@@ -1,0 +1,311 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\mantis.iii
+ *
+ * III STDLIB - omnia::mantis  --  THE ORACLE MEMBRANE: the metabolized 671B mind,
+ * UTILIZED.  The line crossed from "R1 inference built + self-proven" to "R1
+ * consumed by the organism to do work."
+ *
+ * THE GAP THIS CLOSES (the honest finding of this campaign): the exact forward
+ * pass over the condensed R1 weights was BUILT and PROVEN, but nothing ate its
+ * output -- the only caller was the self-proving rite.  The model was the most
+ * expensive island in the tree.  And the reason no consumer existed was a single
+ * belief: that the forward pass runs on a FIXED captured context.  It never did.
+ * probole/pb_diexodos merely hardcoded the BOS breath; mb_dz_embed(tok) accepts
+ * ANY token and loads its real embedding row.  pb_diexodos_tok (the additive
+ * twin) makes the input free -- and MANTIS is the consumer that this unlocks.
+ *
+ * WHAT MANTIS IS: a MEMBRANE around the neural oracle.  It does NOT trust the
+ * model.  It CONSULTS it, and every consultation is disciplined by the three
+ * organs the dedup verdict proved were never superseded (they are this organ's
+ * load-bearing substrate):
+ *
+ *   1. THE CONSULT (probole/metabole): mantis_consult(tok, lo, nlay) embeds an
+ *      arbitrary token, walks the certified layers at a chosen tier, and takes
+ *      the krisis -- R1's next-token given <tok> as the whole context, with its
+ *      exact decision margin (gap) and certified width (wled).
+ *   2. THE PIN (reach_oracle): the answer is a NON-DERIVED reading -- the house
+ *      did not PROVE it, it ASKED a mind.  So it is content-addressed by EXACTLY
+ *      what it depended on: cad("R1" || tok || tier || depth).  Same question,
+ *      same pin, forever auditable; the dependence can never be lost.
+ *   3. THE WALL (reach_oracle firewall): the answer's tier is PROVISIONAL, and
+ *      admit_canonical is DEFAULT-DENY.  R1's opinion can INFORM the organism,
+ *      seed its questions (the erotema), be remembered and spoken -- but it can
+ *      NEVER silently become the canonical, proven self.  This is what makes
+ *      consuming a 671B black box SAFE inside a machine whose whole dignity is
+ *      that it proves what it claims.
+ *
+ * THE MEMORY (eidolos): each consultation is sealed as a self-verifying scroll
+ * [answer k<out> < consult k<in>] -- the answer stands UNDER the consult that
+ * produced it, content-addressed, so a tampered or stale oracle memory is a
+ * LYING memory the barometer catches (the tree's universal event-line law).
+ * The oracle memory is a KEPT HOUSE the boundary can QUESTION (eol_judge_claim)
+ * but never UNIONS into the canonical house -- the wall, in the logos.
+ *
+ * THE VOICE (metabole/LEXIS): mantis_speak renders the answer token's surface
+ * bytes -- the oracle speaks text, not bare ids.
+ *
+ * Truth is a CONDITION OF MOTION: mantis_selfprove is PURE (no Feast, no weights)
+ * -- it re-derives the whole membrane law every invocation: the pin is
+ * content-addressed (same question -> same pin, different question -> different
+ * pin), the wall default-denies the provisional answer from canon, and the
+ * oracle memory seals + self-verifies + a different answer earns a different
+ * name.  So the DISCIPLINE is green on any machine; only the live consult needs
+ * the Feast.  An absent Feast is a lawful FAST, never a broken organ.
+ *
+ * Ring R0.  K 0.95 (the live consult is Feast-bound; the membrane law is pure).
+ * Composes probole + metabole + reach_oracle + eidolos.  NIH: no island, no new
+ * inference -- it CONSUMES the exact one III already built.  ASCII only.
+ * Hexad: kind_passage (a mind's word crosses the membrane) + kind_witness. */
+
+module omnia_mantis
+
+/* ---- THE CONSULT: the arbitrary-input forward pass + its verdict ---- */
+extern @abi(c-msvc-x64) fn pb_diexodos_tok(tok: u64, nlay: u64) -> u64 from "probole.iii"
+extern @abi(c-msvc-x64) fn pb_dx_tok() -> u64 from "probole.iii"
+extern @abi(c-msvc-x64) fn pb_dx_gape() -> i64 from "probole.iii"
+extern @abi(c-msvc-x64) fn pb_dx_wled() -> i64 from "probole.iii"
+
+/* ---- metabole: the tier knob, the BOS breath, the Feast gate, the LEXIS ---- */
+extern @abi(c-msvc-x64) fn mb_dz_set_lo(lo: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_dz_bos() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_feast() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_tok_len(t: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_tok_byte(t: u64, i: u64) -> u8 from "metabole.iii"
+
+/* ---- reach_oracle: the provenance pin + the default-deny firewall ---- */
+extern @abi(c-msvc-x64) fn reach_oracle_pin(pin_bytes: u64, pin_len: u64, out_pin: u64) -> u32 from "reach_oracle.iii"
+extern @abi(c-msvc-x64) fn reach_oracle_admit_canonical(tier: u32) -> i32 from "reach_oracle.iii"
+extern @abi(c-msvc-x64) fn reach_oracle_is_provisional(tier: u32) -> u8 from "reach_oracle.iii"
+
+/* ---- eidolos: seal + verify the oracle memory ---- */
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_keep() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_verify(base: u64, len: u64, expect: u64) -> u64 from "eidolos.iii"
+
+const MAN_TIER_CANON : u32 = 0u32
+const MAN_TIER_PROV  : u32 = 1u32
+const MAN_SENT       : u64 = 18446744073709551615u64
+
+/* ---- the last consultation's state ---- */
+var MAN_IN   : u64 = 0u64                 /* the input token consulted            */
+var MAN_OUT  : u64 = 0u64                 /* R1's next-token answer               */
+var MAN_GAP  : i64 = 0i64                 /* the decision margin (best - second)  */
+var MAN_WID  : i64 = 0i64                 /* the certified width ledger           */
+var MAN_LO   : u64 = 0u64                 /* the tier used (0 = certified 896-bit)*/
+var MAN_NLAY : u64 = 0u64                 /* the depth walked                     */
+var MAN_TIER : u32 = 0u32                 /* the provenance tier (PROVISIONAL)    */
+var MAN_ORA  : u64 = 0u64                 /* the sealed oracle-memory address     */
+var MAN_OK   : u64 = 0u64                 /* 1 = the last consult succeeded       */
+
+var MAN_PIN    : [u8; 32]                 /* the oracle-pin (content-addr of deps)*/
+var MAN_PIN2   : [u8; 32]                 /* a second pin, for the determinism arm*/
+var MAN_PINBUF : [u8; 64]                 /* the pin preimage: R1 || tok||lo||nlay*/
+var MAN_SCROLL : [u8; 512]                /* the oracle-memory claim text         */
+var MAN_SN     : u64 = 0u64
+var MAN_HEX    : [u8; 16]
+var MAN_GEN    : [u64; 64]                /* the generation stream (RHAPSODIA seed)*/
+var MAN_GN     : u64 = 0u64
+
+/* ---- small helpers (defined before use; no forward references) ---- */
+fn man_slen(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut n : u64 = 0u64
+    while p[n] != 0u8 { n = n + 1u64 }
+    return n
+}
+fn man_hex_init() -> i32 {
+    MAN_HEX[0u64]=48u8  MAN_HEX[1u64]=49u8  MAN_HEX[2u64]=50u8  MAN_HEX[3u64]=51u8
+    MAN_HEX[4u64]=52u8  MAN_HEX[5u64]=53u8  MAN_HEX[6u64]=54u8  MAN_HEX[7u64]=55u8
+    MAN_HEX[8u64]=56u8  MAN_HEX[9u64]=57u8  MAN_HEX[10u64]=97u8 MAN_HEX[11u64]=98u8
+    MAN_HEX[12u64]=99u8 MAN_HEX[13u64]=100u8 MAN_HEX[14u64]=101u8 MAN_HEX[15u64]=102u8
+    return 0i32
+}
+fn man_pack8(off: u64, v: u64) -> i32 {
+    let mut k : u64 = 0u64
+    while k < 8u64 { MAN_PINBUF[off + k] = ((v >> (k * 8u64)) & 255u64) as u8   k = k + 1u64 }
+    return 0i32
+}
+/* the pin preimage: exactly what the answer depended on. */
+fn man_pin_pack(tok: u64, lo: u64, nlay: u64) -> u64 {
+    MAN_PINBUF[0u64] = 82u8                /* 'R' */
+    MAN_PINBUF[1u64] = 49u8                /* '1' -- the model marker */
+    man_pack8(2u64, tok)
+    man_pack8(10u64, lo)
+    man_pack8(18u64, nlay)
+    return 26u64
+}
+fn man_sput(c: u8) -> i32 {
+    if MAN_SN < 512u64 { MAN_SCROLL[MAN_SN] = c   MAN_SN = MAN_SN + 1u64 }
+    return 0i32
+}
+fn man_sputz(s: u64) -> i32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { man_sput(p[i])   i = i + 1u64 }
+    return 0i32
+}
+fn man_s_hex16(v: u64) -> i32 {
+    let mut sh : u64 = 60u64
+    let mut go : u64 = 1u64
+    while go == 1u64 {
+        man_sput(MAN_HEX[(v >> sh) & 15u64])
+        if sh == 0u64 { go = 0u64 }
+        if sh != 0u64 { sh = sh - 4u64 }
+    }
+    return 0i32
+}
+/* build the oracle-memory claim "[answer k<out> < consult k<in>]" into MAN_SCROLL;
+ * returns its length.  The answer stands UNDER the consult that produced it. */
+fn man_build_mem(in_tok: u64, out_tok: u64) -> u64 {
+    MAN_SN = 0u64
+    man_sputz("[answer k" as u64)
+    man_s_hex16(out_tok)
+    man_sputz(" < consult k" as u64)
+    man_s_hex16(in_tok)
+    man_sput(93u8)                         /* ']' */
+    return MAN_SN
+}
+fn man_vz(base: u64, len: u64, expect: u64) -> u64 { return eol_verify(base, len, expect) }
+
+/* seal the current consultation as a self-verifying kept house; sets MAN_ORA. */
+fn man_seal_oracle() -> u64 {
+    man_hex_init()
+    man_build_mem(MAN_IN, MAN_OUT)
+    eol_reset()
+    if eol_read((&MAN_SCROLL) as u64, MAN_SN) < 0i64 { eol_reset()   MAN_ORA = 0u64   return 0u64 }
+    MAN_ORA = eol_keep()
+    return MAN_ORA
+}
+
+/* THE CONSULT: ask the oracle "given <tok> as the whole context, what next?"
+ * at tier `lo` (0 = certified 896-bit; 12 = fast, bounded) over `nlay` layers.
+ * Returns the answer token, or MAN_SENT on failure (Feast absent, bad token,
+ * or a walk fault).  On success the pin, tier, memory, gap and width all stand. */
+fn mantis_consult(tok: u64, lo: u64, nlay: u64) -> u64 @export {
+    MAN_OK = 0u64
+    MAN_TIER = 4294967295u32               /* INVALID until a real reading stands */
+    mb_dz_set_lo(lo)
+    let rc : u64 = pb_diexodos_tok(tok, nlay)
+    if rc != 0u64 { return MAN_SENT }
+    MAN_IN = tok
+    MAN_LO = lo
+    MAN_NLAY = nlay
+    MAN_OUT = pb_dx_tok()
+    MAN_GAP = pb_dx_gape()
+    MAN_WID = pb_dx_wled()
+    let plen : u64 = man_pin_pack(tok, lo, nlay)
+    MAN_TIER = reach_oracle_pin((&MAN_PINBUF) as u64, plen, (&MAN_PIN) as u64)
+    man_seal_oracle()
+    MAN_OK = 1u64
+    return MAN_OUT
+}
+
+/* consult on the model's own first breath (BOS) -- R1's opening prediction. */
+fn mantis_consult_bos(lo: u64, nlay: u64) -> u64 @export { return mantis_consult(mb_dz_bos(), lo, nlay) }
+
+/* THE WALL (the load-bearing guarantee): can the last answer enter the canonical,
+ * proven self?  Returns reach_oracle's verdict -- 1 = REFUSED (default-deny; a
+ * provisional oracle reading is never canonical), 0 = admitted (only a CANONICAL
+ * tier, which a live consult never is). */
+fn mantis_wall() -> i32 @export { return reach_oracle_admit_canonical(MAN_TIER) }
+fn mantis_provisional() -> u8 @export { return reach_oracle_is_provisional(MAN_TIER) }
+
+/* THE RHAPSODIA SEED (context-1 generation): chain the oracle -- each answer
+ * becomes the next input.  HONEST SCOPE: this is context-1 (each step sees only
+ * the previous token, not the whole prefix) -- a real token STREAM from R1's
+ * weights, but a Markov shadow of faithful multi-token decoding, which needs the
+ * per-position KV-cache + rope (the next frontier).  Returns the count produced;
+ * the stream is readable via mantis_gen_len/tok. */
+fn mantis_generate(seed: u64, steps: u64, lo: u64, nlay: u64) -> u64 @export {
+    MAN_GN = 0u64
+    let mut t : u64 = seed
+    let mut i : u64 = 0u64
+    while i < steps {
+        if MAN_GN >= 64u64 { return MAN_GN }
+        let nx : u64 = mantis_consult(t, lo, nlay)
+        if nx == MAN_SENT { return MAN_GN }
+        MAN_GEN[MAN_GN] = nx
+        MAN_GN = MAN_GN + 1u64
+        t = nx
+        i = i + 1u64
+    }
+    return MAN_GN
+}
+
+/* ---- the query surface (any organ, any session) ---- */
+fn mantis_in() -> u64 @export { return MAN_IN }
+fn mantis_out() -> u64 @export { return MAN_OUT }
+fn mantis_gap() -> i64 @export { return MAN_GAP }
+fn mantis_width() -> i64 @export { return MAN_WID }
+fn mantis_tier() -> u32 @export { return MAN_TIER }
+fn mantis_lo() -> u64 @export { return MAN_LO }
+fn mantis_nlay() -> u64 @export { return MAN_NLAY }
+fn mantis_ok() -> u64 @export { return MAN_OK }
+fn mantis_oracle_addr() -> u64 @export { return MAN_ORA }
+fn mantis_pin_byte(i: u64) -> u8 @export { if i < 32u64 { return MAN_PIN[i] }   return 0u8 }
+fn mantis_gen_len() -> u64 @export { return MAN_GN }
+fn mantis_gen_tok(i: u64) -> u64 @export { if i < MAN_GN { return MAN_GEN[i] }   return 0u64 }
+
+/* THE VOICE: the surface bytes of the last answer token (the LEXIS). */
+fn mantis_speak_len() -> u64 @export { return mb_tok_len(MAN_OUT) }
+fn mantis_speak_byte(i: u64) -> u8 @export { return mb_tok_byte(MAN_OUT, i) }
+
+/* ==================== THE CONDITION OF MOTION (pure -- no Feast) ==================== *
+ * The whole membrane discipline re-derived every invocation from fixed inputs, so
+ * green never depends on the weights being on the table.  Returns 0 = the law
+ * holds; a nonzero arm code = the exact step that failed. */
+fn mantis_selfprove() -> u64 @export {
+    man_hex_init()
+
+    /* arm 1: THE PIN IS CONTENT-ADDRESSED + PROVISIONAL.  The same question
+     * (tok=100, lo=12, nlay=4) pins identically twice, and the tier is
+     * PROVISIONAL (an oracle reading is never born canonical). */
+    let p1 : u64 = man_pin_pack(100u64, 12u64, 4u64)
+    let t1 : u32 = reach_oracle_pin((&MAN_PINBUF) as u64, p1, (&MAN_PIN) as u64)
+    if t1 != MAN_TIER_PROV { return 1u64 }
+    let mut c : u64 = 0u64
+    while c < 32u64 { MAN_PIN2[c] = MAN_PIN[c]   c = c + 1u64 }
+    let p1b : u64 = man_pin_pack(100u64, 12u64, 4u64)
+    reach_oracle_pin((&MAN_PINBUF) as u64, p1b, (&MAN_PIN) as u64)
+    c = 0u64
+    while c < 32u64 { if MAN_PIN[c] != MAN_PIN2[c] { return 2u64 }   c = c + 1u64 }
+
+    /* arm 2: A DIFFERENT QUESTION -> A DIFFERENT PIN (a different input token). */
+    let p2 : u64 = man_pin_pack(101u64, 12u64, 4u64)
+    reach_oracle_pin((&MAN_PINBUF) as u64, p2, (&MAN_PIN) as u64)
+    let mut diff : u64 = 0u64
+    c = 0u64
+    while c < 32u64 { if MAN_PIN[c] != MAN_PIN2[c] { diff = 1u64 }   c = c + 1u64 }
+    if diff == 0u64 { return 3u64 }
+
+    /* arm 3: THE WALL -- a PROVISIONAL reading is DEFAULT-DENIED from canon; only
+     * a CANONICAL tier (which a live consult never is) may be admitted. */
+    if reach_oracle_admit_canonical(MAN_TIER_PROV) != 1i32 { return 4u64 }
+    if reach_oracle_admit_canonical(MAN_TIER_CANON) != 0i32 { return 5u64 }
+
+    /* arm 4: the tier typing is honest. */
+    if reach_oracle_is_provisional(MAN_TIER_PROV) != 1u8 { return 6u64 }
+    if reach_oracle_is_provisional(MAN_TIER_CANON) != 0u8 { return 7u64 }
+
+    /* arm 5: THE ORACLE MEMORY seals, self-verifies, and is content-addressed --
+     * a different answer to the same consult earns a DIFFERENT name, and a stale
+     * memory can never verify against the wrong address. */
+    let snA : u64 = man_build_mem(100u64, 64u64)
+    eol_reset()
+    if eol_read((&MAN_SCROLL) as u64, snA) < 0i64 { eol_reset()   return 8u64 }
+    let aA : u64 = eol_keep()
+    if aA == 0u64 { eol_reset()   return 9u64 }
+    if man_vz((&MAN_SCROLL) as u64, snA, aA) != 1u64 { return 10u64 }
+    let snB : u64 = man_build_mem(100u64, 65u64)
+    eol_reset()
+    if eol_read((&MAN_SCROLL) as u64, snB) < 0i64 { eol_reset()   return 11u64 }
+    let aB : u64 = eol_keep()
+    if aB == 0u64 { eol_reset()   return 12u64 }
+    if aA == aB { return 13u64 }
+    let snA2 : u64 = man_build_mem(100u64, 64u64)
+    if man_vz((&MAN_SCROLL) as u64, snA2, aB) != 0u64 { return 14u64 }
+    if man_vz((&MAN_SCROLL) as u64, snA2, aA) != 1u64 { return 15u64 }
+
+    eol_reset()
+    return 0u64
+}

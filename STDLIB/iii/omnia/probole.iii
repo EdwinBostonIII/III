@@ -67,6 +67,10 @@ extern @abi(c-msvc-x64) fn mb_moe_scale_bits() -> u64 from "metabole.iii"
 extern @abi(c-msvc-x64) fn mb_moe_used() -> u64 from "metabole.iii"
 extern @abi(c-msvc-x64) fn mb_pb_run_exp(role: u64, expert: u64, n: u64, rows: u64, bank: u64, passes: u64) -> u64 from "metabole.iii"
 extern @abi(c-msvc-x64) fn mb_pb_run_shexp(role: u64, n: u64, rows: u64, bank: u64, passes: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_eb_present(lay: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_moe_bias_load() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_bs_m(i: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_bs_e(i: u64) -> i64 from "metabole.iii"
 
 extern @abi(c-msvc-x64) fn pr_x_chok() -> u64 from "peras.iii"
 extern @abi(c-msvc-x64) fn pr_x_dfm() -> u64 from "peras.iii"
@@ -83,6 +87,59 @@ extern @abi(c-msvc-x64) fn pr_x_ri13_eu() -> i64 from "peras.iii"
 extern @abi(c-msvc-x64) fn pr_x_dfrecip(m: u64, e: i64, up: u64) -> i32 from "peras.iii"
 extern @abi(c-msvc-x64) fn pr_x_dfsqrt(m: u64, e: i64, up: u64) -> i32 from "peras.iii"
 extern @abi(c-msvc-x64) fn pr_x_exp_s(m: u64, e: i64, sg: i64, up: u64) -> u64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_x_esc(d: u64) -> u64 from "peras.iii"
+
+/* the bathys (896-bit) faces the deep walk rides */
+extern @abi(c-msvc-x64) fn pr_bn_seta(k: u64, v: u64) -> u64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_bn_sete_a(e: i64) -> u64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_bn_setb(k: u64, v: u64) -> u64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_bn_sete_b(e: i64) -> u64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_bn_r(k: u64) -> u64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_bn_re() -> i64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_bn_rz() -> u64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_bn_r_to_a() -> u64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_bn_r_to_b() -> u64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_bn_cmp() -> i64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_bn_x_mul(up: u64) -> u64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_bn_x_add(up: u64) -> u64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_bn_x_sub(up: u64) -> u64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_bn_recip(up: u64) -> u64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_bn_sqrt(up: u64) -> u64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_bn_exp(sg: i64, up: u64) -> u64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_bn_from_df_a(m: u64, e: i64) -> u64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_bn_from_df_b(m: u64, e: i64) -> u64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_bn_to_df(up: u64) -> u64 from "peras.iii"
+
+/* the deep weave faces (metabole) */
+extern @abi(c-msvc-x64) fn mb_dz_set(i: u64, k: u64, v: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_dz_sete(i: u64, s: i64, e: i64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_dz_mark(n: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_dz_x_l(i: u64, k: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_dz_x_s(i: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_dz_x_e(i: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_dz_o_l(i: u64, k: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_dz_o_s(i: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_dz_o_e(i: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_dz_run(slot: u64, n: u64, rows: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_dz_run_exp(role: u64, expert: u64, n: u64, rows: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_dz_run_sp(k: u64, n: u64, rows: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_dz_embed(tok: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_dz_krisis(k: u64, n: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_dz_amp() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_dz_oemax() -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_dz_lo() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_dz_bos() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_census_only() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_ld_normw_sp(k: u64, n: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_me_sel(lay: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_kr_tok() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_kr_s() -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_kr_m() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_kr_e() -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_kr_tok2() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_kr_s2() -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_kr_m2() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_kr_e2() -> i64 from "metabole.iii"
 
 extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
@@ -1406,6 +1463,83 @@ fn pb_arm385() -> u64 {
     return 0u64
 }
 
+/* ==================== arm 387: THE EKLOGION ====================
+ * The election core proven on exact dyadics, feast or fast.  The core
+ * elects on whatever selection scores stand (in production: s + bias,
+ * built by pb_router_score -- the bias CHOOSES a seat; the weights are
+ * built from s alone by pb_routed_combine -- the bias never mixes; that
+ * split is enforced by construction and sworn here on the core):
+ *   (i)  a decisive field -- seven separated winners and one seat won
+ *        ONLY through the added bias -- elects exactly those eight,
+ *        decided, certain 8/8, and the gap is LIMB-EXACT (25/64);
+ *   (ii) one riser overlapping the weakest winner REFUSES (decided=0)
+ *        with the negative gap exact (-1/64);
+ *   (iii) the decisive field re-run lands identical (the core is a
+ *        function, not a mood). */
+fn pb_ek_set(e: u64, lnum: u64, lsh: i64, hnum: u64, hsh: i64) -> u64 {
+    pr_x_dfn2(0u64, lnum, lsh, 0u64)
+    PB_SCLS[e] = 1i64
+    PB_SCLM[e] = pr_x_dfm()
+    PB_SCLE[e] = pr_x_dfe()
+    pr_x_dfn2(0u64, hnum, hsh, 0u64)
+    PB_SCHS[e] = 1i64
+    PB_SCHM[e] = pr_x_dfm()
+    PB_SCHE[e] = pr_x_dfe()
+    return 0u64
+}
+fn pb_ek_field() -> u64 {
+    let mut e : u64 = 0u64
+    while e < 256u64 {
+        pb_ek_set(e, 16u64, 0i64 - 7i64, 18u64, 0i64 - 7i64)
+        e = e + 1u64
+    }
+    let mut k : u64 = 0u64
+    while k < 7u64 {
+        pb_ek_set(k, 40u64 - k, 0i64 - 6i64, 81u64 - 2u64 * k, 0i64 - 7i64)
+        k = k + 1u64
+    }
+    /* the bias-won seat: a loser's s lifted whole by an exact bias of 1 */
+    pb_ek_set(200u64, 144u64, 0i64 - 7i64, 146u64, 0i64 - 7i64)
+    return 0u64
+}
+fn pb_arm387() -> u64 {
+    pb_ek_field()
+    pb_elect()
+    if PB_MOE_DECIDED != 1u64 { return 387u64 }
+    if PB_MOE_CERTAIN != 8u64 { return 387u64 }
+    if PB_TOPUSED[200u64] != 1u8 { return 387u64 }
+    let mut k : u64 = 0u64
+    while k < 7u64 {
+        if PB_TOPUSED[k] != 1u8 { return 387u64 }
+        k = k + 1u64
+    }
+    /* the gap limb-exact: 34/64 - 18/128 = 25/64 = (25<<59) * 2^-65 */
+    if PB_EGS != 1i64 { return 387u64 }
+    if PB_EGM != (25u64 << 59u64) { return 387u64 }
+    if PB_EGE != (0i64 - 65i64) { return 387u64 }
+    let g1m : u64 = PB_EGM
+    let g1e : i64 = PB_EGE
+    /* (ii) the riser: expert 100's hi lifted over the weakest winner's lo */
+    pb_ek_set(100u64, 16u64, 0i64 - 7i64, 35u64, 0i64 - 6i64)
+    pb_elect()
+    if PB_MOE_DECIDED != 0u64 { return 387u64 }
+    if PB_TOPUSED[100u64] != 0u8 { return 387u64 }
+    /* the negative gap exact: 34/64 - 35/64 = -1/64 */
+    if PB_EGS != (0i64 - 1i64) { return 387u64 }
+    if PB_EGM != (1u64 << 63u64) { return 387u64 }
+    if PB_EGE != (0i64 - 69i64) { return 387u64 }
+    /* (iii) the decisive field re-run lands identical */
+    pb_ek_field()
+    pb_elect()
+    if PB_MOE_DECIDED != 1u64 { return 387u64 }
+    if PB_MOE_CERTAIN != 8u64 { return 387u64 }
+    if PB_EGM != g1m { return 387u64 }
+    if PB_EGE != g1e { return 387u64 }
+    pb_rs("the eklogion: election core on exact dyadics -- bias-won seat=ok decisive gap=25/64 limb-exact refusal-at-riser=ok negative-gap=-1/64 exact rerun=identical -- selection on s+bias, weights on s alone: the bias chooses, never mixes" as u64)
+    pb_rb(10u8)
+    return 0u64
+}
+
 /* ============ arms 388-389: THE ANABASIS (the multi-layer walk) ============
  * Layer 0 proved that a transformer block is an organ: X -> X''.  The dense
  * layers 1 and 2 are its twins -- the SAME law on new weights, with the
@@ -1959,6 +2093,24 @@ var PB_MOEHM : [u64; 7168]
 var PB_MOEHE : [i64; 7168]
 var PB_TOP8 : [u64; 8]
 var PB_TOPUSED : [u8; 256]
+/* SYNODOS II -- the true election: scores s = sigmoid(logit) as signed
+ * df intervals, the SELECTION judged on s + bias (the ledger's
+ * exp_probs_b), the WEIGHTS on s alone.  The election carries its GAP
+ * as a certified df: gap_lo = min(selected s+b lo) - max(unselected
+ * s+b hi), rounded toward -inf; decided iff gap_lo > 0.  An undecided
+ * election REFUSES the enclosure by name -- the walk never continues
+ * as if it knew. */
+var PB_SCLS : [i64; 256]
+var PB_SCLM : [u64; 256]
+var PB_SCLE : [i64; 256]
+var PB_SCHS : [i64; 256]
+var PB_SCHM : [u64; 256]
+var PB_SCHE : [i64; 256]
+var PB_EGS : i64 = 0i64
+var PB_EGM : u64 = 0u64
+var PB_EGE : i64 = 0i64
+var PB_BIAS_ON : u64 = 0u64
+var PB_ESC : u64 = 48u64
 var PB_SIGLS : [i64; 8]
 var PB_SIGLM : [u64; 8]
 var PB_SIGLE : [i64; 8]
@@ -1969,6 +2121,7 @@ var PB_MOE_DECIDED : u64 = 0u64
 var PB_MOE_CERTAIN : u64 = 0u64
 var PB_MOE_OK : u64 = 0u64
 var PB_MOE_CONT : u64 = 0u64
+var PB_MOE_SOUND : u64 = 0u64
 /* the general interval-product hull channel */
 var PB_HULLS : i64 = 0i64
 var PB_HULLM : u64 = 0u64
@@ -2127,9 +2280,11 @@ fn pb_router_dot(e: u64) -> u64 {
     return 0u64
 }
 
-/* elect the 8 highest-lo experts, then judge decidability: the set is
- * decided iff min(selected lo) > max(unselected hi) */
-fn pb_top8() -> u64 {
+/* THE ELECTION CORE: elect the 8 highest-lo of the standing SELECTION
+ * scores (PB_SC*), judge decidability, and CERTIFY the gap.  The set is
+ * decided iff gap_lo = min(selected lo) - max(unselected hi) > 0, the
+ * subtraction rounded toward -inf so the spoken gap is never flattered. */
+fn pb_elect() -> u64 {
     let mut e : u64 = 0u64
     while e < 256u64 {
         PB_TOPUSED[e] = 0u8
@@ -2143,7 +2298,7 @@ fn pb_top8() -> u64 {
             if PB_TOPUSED[e] == 0u8 {
                 if best == 256u64 { best = e }
                 if best != e {
-                    if pb_scmp(PB_RGLS[e], PB_RGLM[e], PB_RGLE[e], PB_RGLS[best], PB_RGLM[best], PB_RGLE[best]) > 0i64 { best = e }
+                    if pb_scmp(PB_SCLS[e], PB_SCLM[e], PB_SCLE[e], PB_SCLS[best], PB_SCLM[best], PB_SCLE[best]) > 0i64 { best = e }
                 }
             }
             e = e + 1u64
@@ -2153,16 +2308,16 @@ fn pb_top8() -> u64 {
         k = k + 1u64
     }
     /* min lo among selected */
-    let mut mls : i64 = PB_RGLS[PB_TOP8[0]]
-    let mut mlm : u64 = PB_RGLM[PB_TOP8[0]]
-    let mut mle : i64 = PB_RGLE[PB_TOP8[0]]
+    let mut mls : i64 = PB_SCLS[PB_TOP8[0]]
+    let mut mlm : u64 = PB_SCLM[PB_TOP8[0]]
+    let mut mle : i64 = PB_SCLE[PB_TOP8[0]]
     k = 1u64
     while k < 8u64 {
         let ee : u64 = PB_TOP8[k]
-        if pb_scmp(PB_RGLS[ee], PB_RGLM[ee], PB_RGLE[ee], mls, mlm, mle) < 0i64 {
-            mls = PB_RGLS[ee]
-            mlm = PB_RGLM[ee]
-            mle = PB_RGLE[ee]
+        if pb_scmp(PB_SCLS[ee], PB_SCLM[ee], PB_SCLE[ee], mls, mlm, mle) < 0i64 {
+            mls = PB_SCLS[ee]
+            mlm = PB_SCLM[ee]
+            mle = PB_SCLE[ee]
         }
         k = k + 1u64
     }
@@ -2175,31 +2330,78 @@ fn pb_top8() -> u64 {
     while e < 256u64 {
         if PB_TOPUSED[e] == 0u8 {
             if seen == 0u64 {
-                xhs = PB_RGHS[e]
-                xhm = PB_RGHM[e]
-                xhe = PB_RGHE[e]
+                xhs = PB_SCHS[e]
+                xhm = PB_SCHM[e]
+                xhe = PB_SCHE[e]
                 seen = 1u64
             }
             if seen == 1u64 {
-                if pb_scmp(PB_RGHS[e], PB_RGHM[e], PB_RGHE[e], xhs, xhm, xhe) > 0i64 {
-                    xhs = PB_RGHS[e]
-                    xhm = PB_RGHM[e]
-                    xhe = PB_RGHE[e]
+                if pb_scmp(PB_SCHS[e], PB_SCHM[e], PB_SCHE[e], xhs, xhm, xhe) > 0i64 {
+                    xhs = PB_SCHS[e]
+                    xhm = PB_SCHM[e]
+                    xhe = PB_SCHE[e]
                 }
             }
         }
         e = e + 1u64
     }
+    /* the certified gap, rounded toward -inf */
+    pb_sadd(mls, mlm, mle, 0i64 - xhs, xhm, xhe, 0u64)
+    PB_EGS = PB_SDS
+    PB_EGM = PB_SDM
+    PB_EGE = PB_SDE
     PB_MOE_DECIDED = 0u64
-    if pb_scmp(mls, mlm, mle, xhs, xhm, xhe) > 0i64 { PB_MOE_DECIDED = 1u64 }
+    if PB_EGS > 0i64 { PB_MOE_DECIDED = 1u64 }
     /* certain-in count: selected experts whose lo exceeds max-unselected-hi */
     PB_MOE_CERTAIN = 0u64
     k = 0u64
     while k < 8u64 {
         let ee : u64 = PB_TOP8[k]
-        if pb_scmp(PB_RGLS[ee], PB_RGLM[ee], PB_RGLE[ee], xhs, xhm, xhe) > 0i64 { PB_MOE_CERTAIN = PB_MOE_CERTAIN + 1u64 }
+        if pb_scmp(PB_SCLS[ee], PB_SCLM[ee], PB_SCLE[ee], xhs, xhm, xhe) > 0i64 { PB_MOE_CERTAIN = PB_MOE_CERTAIN + 1u64 }
         k = k + 1u64
     }
+    return 0u64
+}
+
+/* fill the SELECTION scores for expert e from the standing router logit
+ * interval: s = sigmoid(logit) endpoint-monotone, then + bias (exact
+ * f32 df) under direction.  Weights stay on s alone -- the bias only
+ * chooses, it never mixes. */
+fn pb_router_score(e: u64) -> u64 {
+    pb_sigma(PB_RGLS[e], PB_RGLM[e], PB_RGLE[e], 0u64)
+    let sls : i64 = PB_SGS
+    let slm : u64 = PB_SGM
+    let sle : i64 = PB_SGE
+    pb_sigma(PB_RGHS[e], PB_RGHM[e], PB_RGHE[e], 1u64)
+    let shs : i64 = PB_SGS
+    let shm : u64 = PB_SGM
+    let she : i64 = PB_SGE
+    if pb_scmp(sls, slm, sle, shs, shm, she) > 0i64 { return 1u64 }
+    let mut bs : i64 = 0i64
+    let mut bm : u64 = 0u64
+    let mut be : i64 = 0i64
+    if PB_BIAS_ON == 1u64 {
+        let bmi : i64 = mb_bs_m(e)
+        if bmi != 0i64 {
+            bs = 1i64
+            let mut mg : u64 = bmi as u64
+            if bmi < 0i64 {
+                bs = 0i64 - 1i64
+                mg = (0i64 - bmi) as u64
+            }
+            pr_x_dfn2(0u64, mg, mb_bs_e(e), 0u64)
+            bm = pr_x_dfm()
+            be = pr_x_dfe()
+        }
+    }
+    pb_sadd(sls, slm, sle, bs, bm, be, 0u64)
+    PB_SCLS[e] = PB_SDS
+    PB_SCLM[e] = PB_SDM
+    PB_SCLE[e] = PB_SDE
+    pb_sadd(shs, shm, she, bs, bm, be, 1u64)
+    PB_SCHS[e] = PB_SDS
+    PB_SCHM[e] = PB_SDM
+    PB_SCHE[e] = PB_SDE
     return 0u64
 }
 
@@ -2378,13 +2580,43 @@ fn pb_arm389() -> u64 {
     pb_save_wk(7168u64)
     if pb_rms_wk(7168u64, 44u64) != 0u64 { return 389u64 }
     pb_save_h()
-    /* the router election (interval logits over 256 experts) */
+    /* the router election: interval logits -> sigmoid scores, the
+     * selection bias joined when the feast carries it (named either way),
+     * the top-8 elected on s + bias with the gap CERTIFIED */
     let mut e : u64 = 0u64
     while e < 256u64 {
         if pb_router_dot(e) != 0u64 { return 389u64 }
         e = e + 1u64
     }
-    pb_top8()
+    PB_BIAS_ON = 0u64
+    if mb_eb_present(3u64) == 1u64 {
+        if mb_moe_bias_load() != 0u64 { return 389u64 }
+        PB_BIAS_ON = 1u64
+    }
+    e = 0u64
+    while e < 256u64 {
+        if pb_router_score(e) != 0u64 { return 389u64 }
+        e = e + 1u64
+    }
+    pb_elect()
+    /* THE CLIMB: a straddled election asks the ladder for the next rung
+     * (48 -> 58) and re-derives the whole election there; the rung is
+     * returned home either way -- the schedule is law, never a mood */
+    PB_ESC = 48u64
+    if PB_MOE_DECIDED == 0u64 {
+        if pr_x_esc(58u64) != 0u64 { return 389u64 }
+        e = 0u64
+        while e < 256u64 {
+            if pb_router_score(e) != 0u64 {
+                pr_x_esc(48u64)
+                return 389u64
+            }
+            e = e + 1u64
+        }
+        pb_elect()
+        pr_x_esc(48u64)
+        PB_ESC = 58u64
+    }
     /* the shared expert (always on), then the elected 8 */
     pb_moe_clear()
     if pb_swiglu(0u64, 1u64) != 0u64 { return 389u64 }
@@ -2398,20 +2630,1238 @@ fn pb_arm389() -> u64 {
     pb_wk_from_moe_plus_sv()
     pb_wk_census()
     PB_MOE_OK = 1u64
+    PB_MOE_SOUND = PB_MOE_DECIDED
     pb_rs("the synodos: layer 3 MoE -- router elected top-" as u64)
     pb_ru(mb_moe_used())
-    pb_rs(" of 256 (interval logits) decided=" as u64)
+    pb_rs(" of 256 (sigmoid+bias scores) bias=" as u64)
+    if PB_BIAS_ON == 1u64 { pb_rs("on" as u64) }
+    if PB_BIAS_ON == 0u64 { pb_rs("off" as u64) }
+    pb_rs(" decided=" as u64)
     pb_ru(PB_MOE_DECIDED)
     pb_rs(" certain-in=" as u64)
     pb_ru(PB_MOE_CERTAIN)
-    pb_rs("/8 shared-expert-FFN contained=" as u64)
+    pb_rs("/8 esc=" as u64)
+    pb_ru(PB_ESC)
+    pb_rs(" gap=" as u64)
+    if PB_MOE_DECIDED == 1u64 {
+        pb_rs("2^" as u64)
+        pb_ri(PB_EGE + 63i64)
+    }
+    if PB_MOE_DECIDED == 0u64 { pb_rs("straddle" as u64) }
+    pb_rs(" shared-expert-FFN contained=" as u64)
     pb_ru(PB_MOE_CONT)
     pb_rs("/7168 gate=sigmoid-normalized scale=2.5 X''=X'+MoE sign-straddle=" as u64)
     pb_ru(PB_WSTRAD)
     pb_rs("/7168 shadow(max-width-exp2)=" as u64)
     pb_ri(PB_WWMAX)
-    pb_rs(" -- the sparse layer of R1 woven in certified intervals" as u64)
+    if PB_MOE_DECIDED == 1u64 {
+        pb_rs(" -- the sparse layer of R1 woven in certified intervals" as u64)
+    }
+    if PB_MOE_DECIDED == 0u64 {
+        pb_rs(" -- election undecided: the enclosure REFUSED beyond the shared expert (named); the affine stair is the door" as u64)
+    }
     pb_rb(10u8)
+    return 0u64
+}
+
+/* ==================== THE DIEXODOS (the way through) ====================
+ * R1 walked END TO END on the deep anchor: one 896-bit center per
+ * dimension, exact matvecs with one truncation per row, the norms and
+ * activations through the judged deep quotient tier, the MoE elections
+ * decided on centers whose ledger-certified widths sit hundreds of bits
+ * below the gaps, and the head's KRISIS: the elected token with its gap,
+ * spoken with the width ledger beside it.  What the ledger cannot cover,
+ * the walk refuses by name. */
+
+/* the deep save vectors: X (residual), H (the MoE's normed input), the
+ * gate stash, and the MoE accumulator; each (sign, 14 limbs, exp) */
+var PB_DSVM : [u64; 100352]
+var PB_DSVS : [i64; 7168]
+var PB_DSVE : [i64; 7168]
+var PB_DHM : [u64; 100352]
+var PB_DHS : [i64; 7168]
+var PB_DHE : [i64; 7168]
+var PB_DGM : [u64; 258048]
+var PB_DGS : [i64; 18432]
+var PB_DGE : [i64; 18432]
+var PB_DMM : [u64; 100352]
+var PB_DMS : [i64; 7168]
+var PB_DME : [i64; 7168]
+/* two deep scalar saves (sum-of-squares walkers, norms, weights) */
+var PB_S1M : [u64; 14]
+var PB_S1S : i64 = 0i64
+var PB_S1E : i64 = 0i64
+var PB_S2M : [u64; 14]
+var PB_S2S : i64 = 0i64
+var PB_S2E : i64 = 0i64
+/* the router score centers as one-limb dfs (order only; cert by ledger) */
+var PB_RCM : [u64; 256]
+var PB_RCE : [i64; 256]
+var PB_RCS : [i64; 256]
+/* the coarse width ledger: a power-of-2 exponent bound over the walk */
+var PB_WLED : i64 = 0i64 - 1000000i64
+var PB_DX_OK : u64 = 0u64
+
+/* ---- slot plumbing: bathys A/B from the deep stores ---- */
+fn pb_a_from_x(i: u64) -> i64 {
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        pr_bn_seta(k, mb_dz_x_l(i, k))
+        k = k + 1u64
+    }
+    pr_bn_sete_a(mb_dz_x_e(i))
+    return mb_dz_x_s(i)
+}
+fn pb_b_from_x(i: u64) -> i64 {
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        pr_bn_setb(k, mb_dz_x_l(i, k))
+        k = k + 1u64
+    }
+    pr_bn_sete_b(mb_dz_x_e(i))
+    return mb_dz_x_s(i)
+}
+fn pb_a_from_o(i: u64) -> i64 {
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        pr_bn_seta(k, mb_dz_o_l(i, k))
+        k = k + 1u64
+    }
+    pr_bn_sete_a(mb_dz_o_e(i))
+    return mb_dz_o_s(i)
+}
+fn pb_b_from_o(i: u64) -> i64 {
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        pr_bn_setb(k, mb_dz_o_l(i, k))
+        k = k + 1u64
+    }
+    pr_bn_sete_b(mb_dz_o_e(i))
+    return mb_dz_o_s(i)
+}
+/* buffers: 0 = SV, 1 = H, 2 = G, 3 = M */
+fn pb_a_from_buf(w: u64, i: u64) -> i64 {
+    let base : u64 = i * 14u64
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        let mut v : u64 = 0u64
+        if w == 0u64 { v = PB_DSVM[base + k] }
+        if w == 1u64 { v = PB_DHM[base + k] }
+        if w == 2u64 { v = PB_DGM[base + k] }
+        if w == 3u64 { v = PB_DMM[base + k] }
+        pr_bn_seta(k, v)
+        k = k + 1u64
+    }
+    let mut e : i64 = 0i64
+    let mut s : i64 = 0i64
+    if w == 0u64 { e = PB_DSVE[i]   s = PB_DSVS[i] }
+    if w == 1u64 { e = PB_DHE[i]   s = PB_DHS[i] }
+    if w == 2u64 { e = PB_DGE[i]   s = PB_DGS[i] }
+    if w == 3u64 { e = PB_DME[i]   s = PB_DMS[i] }
+    pr_bn_sete_a(e)
+    return s
+}
+fn pb_b_from_buf(w: u64, i: u64) -> i64 {
+    let base : u64 = i * 14u64
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        let mut v : u64 = 0u64
+        if w == 0u64 { v = PB_DSVM[base + k] }
+        if w == 1u64 { v = PB_DHM[base + k] }
+        if w == 2u64 { v = PB_DGM[base + k] }
+        if w == 3u64 { v = PB_DMM[base + k] }
+        pr_bn_setb(k, v)
+        k = k + 1u64
+    }
+    let mut e : i64 = 0i64
+    let mut s : i64 = 0i64
+    if w == 0u64 { e = PB_DSVE[i]   s = PB_DSVS[i] }
+    if w == 1u64 { e = PB_DHE[i]   s = PB_DHS[i] }
+    if w == 2u64 { e = PB_DGE[i]   s = PB_DGS[i] }
+    if w == 3u64 { e = PB_DME[i]   s = PB_DMS[i] }
+    pr_bn_sete_b(e)
+    return s
+}
+fn pb_buf_from_r(w: u64, i: u64, s: i64) -> u64 {
+    let base : u64 = i * 14u64
+    let mut s2 : i64 = s
+    if pr_bn_rz() == 1u64 { s2 = 0i64 }
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        let v : u64 = pr_bn_r(k)
+        if w == 0u64 { PB_DSVM[base + k] = v }
+        if w == 1u64 { PB_DHM[base + k] = v }
+        if w == 2u64 { PB_DGM[base + k] = v }
+        if w == 3u64 { PB_DMM[base + k] = v }
+        k = k + 1u64
+    }
+    let e : i64 = pr_bn_re()
+    if w == 0u64 { PB_DSVE[i] = e   PB_DSVS[i] = s2 }
+    if w == 1u64 { PB_DHE[i] = e   PB_DHS[i] = s2 }
+    if w == 2u64 { PB_DGE[i] = e   PB_DGS[i] = s2 }
+    if w == 3u64 { PB_DME[i] = e   PB_DMS[i] = s2 }
+    return 0u64
+}
+fn pb_x_from_r(i: u64, s: i64) -> u64 {
+    let mut s2 : i64 = s
+    if pr_bn_rz() == 1u64 { s2 = 0i64 }
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        mb_dz_set(i, k, pr_bn_r(k))
+        k = k + 1u64
+    }
+    mb_dz_sete(i, s2, pr_bn_re())
+    return 0u64
+}
+fn pb_x_zero(i: u64) -> u64 {
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        mb_dz_set(i, k, 0u64)
+        k = k + 1u64
+    }
+    mb_dz_sete(i, 0i64, 0i64)
+    return 0u64
+}
+/* pass-through: result <- A (add a zero B) / result <- B (add a zero A) */
+fn pb_pass_a(s: i64) -> i64 {
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        pr_bn_setb(k, 0u64)
+        k = k + 1u64
+    }
+    pr_bn_sete_b(0i64)
+    pr_bn_x_add(0u64)
+    return s
+}
+fn pb_pass_b(s: i64) -> i64 {
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        pr_bn_seta(k, 0u64)
+        k = k + 1u64
+    }
+    pr_bn_sete_a(0i64)
+    pr_bn_x_add(0u64)
+    return s
+}
+fn pb_buf_from_x(w: u64, i: u64) -> u64 {
+    let base : u64 = i * 14u64
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        let v : u64 = mb_dz_x_l(i, k)
+        if w == 0u64 { PB_DSVM[base + k] = v }
+        if w == 1u64 { PB_DHM[base + k] = v }
+        k = k + 1u64
+    }
+    if w == 0u64 { PB_DSVE[i] = mb_dz_x_e(i)   PB_DSVS[i] = mb_dz_x_s(i) }
+    if w == 1u64 { PB_DHE[i] = mb_dz_x_e(i)   PB_DHS[i] = mb_dz_x_s(i) }
+    return 0u64
+}
+fn pb_x_from_buf(w: u64, i: u64) -> u64 {
+    let base : u64 = i * 14u64
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        let mut v : u64 = 0u64
+        if w == 0u64 { v = PB_DSVM[base + k] }
+        if w == 1u64 { v = PB_DHM[base + k] }
+        mb_dz_set(i, k, v)
+        k = k + 1u64
+    }
+    if w == 0u64 { mb_dz_sete(i, PB_DSVS[i], PB_DSVE[i]) }
+    if w == 1u64 { mb_dz_sete(i, PB_DHS[i], PB_DHE[i]) }
+    return 0u64
+}
+
+/* zero one deep buffer range */
+fn pb_dbuf_zero(w: u64, n: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < n {
+        let base : u64 = i * 14u64
+        let mut k : u64 = 0u64
+        while k < 14u64 {
+            if w == 3u64 { PB_DMM[base + k] = 0u64 }
+            k = k + 1u64
+        }
+        if w == 3u64 { PB_DMS[i] = 0i64   PB_DME[i] = 0i64 }
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+/* THE WIDTH LEDGER fold after one deep projection.  W is the log2 of an
+ * absolute bound on the error interval's half-width.  One projection maps
+ * W_in -> W_out <= amp*2^-24 * W_in + fresh, where amp = max row-mass
+ * Sigma|w| (at 2^-24) and fresh = one truncation at the served lsb.  In
+ * log2, honoring the TACHOS floor (the fast tier truncates at limb LO, so
+ * fresh = 2^(oemax + LO*64)):
+ *   W_out(log2) = max(log2(amp)-24 + W_in, oemax + LO*64) + 1  */
+fn pb_wled_fold() -> u64 {
+    let amp : u64 = mb_dz_amp()
+    let mut la : i64 = 0i64 - 24i64
+    let mut t : u64 = amp
+    while t != 0u64 {
+        t = t >> 1u64
+        la = la + 1i64
+    }
+    let fresh : i64 = mb_dz_oemax() + (mb_dz_lo() as i64) * 64i64
+    let mut w : i64 = PB_WLED + la
+    if fresh > w { w = fresh }
+    PB_WLED = w + 1i64
+    return 0u64
+}
+
+/* deep RMS over the thought [0..n): gamma from slot (sp 1 = output_norm)
+ * -- x_i <- x_i * gamma_i / sqrt(mean(x^2) + eps).  0 ok / 1 red */
+fn pb_dz_rms(n: u64, slot: u64, sp: u64) -> u64 {
+    if sp == 0u64 {
+        if mb_ld_normw(slot, n) != 0u64 { return 1u64 }
+    }
+    if sp == 1u64 {
+        if mb_ld_normw_sp(1u64, n) != 0u64 { return 1u64 }
+    }
+    /* sumsq into S1 */
+    PB_S1S = 0i64
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PB_S1M[k] = 0u64
+        k = k + 1u64
+    }
+    PB_S1E = 0i64
+    let mut i : u64 = 0u64
+    while i < n {
+        if mb_dz_x_s(i) != 0i64 {
+            pb_a_from_x(i)
+            pb_b_from_x(i)
+            if pr_bn_x_mul(0u64) != 0u64 { return 1u64 }
+            if PB_S1S == 0i64 {
+                pr_bn_r_to_a()
+                PB_S1S = 1i64
+                k = 0u64
+                while k < 14u64 {
+                    PB_S1M[k] = pr_bn_r(k)
+                    k = k + 1u64
+                }
+                PB_S1E = pr_bn_re()
+            }
+            if PB_S1S == 1i64 {
+                /* acc += t: A <- acc, B <- t(channel) */
+                pr_bn_r_to_b()
+                k = 0u64
+                while k < 14u64 {
+                    pr_bn_seta(k, PB_S1M[k])
+                    k = k + 1u64
+                }
+                pr_bn_sete_a(PB_S1E)
+                if pr_bn_x_add(0u64) != 0u64 { return 1u64 }
+                k = 0u64
+                while k < 14u64 {
+                    PB_S1M[k] = pr_bn_r(k)
+                    k = k + 1u64
+                }
+                PB_S1E = pr_bn_re()
+            }
+        }
+        i = i + 1u64
+    }
+    if PB_S1S == 0i64 { return 1u64 }
+    /* mean: * recip(n) */
+    pr_bn_from_df_a(1u64 << 63u64, 0i64)
+    /* build n as a small into A then recip */
+    let mut sh : u64 = 0u64
+    let mut hh : u64 = n
+    while (hh >> 63u64) == 0u64 {
+        hh = hh << 1u64
+        sh = sh + 1u64
+    }
+    k = 0u64
+    while k < 14u64 {
+        pr_bn_seta(k, 0u64)
+        k = k + 1u64
+    }
+    pr_bn_seta(13u64, n << sh)
+    pr_bn_sete_a((0i64 - 832i64) - (sh as i64))
+    if pr_bn_recip(0u64) != 0u64 { return 1u64 }
+    pr_bn_r_to_b()
+    k = 0u64
+    while k < 14u64 {
+        pr_bn_seta(k, PB_S1M[k])
+        k = k + 1u64
+    }
+    pr_bn_sete_a(PB_S1E)
+    if pr_bn_x_mul(0u64) != 0u64 { return 1u64 }
+    /* + eps (exact f32) */
+    let em : i64 = mb_gz_eps_m()
+    if em > 0i64 {
+        pr_bn_r_to_a()
+        let mut mg : u64 = em as u64
+        let mut sh2 : u64 = 0u64
+        let mut h2 : u64 = mg
+        while (h2 >> 63u64) == 0u64 {
+            h2 = h2 << 1u64
+            sh2 = sh2 + 1u64
+        }
+        k = 0u64
+        while k < 14u64 {
+            pr_bn_setb(k, 0u64)
+            k = k + 1u64
+        }
+        pr_bn_setb(13u64, mg << sh2)
+        pr_bn_sete_b(mb_gz_eps_e() - 832i64 - (sh2 as i64))
+        if pr_bn_x_add(0u64) != 0u64 { return 1u64 }
+    }
+    /* sqrt then recip -> S2 = 1/rms */
+    pr_bn_r_to_a()
+    if pr_bn_sqrt(0u64) != 0u64 { return 1u64 }
+    pr_bn_r_to_a()
+    if pr_bn_recip(0u64) != 0u64 { return 1u64 }
+    PB_S2S = 1i64
+    k = 0u64
+    while k < 14u64 {
+        PB_S2M[k] = pr_bn_r(k)
+        k = k + 1u64
+    }
+    PB_S2E = pr_bn_re()
+    /* xhat_i = x_i * gamma_i * (1/rms) */
+    i = 0u64
+    while i < n {
+        let gm : i64 = mb_nw_m(i)
+        let xs : i64 = mb_dz_x_s(i)
+        if gm == 0i64 {
+            pb_x_zero(i)
+        }
+        if xs == 0i64 {
+            if gm != 0i64 { pb_x_zero(i) }
+        }
+        if gm != 0i64 {
+            if xs != 0i64 {
+                let mut gs : i64 = 1i64
+                let mut gmm : u64 = gm as u64
+                if gm < 0i64 {
+                    gs = 0i64 - 1i64
+                    gmm = (0i64 - gm) as u64
+                }
+                let mut sh3 : u64 = 0u64
+                let mut h3 : u64 = gmm
+                while (h3 >> 63u64) == 0u64 {
+                    h3 = h3 << 1u64
+                    sh3 = sh3 + 1u64
+                }
+                pb_a_from_x(i)
+                k = 0u64
+                while k < 14u64 {
+                    pr_bn_setb(k, 0u64)
+                    k = k + 1u64
+                }
+                pr_bn_setb(13u64, gmm << sh3)
+                pr_bn_sete_b(mb_nw_e(i) - 832i64 - (sh3 as i64))
+                if pr_bn_x_mul(0u64) != 0u64 { return 1u64 }
+                pr_bn_r_to_a()
+                k = 0u64
+                while k < 14u64 {
+                    pr_bn_setb(k, PB_S2M[k])
+                    k = k + 1u64
+                }
+                pr_bn_sete_b(PB_S2E)
+                if pr_bn_x_mul(0u64) != 0u64 { return 1u64 }
+                let mut rs : i64 = xs
+                if gs < 0i64 { rs = 0i64 - rs }
+                pb_x_from_r(i, rs)
+            }
+        }
+        i = i + 1u64
+    }
+    mb_dz_mark(n)
+    return 0u64
+}
+
+/* deep sigma of the value in A (sign sa): 1/(1 + e^-z), center, dn */
+fn pb_dz_sigma_deep(sa: i64) -> u64 {
+    let rc : u64 = pr_bn_exp(0i64 - sa, 0u64)
+    if rc == 1u64 {
+        /* saturation: z >= 24 -> sigma ~ 1; z <= -24 -> sigma ~ 0 */
+        let mut k : u64 = 0u64
+        while k < 14u64 {
+            pr_bn_seta(k, 0u64)
+            pr_bn_setb(k, 0u64)
+            k = k + 1u64
+        }
+        if sa > 0i64 {
+            pr_bn_seta(13u64, 1u64 << 63u64)
+            pr_bn_sete_a(0i64 - 895i64)
+        }
+        pr_bn_sete_b(0i64)
+        pr_bn_x_add(0u64)
+        return 0u64
+    }
+    /* 1 + e^-z */
+    pr_bn_r_to_a()
+    let mut k2 : u64 = 0u64
+    while k2 < 14u64 {
+        pr_bn_setb(k2, 0u64)
+        k2 = k2 + 1u64
+    }
+    pr_bn_setb(13u64, 1u64 << 63u64)
+    pr_bn_sete_b(0i64 - 895i64)
+    if pr_bn_x_add(0u64) != 0u64 { return 1u64 }
+    pr_bn_r_to_a()
+    if pr_bn_recip(0u64) != 0u64 { return 1u64 }
+    return 0u64
+}
+
+/* the deep attention half (single token): X -> X' in the thought */
+fn pb_dz_attn(lay: u64) -> u64 {
+    let b : u64 = lay * 12u64
+    let mut i : u64 = 0u64
+    while i < 7168u64 {
+        pb_buf_from_x(0u64, i)
+        i = i + 1u64
+    }
+    if pb_dz_rms(7168u64, b + 0u64, 0u64) != 0u64 { return 11u64 }
+    let r4 : u64 = mb_dz_run(b + 4u64, 7168u64, 576u64)
+    if r4 != 0u64 { return 120u64 + r4 }
+    pb_wled_fold()
+    /* thought <- out[0..512] (the latent; the 64 rope lanes rest at pos 0) */
+    i = 0u64
+    while i < 512u64 {
+        let mut k : u64 = 0u64
+        while k < 14u64 {
+            mb_dz_set(i, k, mb_dz_o_l(i, k))
+            k = k + 1u64
+        }
+        mb_dz_sete(i, mb_dz_o_s(i), mb_dz_o_e(i))
+        i = i + 1u64
+    }
+    mb_dz_mark(512u64)
+    if pb_dz_rms(512u64, b + 5u64, 0u64) != 0u64 { return 13u64 }
+    let r6 : u64 = mb_dz_run(b + 6u64, 512u64, 32768u64)
+    if r6 != 0u64 { return 140u64 + r6 }
+    pb_wled_fold()
+    /* extract V: thought[h*128+d] <- out[h*256+128+d] */
+    let mut h : u64 = 0u64
+    while h < 128u64 {
+        let mut d : u64 = 0u64
+        while d < 128u64 {
+            let src : u64 = h * 256u64 + 128u64 + d
+            let dst : u64 = h * 128u64 + d
+            let mut k2 : u64 = 0u64
+            while k2 < 14u64 {
+                mb_dz_set(dst, k2, mb_dz_o_l(src, k2))
+                k2 = k2 + 1u64
+            }
+            mb_dz_sete(dst, mb_dz_o_s(src), mb_dz_o_e(src))
+            d = d + 1u64
+        }
+        h = h + 1u64
+    }
+    mb_dz_mark(16384u64)
+    if mb_dz_run(b + 7u64, 16384u64, 7168u64) != 0u64 { return 1u64 }
+    pb_wled_fold()
+    /* X' = save + out -> thought */
+    i = 0u64
+    while i < 7168u64 {
+        let so : i64 = pb_b_from_o(i)
+        let ss : i64 = pb_a_from_buf(0u64, i)
+        let mut rs : i64 = 0i64
+        if ss == so {
+            if ss != 0i64 {
+                if pr_bn_x_add(0u64) != 0u64 { return 1u64 }
+                rs = ss
+            }
+        }
+        if ss != so {
+            if ss == 0i64 { rs = pb_pass_b(so) }
+            if so == 0i64 {
+                if ss != 0i64 { rs = pb_pass_a(ss) }
+            }
+            if ss != 0i64 {
+                if so != 0i64 {
+                    let c : i64 = pr_bn_cmp()
+                    if c >= 0i64 {
+                        if pr_bn_x_sub(0u64) != 0u64 { return 1u64 }
+                        rs = ss
+                        if c == 0i64 { rs = 0i64 }
+                    }
+                    if c < 0i64 {
+                        /* reload swapped: A <- out, B <- save */
+                        pb_a_from_o(i)
+                        pb_b_from_buf(0u64, i)
+                        if pr_bn_x_sub(0u64) != 0u64 { return 1u64 }
+                        rs = so
+                    }
+                }
+            }
+        }
+        pb_x_from_r(i, rs)
+        i = i + 1u64
+    }
+    mb_dz_mark(7168u64)
+    return 0u64
+}
+
+/* the deep dense FFN half: X' -> X'' in the thought */
+fn pb_dz_ffn_dense(lay: u64) -> u64 {
+    let b : u64 = lay * 12u64
+    let mut i : u64 = 0u64
+    while i < 7168u64 {
+        pb_buf_from_x(0u64, i)
+        i = i + 1u64
+    }
+    if pb_dz_rms(7168u64, b + 8u64, 0u64) != 0u64 { return 1u64 }
+    if mb_dz_run(b + 9u64, 7168u64, 18432u64) != 0u64 { return 1u64 }
+    pb_wled_fold()
+    /* stash gate -> G */
+    i = 0u64
+    while i < 18432u64 {
+        let base : u64 = i * 14u64
+        let mut k : u64 = 0u64
+        while k < 14u64 {
+            PB_DGM[base + k] = mb_dz_o_l(i, k)
+            k = k + 1u64
+        }
+        PB_DGS[i] = mb_dz_o_s(i)
+        PB_DGE[i] = mb_dz_o_e(i)
+        i = i + 1u64
+    }
+    if mb_dz_run(b + 10u64, 7168u64, 18432u64) != 0u64 { return 1u64 }
+    pb_wled_fold()
+    /* silu: thought[j] = g * sigma(g) * u */
+    let mut j : u64 = 0u64
+    while j < 18432u64 {
+        let gs : i64 = PB_DGS[j]
+        let us : i64 = mb_dz_o_s(j)
+        if gs == 0i64 { pb_x_zero(j) }
+        if us == 0i64 {
+            if gs != 0i64 { pb_x_zero(j) }
+        }
+        if gs != 0i64 {
+            if us != 0i64 {
+                pb_a_from_buf(2u64, j)
+                if pb_dz_sigma_deep(gs) != 0u64 { return 1u64 }
+                if pr_bn_rz() == 1u64 {
+                    pb_x_zero(j)
+                }
+                if pr_bn_rz() == 0u64 {
+                    pr_bn_r_to_b()
+                    pb_a_from_buf(2u64, j)
+                    if pr_bn_x_mul(0u64) != 0u64 { return 1u64 }
+                    pr_bn_r_to_a()
+                    pb_b_from_o(j)
+                    if pr_bn_x_mul(0u64) != 0u64 { return 1u64 }
+                    let mut rs : i64 = gs
+                    if us < 0i64 { rs = 0i64 - rs }
+                    pb_x_from_r(j, rs)
+                }
+            }
+        }
+        j = j + 1u64
+    }
+    mb_dz_mark(18432u64)
+    if mb_dz_run(b + 11u64, 18432u64, 7168u64) != 0u64 { return 1u64 }
+    pb_wled_fold()
+    /* X'' = save + out */
+    i = 0u64
+    while i < 7168u64 {
+        let so : i64 = pb_b_from_o(i)
+        let ss : i64 = pb_a_from_buf(0u64, i)
+        let mut rs : i64 = 0i64
+        if ss == so {
+            if ss != 0i64 {
+                if pr_bn_x_add(0u64) != 0u64 { return 1u64 }
+                rs = ss
+            }
+        }
+        if ss != so {
+            if ss == 0i64 { rs = pb_pass_b(so) }
+            if so == 0i64 {
+                if ss != 0i64 { rs = pb_pass_a(ss) }
+            }
+            if ss != 0i64 {
+                if so != 0i64 {
+                    let c : i64 = pr_bn_cmp()
+                    if c >= 0i64 {
+                        if pr_bn_x_sub(0u64) != 0u64 { return 1u64 }
+                        rs = ss
+                        if c == 0i64 { rs = 0i64 }
+                    }
+                    if c < 0i64 {
+                        pb_a_from_o(i)
+                        pb_b_from_buf(0u64, i)
+                        if pr_bn_x_sub(0u64) != 0u64 { return 1u64 }
+                        rs = so
+                    }
+                }
+            }
+        }
+        pb_x_from_r(i, rs)
+        i = i + 1u64
+    }
+    mb_dz_mark(7168u64)
+    return 0u64
+}
+
+/* MoE accumulate: M += w (S1, positive) * out[i], i < 7168 */
+fn pb_dz_moe_acc() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 7168u64 {
+        let os : i64 = mb_dz_o_s(i)
+        if os != 0i64 {
+            pb_a_from_o(i)
+            let mut k : u64 = 0u64
+            while k < 14u64 {
+                pr_bn_setb(k, PB_S1M[k])
+                k = k + 1u64
+            }
+            pr_bn_sete_b(PB_S1E)
+            if pr_bn_x_mul(0u64) != 0u64 { return 1u64 }
+            let ms : i64 = PB_DMS[i]
+            if ms == 0i64 {
+                pb_buf_from_r(3u64, i, os)
+            }
+            if ms != 0i64 {
+                pr_bn_r_to_b()
+                pb_a_from_buf(3u64, i)
+                if ms == os {
+                    if pr_bn_x_add(0u64) != 0u64 { return 1u64 }
+                    pb_buf_from_r(3u64, i, ms)
+                }
+                if ms != os {
+                    let c : i64 = pr_bn_cmp()
+                    if c > 0i64 {
+                        if pr_bn_x_sub(0u64) != 0u64 { return 1u64 }
+                        pb_buf_from_r(3u64, i, ms)
+                    }
+                    if c == 0i64 {
+                        let mut k2 : u64 = 0u64
+                        while k2 < 14u64 {
+                            PB_DMM[i * 14u64 + k2] = 0u64
+                            k2 = k2 + 1u64
+                        }
+                        PB_DMS[i] = 0i64
+                        PB_DME[i] = 0i64
+                    }
+                    if c < 0i64 {
+                        pr_bn_r_to_a()
+                        pb_b_from_buf(3u64, i)
+                        if pr_bn_x_sub(0u64) != 0u64 { return 1u64 }
+                        pb_buf_from_r(3u64, i, os)
+                    }
+                }
+            }
+        }
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+/* one deep expert FFN over the standing H: acc-ready out */
+fn pb_dz_expert(e: u64, shared: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < 7168u64 {
+        pb_x_from_buf(1u64, i)
+        i = i + 1u64
+    }
+    mb_dz_mark(7168u64)
+    let mut r0 : u64 = 0u64
+    if shared == 1u64 { r0 = mb_dz_run_exp(3u64, 0u64, 7168u64, 2048u64) }
+    if shared == 0u64 { r0 = mb_dz_run_exp(0u64, e, 7168u64, 2048u64) }
+    if r0 != 0u64 { return 1u64 }
+    pb_wled_fold()
+    i = 0u64
+    while i < 2048u64 {
+        let base : u64 = i * 14u64
+        let mut k : u64 = 0u64
+        while k < 14u64 {
+            PB_DGM[base + k] = mb_dz_o_l(i, k)
+            k = k + 1u64
+        }
+        PB_DGS[i] = mb_dz_o_s(i)
+        PB_DGE[i] = mb_dz_o_e(i)
+        i = i + 1u64
+    }
+    let mut r1 : u64 = 0u64
+    if shared == 1u64 { r1 = mb_dz_run_exp(4u64, 0u64, 7168u64, 2048u64) }
+    if shared == 0u64 { r1 = mb_dz_run_exp(1u64, e, 7168u64, 2048u64) }
+    if r1 != 0u64 { return 1u64 }
+    pb_wled_fold()
+    let mut j : u64 = 0u64
+    while j < 2048u64 {
+        let gs : i64 = PB_DGS[j]
+        let us : i64 = mb_dz_o_s(j)
+        let mut done2 : u64 = 0u64
+        if gs == 0i64 {
+            pb_x_zero(j)
+            done2 = 1u64
+        }
+        if done2 == 0u64 {
+            if us == 0i64 {
+                pb_x_zero(j)
+                done2 = 1u64
+            }
+        }
+        if done2 == 0u64 {
+            pb_a_from_buf(2u64, j)
+            if pb_dz_sigma_deep(gs) != 0u64 { return 1u64 }
+            if pr_bn_rz() == 1u64 { pb_x_zero(j) }
+            if pr_bn_rz() == 0u64 {
+                pr_bn_r_to_b()
+                pb_a_from_buf(2u64, j)
+                if pr_bn_x_mul(0u64) != 0u64 { return 1u64 }
+                pr_bn_r_to_a()
+                pb_b_from_o(j)
+                if pr_bn_x_mul(0u64) != 0u64 { return 1u64 }
+                let mut rs : i64 = gs
+                if us < 0i64 { rs = 0i64 - rs }
+                pb_x_from_r(j, rs)
+            }
+        }
+        j = j + 1u64
+    }
+    mb_dz_mark(2048u64)
+    let mut r2 : u64 = 0u64
+    if shared == 1u64 { r2 = mb_dz_run_exp(5u64, 0u64, 2048u64, 7168u64) }
+    if shared == 0u64 { r2 = mb_dz_run_exp(2u64, e, 2048u64, 7168u64) }
+    if r2 != 0u64 { return 1u64 }
+    pb_wled_fold()
+    return 0u64
+}
+
+/* the deep router dot for expert e over the H buffer: the accumulated
+ * deep logit lands in PB_S1 (sign in the return, 0 = zero) */
+fn pb_dz_rdot() -> i64 {
+    let mut accs : i64 = 0i64
+    let mut i : u64 = 0u64
+    while i < 7168u64 {
+        let wm : i64 = mb_rw_m(i)
+        if wm != 0i64 {
+            if PB_DHS[i] != 0i64 {
+                let mut ws : i64 = 1i64
+                let mut wmm : u64 = wm as u64
+                if wm < 0i64 {
+                    ws = 0i64 - 1i64
+                    wmm = (0i64 - wm) as u64
+                }
+                let mut sh : u64 = 0u64
+                let mut hh : u64 = wmm
+                while (hh >> 63u64) == 0u64 {
+                    hh = hh << 1u64
+                    sh = sh + 1u64
+                }
+                pb_a_from_buf(1u64, i)
+                let mut k : u64 = 0u64
+                while k < 14u64 {
+                    pr_bn_setb(k, 0u64)
+                    k = k + 1u64
+                }
+                pr_bn_setb(13u64, wmm << sh)
+                pr_bn_sete_b(mb_rw_e(i) - 832i64 - (sh as i64))
+                if pr_bn_x_mul(0u64) != 0u64 { return 100i64 }
+                let mut ts : i64 = PB_DHS[i]
+                if ws < 0i64 { ts = 0i64 - ts }
+                if accs == 0i64 {
+                    accs = ts
+                    k = 0u64
+                    while k < 14u64 {
+                        PB_S1M[k] = pr_bn_r(k)
+                        k = k + 1u64
+                    }
+                    PB_S1E = pr_bn_re()
+                }
+                if accs != 0i64 {
+                    if accs == ts {
+                        pr_bn_r_to_b()
+                        k = 0u64
+                        while k < 14u64 {
+                            pr_bn_seta(k, PB_S1M[k])
+                            k = k + 1u64
+                        }
+                        pr_bn_sete_a(PB_S1E)
+                        if pr_bn_x_add(0u64) != 0u64 { return 100i64 }
+                        k = 0u64
+                        while k < 14u64 {
+                            PB_S1M[k] = pr_bn_r(k)
+                            k = k + 1u64
+                        }
+                        PB_S1E = pr_bn_re()
+                    }
+                    if accs != ts {
+                        pr_bn_r_to_b()
+                        k = 0u64
+                        while k < 14u64 {
+                            pr_bn_seta(k, PB_S1M[k])
+                            k = k + 1u64
+                        }
+                        pr_bn_sete_a(PB_S1E)
+                        let c : i64 = pr_bn_cmp()
+                        if c > 0i64 {
+                            if pr_bn_x_sub(0u64) != 0u64 { return 100i64 }
+                            k = 0u64
+                            while k < 14u64 {
+                                PB_S1M[k] = pr_bn_r(k)
+                                k = k + 1u64
+                            }
+                            PB_S1E = pr_bn_re()
+                        }
+                        if c == 0i64 {
+                            accs = 0i64
+                        }
+                        if c < 0i64 {
+                            pr_bn_r_to_a()
+                            k = 0u64
+                            while k < 14u64 {
+                                pr_bn_setb(k, PB_S1M[k])
+                                k = k + 1u64
+                            }
+                            pr_bn_sete_b(PB_S1E)
+                            if pr_bn_x_sub(0u64) != 0u64 { return 100i64 }
+                            accs = ts
+                            k = 0u64
+                            while k < 14u64 {
+                                PB_S1M[k] = pr_bn_r(k)
+                                k = k + 1u64
+                            }
+                            PB_S1E = pr_bn_re()
+                        }
+                    }
+                }
+            }
+        }
+        i = i + 1u64
+    }
+    return accs
+}
+
+/* the deep MoE layer: attention, the election on deep centers, the nine
+ * expert weaves, the weighted return */
+fn pb_dz_layer_moe(lay: u64) -> u64 {
+    if pb_dz_attn(lay) != 0u64 { return 1u64 }
+    let b : u64 = lay * 12u64
+    let mut i : u64 = 0u64
+    while i < 7168u64 {
+        pb_buf_from_x(0u64, i)
+        i = i + 1u64
+    }
+    if pb_dz_rms(7168u64, b + 8u64, 0u64) != 0u64 { return 1u64 }
+    i = 0u64
+    while i < 7168u64 {
+        pb_buf_from_x(1u64, i)
+        i = i + 1u64
+    }
+    if mb_me_sel(lay) != 0u64 { return 1u64 }
+    PB_BIAS_ON = 0u64
+    if mb_eb_present(lay) == 1u64 {
+        if mb_moe_bias_load() != 0u64 { return 1u64 }
+        PB_BIAS_ON = 1u64
+    }
+    /* the election on deep centers: sigma(row.H) + bias, order by the
+     * one-limb df keys, certification by the standing ledger */
+    let mut e : u64 = 0u64
+    while e < 256u64 {
+        if mb_moe_router_row(e) != 0u64 { return 1u64 }
+        let ls : i64 = pb_dz_rdot()
+        if ls == 100i64 { return 1u64 }
+        let mut k : u64 = 0u64
+        while k < 14u64 {
+            pr_bn_seta(k, PB_S1M[k])
+            k = k + 1u64
+        }
+        pr_bn_sete_a(PB_S1E)
+        let mut sgn : i64 = ls
+        if ls == 0i64 {
+            k = 0u64
+            while k < 14u64 {
+                pr_bn_seta(k, 0u64)
+                k = k + 1u64
+            }
+            pr_bn_sete_a(0i64)
+            sgn = 1i64
+        }
+        if pb_dz_sigma_deep(sgn) != 0u64 { return 1u64 }
+        PB_RCS[e] = 1i64
+        if PB_BIAS_ON == 1u64 {
+            let bmi : i64 = mb_bs_m(e)
+            if bmi != 0i64 {
+                let mut bs : i64 = 1i64
+                let mut mg : u64 = bmi as u64
+                if bmi < 0i64 {
+                    bs = 0i64 - 1i64
+                    mg = (0i64 - bmi) as u64
+                }
+                let mut sh2 : u64 = 0u64
+                let mut h2 : u64 = mg
+                while (h2 >> 63u64) == 0u64 {
+                    h2 = h2 << 1u64
+                    sh2 = sh2 + 1u64
+                }
+                pr_bn_r_to_a()
+                k = 0u64
+                while k < 14u64 {
+                    pr_bn_setb(k, 0u64)
+                    k = k + 1u64
+                }
+                pr_bn_setb(13u64, mg << sh2)
+                pr_bn_sete_b(mb_bs_e(e) - 832i64 - (sh2 as i64))
+                if bs > 0i64 {
+                    if pr_bn_x_add(0u64) != 0u64 { return 1u64 }
+                }
+                if bs < 0i64 {
+                    let c2 : i64 = pr_bn_cmp()
+                    if c2 >= 0i64 {
+                        if pr_bn_x_sub(0u64) != 0u64 { return 1u64 }
+                    }
+                    if c2 < 0i64 {
+                        pr_bn_r_to_b()
+                        k = 0u64
+                        while k < 14u64 {
+                            pr_bn_seta(k, 0u64)
+                            k = k + 1u64
+                        }
+                        pr_bn_seta(13u64, mg << sh2)
+                        pr_bn_sete_a(mb_bs_e(e) - 832i64 - (sh2 as i64))
+                        if pr_bn_x_sub(0u64) != 0u64 { return 1u64 }
+                        PB_RCS[e] = 0i64 - 1i64
+                    }
+                }
+            }
+        }
+        pr_bn_to_df(0u64)
+        PB_RCM[e] = pr_x_dfm()
+        PB_RCE[e] = pr_x_dfe()
+        if pr_bn_rz() == 1u64 { PB_RCS[e] = 0i64 }
+        e = e + 1u64
+    }
+    /* elect the top-8 by the (sign, m, e) df order */
+    let mut used : u64 = 0u64
+    while used < 256u64 {
+        PB_TOPUSED[used] = 0u8
+        used = used + 1u64
+    }
+    let mut kk : u64 = 0u64
+    while kk < 8u64 {
+        let mut best : u64 = 256u64
+        e = 0u64
+        while e < 256u64 {
+            if PB_TOPUSED[e] == 0u8 {
+                if best == 256u64 { best = e }
+                if best != e {
+                    let cb : i64 = pb_scmp(PB_RCS[e], PB_RCM[e], PB_RCE[e], PB_RCS[best], PB_RCM[best], PB_RCE[best])
+                    if cb > 0i64 { best = e }
+                }
+            }
+            e = e + 1u64
+        }
+        PB_TOP8[kk] = best
+        PB_TOPUSED[best] = 1u8
+        kk = kk + 1u64
+    }
+    /* the weighted return: M <- shared + Sigma w_k expert_k */
+    pb_dbuf_zero(3u64, 7168u64)
+    if pb_dz_expert(0u64, 1u64) != 0u64 { return 1u64 }
+    PB_S1S = 1i64
+    let mut k3 : u64 = 0u64
+    while k3 < 14u64 {
+        PB_S1M[k3] = 0u64
+        k3 = k3 + 1u64
+    }
+    PB_S1M[13u64] = 1u64 << 63u64
+    PB_S1E = 0i64 - 895i64
+    if pb_dz_moe_acc() != 0u64 { return 1u64 }
+    /* the weights: w_k = 2.5 * sigma_k / Sigma sigma over the eight; the
+     * sigma centers recovered from the score keys (minus bias) */
+    let mut smm : u64 = 0u64
+    let mut sme : i64 = 0i64
+    kk = 0u64
+    while kk < 8u64 {
+        let ee : u64 = PB_TOP8[kk]
+        let mut sm2 : u64 = PB_RCM[ee]
+        let mut se2 : i64 = PB_RCE[ee]
+        if PB_BIAS_ON == 1u64 {
+            let bmi2 : i64 = mb_bs_m(ee)
+            if bmi2 != 0i64 {
+                let mut mg2 : u64 = bmi2 as u64
+                let mut neg2 : u64 = 0u64
+                if bmi2 < 0i64 {
+                    mg2 = (0i64 - bmi2) as u64
+                    neg2 = 1u64
+                }
+                pr_x_dfn2(0u64, mg2, mb_bs_e(ee), 0u64)
+                let bfm : u64 = pr_x_dfm()
+                let bfe : i64 = pr_x_dfe()
+                if neg2 == 0u64 {
+                    pr_x_dfsub(sm2, se2, bfm, bfe, 0u64)
+                    sm2 = pr_x_dfm()
+                    se2 = pr_x_dfe()
+                }
+                if neg2 == 1u64 {
+                    pr_x_dfadd(sm2, se2, bfm, bfe, 0u64)
+                    sm2 = pr_x_dfm()
+                    se2 = pr_x_dfe()
+                }
+            }
+        }
+        PB_SIGLM[kk] = sm2
+        PB_SIGLE[kk] = se2
+        pr_x_dfadd(smm, sme, sm2, se2, 0u64)
+        smm = pr_x_dfm()
+        sme = pr_x_dfe()
+        kk = kk + 1u64
+    }
+    if smm == 0u64 { return 1u64 }
+    pr_x_dfrecip(smm, sme, 0u64)
+    let rsm : u64 = pr_x_dfm()
+    let rse : i64 = pr_x_dfe()
+    pr_x_dfn2(0u64, 5u64, 0i64 - 1i64, 0u64)
+    let scm : u64 = pr_x_dfm()
+    let sce : i64 = pr_x_dfe()
+    kk = 0u64
+    while kk < 8u64 {
+        let ee2 : u64 = PB_TOP8[kk]
+        pr_x_dfmul(PB_SIGLM[kk], PB_SIGLE[kk], rsm, rse, 0u64)
+        pr_x_dfmul(pr_x_dfm(), pr_x_dfe(), scm, sce, 0u64)
+        let wm3 : u64 = pr_x_dfm()
+        let we3 : i64 = pr_x_dfe()
+        if pb_dz_expert(ee2, 0u64) != 0u64 { return 1u64 }
+        PB_S1S = 1i64
+        k3 = 0u64
+        while k3 < 14u64 {
+            PB_S1M[k3] = 0u64
+            k3 = k3 + 1u64
+        }
+        PB_S1M[13u64] = wm3
+        PB_S1E = we3 - 832i64
+        if pb_dz_moe_acc() != 0u64 { return 1u64 }
+        kk = kk + 1u64
+    }
+    /* X'' = SV + M */
+    let mut i2 : u64 = 0u64
+    while i2 < 7168u64 {
+        let ms2 : i64 = pb_a_from_buf(3u64, i2)
+        let ss2 : i64 = pb_b_from_buf(0u64, i2)
+        let mut rs2 : i64 = 0i64
+        let mut d3 : u64 = 0u64
+        if ms2 == ss2 {
+            if ms2 != 0i64 {
+                if pr_bn_x_add(0u64) != 0u64 { return 1u64 }
+                rs2 = ms2
+                d3 = 1u64
+            }
+            if ms2 == 0i64 {
+                pb_x_zero(i2)
+                d3 = 2u64
+            }
+        }
+        if d3 == 0u64 {
+            if ms2 == 0i64 { rs2 = pb_pass_b(ss2) }
+            if ss2 == 0i64 {
+                if ms2 != 0i64 { rs2 = pb_pass_a(ms2) }
+            }
+            if ms2 != 0i64 {
+                if ss2 != 0i64 {
+                    let c4 : i64 = pr_bn_cmp()
+                    if c4 >= 0i64 {
+                        if pr_bn_x_sub(0u64) != 0u64 { return 1u64 }
+                        rs2 = ms2
+                        if c4 == 0i64 { rs2 = 0i64 }
+                    }
+                    if c4 < 0i64 {
+                        pb_a_from_buf(0u64, i2)
+                        pb_b_from_buf(3u64, i2)
+                        if pr_bn_x_sub(0u64) != 0u64 { return 1u64 }
+                        rs2 = ss2
+                    }
+                }
+            }
+        }
+        if d3 != 2u64 { pb_x_from_r(i2, rs2) }
+        i2 = i2 + 1u64
+    }
+    mb_dz_mark(7168u64)
+    return 0u64
+}
+
+/* THE WAY THROUGH: embed the first breath, walk every layer, speak */
+var PB_DX_TOK : u64 = 0u64
+var PB_DX_GAPE : i64 = 0i64
+fn pb_diexodos(nlay: u64) -> u64 @export {
+    PB_DX_OK = 0u64
+    PB_WLED = 0i64 - 1000000i64
+    if mb_census_only() != 0u64 { return 1u64 }
+    if mb_feast() == 0u64 { return 2u64 }
+    let bos : u64 = mb_dz_bos()
+    if bos == (0u64 - 1u64) { return 3u64 }
+    if mb_dz_embed(bos) != 0u64 { return 4u64 }
+    let mut lay : u64 = 0u64
+    while lay < nlay {
+        if lay < 3u64 {
+            let ra : u64 = pb_dz_attn(lay)
+            if ra != 0u64 { return 1000u64 + ra }
+            if pb_dz_ffn_dense(lay) != 0u64 { return 100u64 + lay }
+        }
+        if lay >= 3u64 {
+            if pb_dz_layer_moe(lay) != 0u64 { return 200u64 + lay }
+        }
+        lay = lay + 1u64
+    }
+    /* the head: output_norm then the krisis sweep */
+    if pb_dz_rms(7168u64, 0u64, 1u64) != 0u64 { return 5u64 }
+    if mb_dz_krisis(2u64, 7168u64) != 0u64 { return 6u64 }
+    pb_wled_fold()
+    PB_DX_TOK = mb_kr_tok()
+    /* the gap: best - second on the podium centers */
+    let mut gape : i64 = 0i64 - 1000000i64
+    if mb_kr_s() > mb_kr_s2() { gape = mb_kr_e() + 63i64 }
+    if mb_kr_s() == mb_kr_s2() {
+        if mb_kr_s() != 0i64 {
+            pr_x_dfsub(mb_kr_m(), mb_kr_e(), mb_kr_m2(), mb_kr_e2(), 0u64)
+            if pr_x_dfm() != 0u64 { gape = pr_x_dfe() + 63i64 }
+        }
+    }
+    PB_DX_GAPE = gape
+    PB_DX_OK = 1u64
+    return 0u64
+}
+fn pb_dx_tok() -> u64 @export { return PB_DX_TOK }
+fn pb_dx_gape() -> i64 @export { return PB_DX_GAPE }
+fn pb_dx_wled() -> i64 @export { return PB_WLED }
+fn pb_dx_tok2() -> u64 @export { return mb_kr_tok2() }
+
+/* THE PROMPT-DRIVEN WAY: pb_diexodos embeds the fixed BOS breath; this twin
+ * embeds an ARBITRARY token so a consumer can ASK the model "given <tok> as the
+ * whole context, what comes next?"  Byte-for-byte the same certified walk +
+ * krisis as pb_diexodos -- only the first breath differs.  This is the one line
+ * that turned the self-proving forward pass into a callable oracle: the input was
+ * never fixed by the mathematics, only by pb_diexodos's hardcoded bos.  An
+ * out-of-vocab token is refused by mb_dz_embed (returns 4). */
+fn pb_diexodos_tok(tok: u64, nlay: u64) -> u64 @export {
+    PB_DX_OK = 0u64
+    PB_WLED = 0i64 - 1000000i64
+    if mb_census_only() != 0u64 { return 1u64 }
+    if mb_feast() == 0u64 { return 2u64 }
+    if mb_dz_embed(tok) != 0u64 { return 4u64 }
+    let mut lay : u64 = 0u64
+    while lay < nlay {
+        if lay < 3u64 {
+            let ra : u64 = pb_dz_attn(lay)
+            if ra != 0u64 { return 1000u64 + ra }
+            if pb_dz_ffn_dense(lay) != 0u64 { return 100u64 + lay }
+        }
+        if lay >= 3u64 {
+            if pb_dz_layer_moe(lay) != 0u64 { return 200u64 + lay }
+        }
+        lay = lay + 1u64
+    }
+    if pb_dz_rms(7168u64, 0u64, 1u64) != 0u64 { return 5u64 }
+    if mb_dz_krisis(2u64, 7168u64) != 0u64 { return 6u64 }
+    pb_wled_fold()
+    PB_DX_TOK = mb_kr_tok()
+    let mut gape : i64 = 0i64 - 1000000i64
+    if mb_kr_s() > mb_kr_s2() { gape = mb_kr_e() + 63i64 }
+    if mb_kr_s() == mb_kr_s2() {
+        if mb_kr_s() != 0i64 {
+            pr_x_dfsub(mb_kr_m(), mb_kr_e(), mb_kr_m2(), mb_kr_e2(), 0u64)
+            if pr_x_dfm() != 0u64 { gape = pr_x_dfe() + 63i64 }
+        }
+    }
+    PB_DX_GAPE = gape
+    PB_DX_OK = 1u64
     return 0u64
 }
 
@@ -2425,6 +3875,7 @@ fn pb_selfprove() -> u64 @export {
     PB_THREP_OK = 0u64
     PB_WALK_OK = 0u64
     PB_MOE_OK = 0u64
+    PB_MOE_SOUND = 0u64
     let r0 : u64 = pb_arm382()
     if r0 != 0u64 { return r0 }
     let r1 : u64 = pb_arm383()
@@ -2433,6 +3884,8 @@ fn pb_selfprove() -> u64 @export {
     if r2 != 0u64 { return r2 }
     let r3 : u64 = pb_arm385()
     if r3 != 0u64 { return r3 }
+    let r3b : u64 = pb_arm387()
+    if r3b != 0u64 { return r3b }
     let r4 : u64 = pb_arm388()
     if r4 != 0u64 { return r4 }
     let r5 : u64 = pb_arm389()

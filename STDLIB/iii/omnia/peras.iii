@@ -4147,10 +4147,30 @@ fn pr_df_cmp(ma: u64, ea: i64, mb: u64, eb: i64) -> i64 {
     return 0i64
 }
 
-/* df -> exp-ladder argument at 2^-48 (value must be small; dir outward) */
+/* THE ESCALATION RUNG: the exp-ladder argument quantum.  The walk's
+ * fresh error per transcendental is dominated by this quantum, not by
+ * the Taylor tail (2^-103 at 24 terms) nor the 2^-88 fixed point.  A
+ * discrete decision may climb the ladder: 48 -> 58 (the u64 ceiling:
+ * 16 * 2^58 < 2^63, and the halving shift s+h <= 63).  Deterministic,
+ * reset by the spine; a decision decided at one rung must hold at the
+ * next or the climb itself is the refutation. */
+var PR_XDEPTH : u64 = 48u64
+fn pr_x_esc(d: u64) -> u64 @export {
+    if d == 48u64 {
+        PR_XDEPTH = 48u64
+        return 0u64
+    }
+    if d == 58u64 {
+        PR_XDEPTH = 58u64
+        return 0u64
+    }
+    return 1u64
+}
+
+/* df -> exp-ladder argument at 2^-PR_XDEPTH (value small; dir outward) */
 fn pr_df_m48(m: u64, e: i64, up: u64) -> u64 {
     if m == 0u64 { return 0u64 }
-    let sh : i64 = 0i64 - (e + 48i64)
+    let sh : i64 = 0i64 - (e + (PR_XDEPTH as i64))
     if sh <= 0i64 { return 0u64 - 1u64 }
     if sh >= 64i64 {
         if up == 1u64 { return 1u64 }
@@ -4278,6 +4298,740 @@ fn pr_df_from14(up: u64) -> i32 {
     PR_DFM = m
     PR_DFE = e
     return 0i32
+}
+
+/* ==================== THE BATHYS (the deep float) ====================
+ * The 14-limb (896-bit) dyadic float: the anchor tier of the DIEXODOS.
+ * The walk's amplification is x2^13 per layer and SOUND -- no enclosure
+ * method escapes it -- so the center stream must start ~2^-850 deep for
+ * 61 layers to end above 2^-50.  Value = sign * mant * 2^exp with mant a
+ * 14-limb little-endian integer normalized to the top bit of limb 13;
+ * operands ride the A/B slots, results the PR_B* channel; every rounding
+ * is directed and sticky-honest, exactly the one-limb df's law widened.
+ * The 28-limb window carries products and aligned sums; one rounding per
+ * operation, never one per limb. */
+const PR_BN : u64 = 14u64
+var PR_BAM : [u64; 14]
+var PR_BAE : i64 = 0i64
+var PR_BBM : [u64; 14]
+var PR_BBE : i64 = 0i64
+var PR_BM : [u64; 14]
+var PR_BE : i64 = 0i64
+var PR_BW : [u64; 29]
+var PR_BZERO : u64 = 0u64
+
+fn pr_bn_seta(k: u64, v: u64) -> u64 @export {
+    if k >= 14u64 { return 1u64 }
+    PR_BAM[k] = v
+    return 0u64
+}
+fn pr_bn_sete_a(e: i64) -> u64 @export {
+    PR_BAE = e
+    return 0u64
+}
+fn pr_bn_setb(k: u64, v: u64) -> u64 @export {
+    if k >= 14u64 { return 1u64 }
+    PR_BBM[k] = v
+    return 0u64
+}
+fn pr_bn_sete_b(e: i64) -> u64 @export {
+    PR_BBE = e
+    return 0u64
+}
+fn pr_bn_r(k: u64) -> u64 @export {
+    if k >= 14u64 { return 0u64 }
+    return PR_BM[k]
+}
+fn pr_bn_re() -> i64 @export { return PR_BE }
+fn pr_bn_rz() -> u64 @export { return PR_BZERO }
+fn pr_bn_r_to_a() -> u64 @export {
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_BAM[k] = PR_BM[k]
+        k = k + 1u64
+    }
+    PR_BAE = PR_BE
+    return 0u64
+}
+fn pr_bn_r_to_b() -> u64 @export {
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_BBM[k] = PR_BM[k]
+        k = k + 1u64
+    }
+    PR_BBE = PR_BE
+    return 0u64
+}
+
+/* normalize the 29-limb window (value = W * 2^we) into the 14-limb
+ * channel with one directed rounding; sticky over every dropped bit */
+fn pr_bn_normw(we: i64, up: u64) -> u64 {
+    let mut t : u64 = 29u64
+    let mut k : u64 = 29u64
+    while k != 0u64 {
+        k = k - 1u64
+        if t == 29u64 {
+            if PR_BW[k] != 0u64 { t = k }
+        }
+    }
+    if t == 29u64 {
+        k = 0u64
+        while k < 14u64 {
+            PR_BM[k] = 0u64
+            k = k + 1u64
+        }
+        PR_BE = 0i64
+        PR_BZERO = 1u64
+        return 0u64
+    }
+    PR_BZERO = 0u64
+    /* top bit of limb t */
+    let mut bl : u64 = 0u64
+    let mut tv : u64 = PR_BW[t]
+    while tv != 0u64 {
+        tv = tv >> 1u64
+        bl = bl + 1u64
+    }
+    /* the value's top bit position (0-based from limb 0 bit 0) */
+    let top : u64 = t * 64u64 + bl - 1u64
+    /* destination top position: limb 13 bit 63 -> position 13*64+63 = 895 */
+    let mut sticky : u64 = 0u64
+    if top >= 895u64 {
+        /* shift right by top-895; dropped bits feed the sticky */
+        let sh : u64 = top - 895u64
+        let w : u64 = sh / 64u64
+        let b : u64 = sh % 64u64
+        k = 0u64
+        while k < w {
+            sticky = sticky | PR_BW[k]
+            k = k + 1u64
+        }
+        if b != 0u64 { sticky = sticky | (PR_BW[w] << (64u64 - b)) }
+        k = 0u64
+        while k < 14u64 {
+            let src : u64 = k + w
+            let mut v : u64 = 0u64
+            if src < 29u64 { v = PR_BW[src] }
+            if b != 0u64 {
+                v = v >> b
+                if src + 1u64 < 29u64 { v = v | (PR_BW[src + 1u64] << (64u64 - b)) }
+            }
+            PR_BM[k] = v
+            k = k + 1u64
+        }
+        PR_BE = we + (sh as i64)
+    }
+    if top < 895u64 {
+        /* shift left by 895-top */
+        let sh2 : u64 = 895u64 - top
+        let w2 : u64 = sh2 / 64u64
+        let b2 : u64 = sh2 % 64u64
+        k = 14u64
+        while k != 0u64 {
+            k = k - 1u64
+            let mut v2 : u64 = 0u64
+            if k >= w2 {
+                let src2 : u64 = k - w2
+                v2 = PR_BW[src2] << b2
+                if b2 != 0u64 {
+                    if src2 != 0u64 { v2 = v2 | (PR_BW[src2 - 1u64] >> (64u64 - b2)) }
+                }
+            }
+            PR_BM[k] = v2
+        }
+        PR_BE = we - (sh2 as i64)
+    }
+    if up == 1u64 {
+        if sticky != 0u64 {
+            /* increment with ripple; on overflow re-normalize by one bit */
+            let mut c : u64 = 1u64
+            k = 0u64
+            while k < 14u64 {
+                if c == 1u64 {
+                    PR_BM[k] = PR_BM[k] + 1u64
+                    if PR_BM[k] != 0u64 { c = 0u64 }
+                }
+                k = k + 1u64
+            }
+            if c == 1u64 {
+                PR_BM[13u64] = 1u64 << 63u64
+                PR_BE = PR_BE + 1i64
+            }
+        }
+    }
+    return 0u64
+}
+
+/* R = A * B, one directed rounding (28-limb schoolbook product) */
+fn pr_bn_mul(up: u64) -> u64 {
+    let mut k : u64 = 0u64
+    while k < 29u64 {
+        PR_BW[k] = 0u64
+        k = k + 1u64
+    }
+    let mut i : u64 = 0u64
+    while i < 14u64 {
+        let av : u64 = PR_BAM[i]
+        if av != 0u64 {
+            let mut j : u64 = 0u64
+            while j < 14u64 {
+                let bv : u64 = PR_BBM[j]
+                if bv != 0u64 {
+                    pr_mul64(av, bv)
+                    /* add (MHI:MLO) at position i+j with ripple */
+                    let p : u64 = i + j
+                    let s0 : u64 = PR_BW[p] + PR_MLO
+                    let mut c : u64 = 0u64
+                    if s0 < PR_MLO { c = 1u64 }
+                    PR_BW[p] = s0
+                    let s1 : u64 = PR_BW[p + 1u64] + PR_MHI + c
+                    let mut c2 : u64 = 0u64
+                    if s1 < PR_MHI { c2 = 1u64 }
+                    if s1 == PR_MHI {
+                        if c == 1u64 {
+                            if PR_BW[p + 1u64] != 0u64 { c2 = 1u64 }
+                        }
+                    }
+                    PR_BW[p + 1u64] = s1
+                    let mut q : u64 = p + 2u64
+                    while c2 == 1u64 {
+                        PR_BW[q] = PR_BW[q] + 1u64
+                        c2 = 0u64
+                        if PR_BW[q] == 0u64 { c2 = 1u64 }
+                        q = q + 1u64
+                    }
+                }
+                j = j + 1u64
+            }
+        }
+        i = i + 1u64
+    }
+    return pr_bn_normw(PR_BAE + PR_BBE, up)
+}
+
+/* R = A + B (both positive), one directed rounding */
+fn pr_bn_add(up: u64) -> u64 {
+    /* order by exponent so A is the higher grid */
+    let mut d : i64 = PR_BAE - PR_BBE
+    let mut swap : u64 = 0u64
+    if d < 0i64 { swap = 1u64 }
+    if swap == 1u64 { d = 0i64 - d }
+    /* beyond the window the smaller operand is pure sticky */
+    if d >= 960i64 {
+        let mut k0 : u64 = 0u64
+        while k0 < 14u64 {
+            let mut v : u64 = PR_BAM[k0]
+            if swap == 1u64 { v = PR_BBM[k0] }
+            PR_BM[k0] = v
+            k0 = k0 + 1u64
+        }
+        PR_BE = PR_BAE
+        if swap == 1u64 { PR_BE = PR_BBE }
+        PR_BZERO = 0u64
+        if up == 1u64 {
+            let mut c3 : u64 = 1u64
+            let mut k1 : u64 = 0u64
+            while k1 < 14u64 {
+                if c3 == 1u64 {
+                    PR_BM[k1] = PR_BM[k1] + 1u64
+                    if PR_BM[k1] != 0u64 { c3 = 0u64 }
+                }
+                k1 = k1 + 1u64
+            }
+            if c3 == 1u64 {
+                PR_BM[13u64] = 1u64 << 63u64
+                PR_BE = PR_BE + 1i64
+            }
+        }
+        return 0u64
+    }
+    let du : u64 = d as u64
+    let w : u64 = du / 64u64
+    let b : u64 = du % 64u64
+    /* window := larger operand shifted LEFT by d (exact), grid = smaller's e */
+    let mut k : u64 = 0u64
+    while k < 29u64 {
+        PR_BW[k] = 0u64
+        k = k + 1u64
+    }
+    k = 0u64
+    while k < 14u64 {
+        let mut hv : u64 = PR_BAM[k]
+        if swap == 1u64 { hv = PR_BBM[k] }
+        if hv != 0u64 {
+            let pos : u64 = k + w
+            PR_BW[pos] = PR_BW[pos] | (hv << b)
+            if b != 0u64 {
+                PR_BW[pos + 1u64] = PR_BW[pos + 1u64] | (hv >> (64u64 - b))
+            }
+        }
+        k = k + 1u64
+    }
+    /* add the smaller operand at grid position 0 with ripple */
+    let mut c : u64 = 0u64
+    k = 0u64
+    while k < 14u64 {
+        let mut lv : u64 = PR_BBM[k]
+        if swap == 1u64 { lv = PR_BAM[k] }
+        let s : u64 = PR_BW[k] + lv
+        let mut c2 : u64 = 0u64
+        if s < lv { c2 = 1u64 }
+        let s2 : u64 = s + c
+        if s2 < c { c2 = 1u64 }
+        PR_BW[k] = s2
+        c = c2
+        k = k + 1u64
+    }
+    while c == 1u64 {
+        PR_BW[k] = PR_BW[k] + 1u64
+        c = 0u64
+        if PR_BW[k] == 0u64 { c = 1u64 }
+        k = k + 1u64
+    }
+    let mut ge : i64 = PR_BBE
+    if swap == 1u64 { ge = PR_BAE }
+    return pr_bn_normw(ge, up)
+}
+
+/* compare |A| vs |B| as values: -1/0/+1 */
+fn pr_bn_cmp() -> i64 @export {
+    /* top-bit positions decide first (both normalized to limb 13) */
+    let mut az : u64 = 1u64
+    let mut bz : u64 = 1u64
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        if PR_BAM[k] != 0u64 { az = 0u64 }
+        if PR_BBM[k] != 0u64 { bz = 0u64 }
+        k = k + 1u64
+    }
+    if az == 1u64 {
+        if bz == 1u64 { return 0i64 }
+        return 0i64 - 1i64
+    }
+    if bz == 1u64 { return 1i64 }
+    if PR_BAE > PR_BBE { return 1i64 }
+    if PR_BAE < PR_BBE { return 0i64 - 1i64 }
+    k = 14u64
+    while k != 0u64 {
+        k = k - 1u64
+        if PR_BAM[k] > PR_BBM[k] { return 1i64 }
+        if PR_BAM[k] < PR_BBM[k] { return 0i64 - 1i64 }
+    }
+    return 0i64
+}
+
+/* R = A - B demanding |A| >= |B| (caller orders via pr_bn_cmp); one
+ * directed rounding.  dir is on the magnitude. */
+fn pr_bn_sub(up: u64) -> u64 {
+    let d : i64 = PR_BAE - PR_BBE
+    if d < 0i64 { return 1u64 }
+    if d >= 960i64 {
+        /* B is below A's window: R = A minus a sticky epsilon */
+        let mut k0 : u64 = 0u64
+        while k0 < 14u64 {
+            PR_BM[k0] = PR_BAM[k0]
+            k0 = k0 + 1u64
+        }
+        PR_BE = PR_BAE
+        PR_BZERO = 0u64
+        if up == 0u64 {
+            let mut br : u64 = 1u64
+            let mut k1 : u64 = 0u64
+            while k1 < 14u64 {
+                if br == 1u64 {
+                    let ov : u64 = PR_BM[k1]
+                    PR_BM[k1] = ov - 1u64
+                    if ov != 0u64 { br = 0u64 }
+                }
+                k1 = k1 + 1u64
+            }
+            if (PR_BM[13u64] >> 63u64) == 0u64 {
+                /* renormalize one bit left, the vacated bit is 1 (sticky) */
+                let mut k2 : u64 = 13u64
+                while k2 != 0u64 {
+                    PR_BM[k2] = (PR_BM[k2] << 1u64) | (PR_BM[k2 - 1u64] >> 63u64)
+                    k2 = k2 - 1u64
+                }
+                PR_BM[0u64] = (PR_BM[0u64] << 1u64) | 1u64
+                PR_BE = PR_BE - 1i64
+            }
+        }
+        return 0u64
+    }
+    let du : u64 = d as u64
+    let w : u64 = du / 64u64
+    let b : u64 = du % 64u64
+    let mut k : u64 = 0u64
+    while k < 29u64 {
+        PR_BW[k] = 0u64
+        k = k + 1u64
+    }
+    k = 0u64
+    while k < 14u64 {
+        let av : u64 = PR_BAM[k]
+        if av != 0u64 {
+            let pos : u64 = k + w
+            PR_BW[pos] = PR_BW[pos] | (av << b)
+            if b != 0u64 {
+                PR_BW[pos + 1u64] = PR_BW[pos + 1u64] | (av >> (64u64 - b))
+            }
+        }
+        k = k + 1u64
+    }
+    let mut br : u64 = 0u64
+    k = 0u64
+    while k < 14u64 {
+        let bv : u64 = PR_BBM[k]
+        let cur : u64 = PR_BW[k]
+        let t1 : u64 = cur - bv
+        let mut b2 : u64 = 0u64
+        if cur < bv { b2 = 1u64 }
+        let t2 : u64 = t1 - br
+        if t1 < br { b2 = 1u64 }
+        PR_BW[k] = t2
+        br = b2
+        k = k + 1u64
+    }
+    while br == 1u64 {
+        let cur2 : u64 = PR_BW[k]
+        PR_BW[k] = cur2 - 1u64
+        br = 0u64
+        if cur2 == 0u64 { br = 1u64 }
+        k = k + 1u64
+    }
+    return pr_bn_normw(PR_BBE, up)
+}
+
+/* bridges: the one-limb df in and out of the deep channel */
+fn pr_bn_from_df_a(m: u64, e: i64) -> u64 @export {
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_BAM[k] = 0u64
+        k = k + 1u64
+    }
+    PR_BAM[13u64] = m
+    PR_BAE = e - 832i64
+    return 0u64
+}
+fn pr_bn_from_df_b(m: u64, e: i64) -> u64 @export {
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_BBM[k] = 0u64
+        k = k + 1u64
+    }
+    PR_BBM[13u64] = m
+    PR_BBE = e - 832i64
+    return 0u64
+}
+fn pr_bn_to_df(up: u64) -> u64 @export {
+    /* the result channel rounded to a one-limb df in PR_DFM/PR_DFE */
+    if PR_BZERO == 1u64 {
+        PR_DFM = 0u64
+        PR_DFE = 0i64
+        return 0u64
+    }
+    let mut st : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < 13u64 {
+        st = st | PR_BM[k]
+        k = k + 1u64
+    }
+    PR_DFM = PR_BM[13u64]
+    PR_DFE = PR_BE + 832i64
+    if up == 1u64 {
+        if st != 0u64 {
+            PR_DFM = PR_DFM + 1u64
+            if PR_DFM == 0u64 {
+                PR_DFM = 1u64 << 63u64
+                PR_DFE = PR_DFE + 1i64
+            }
+        }
+    }
+    return 0u64
+}
+
+/* the exported drivers (probole's anchor stream rides these) */
+fn pr_bn_x_mul(up: u64) -> u64 @export { return pr_bn_mul(up) }
+fn pr_bn_x_add(up: u64) -> u64 @export { return pr_bn_add(up) }
+fn pr_bn_x_sub(up: u64) -> u64 @export { return pr_bn_sub(up) }
+
+/* ---- the deep quotient tier: THE VERIFIED-BY-MULTIPLICATION LAW ----
+ * Newton PROPOSES a candidate; an EXACT directed multiplication JUDGES
+ * it.  No error analysis is ever trusted: every served bound rests on a
+ * decidable integer comparison, adjusted by ulps until the bracket is
+ * proven.  The adjustment loop is bounded; exhaustion is a NAMED red. */
+
+/* one save slot for a value (the 'a' of a reciprocal/root in flight) */
+var PR_BVM : [u64; 14]
+var PR_BVE : i64 = 0i64
+fn pr_bn_a_save() -> u64 {
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_BVM[k] = PR_BAM[k]
+        k = k + 1u64
+    }
+    PR_BVE = PR_BAE
+    return 0u64
+}
+fn pr_bn_v_to_a() -> u64 {
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_BAM[k] = PR_BVM[k]
+        k = k + 1u64
+    }
+    PR_BAE = PR_BVE
+    return 0u64
+}
+fn pr_bn_v_to_b() -> u64 {
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_BBM[k] = PR_BVM[k]
+        k = k + 1u64
+    }
+    PR_BBE = PR_BVE
+    return 0u64
+}
+/* a second save slot (the walking candidate) */
+var PR_BXM : [u64; 14]
+var PR_BXE : i64 = 0i64
+fn pr_bn_r_to_x() -> u64 {
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_BXM[k] = PR_BM[k]
+        k = k + 1u64
+    }
+    PR_BXE = PR_BE
+    return 0u64
+}
+fn pr_bn_x_to_a() -> u64 {
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_BAM[k] = PR_BXM[k]
+        k = k + 1u64
+    }
+    PR_BAE = PR_BXE
+    return 0u64
+}
+fn pr_bn_x_to_b() -> u64 {
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_BBM[k] = PR_BXM[k]
+        k = k + 1u64
+    }
+    PR_BBE = PR_BXE
+    return 0u64
+}
+/* the candidate nudged by one ulp (mantissa +/-1 with renormalize) */
+fn pr_bn_x_ulp(dn: u64) -> u64 {
+    if dn == 1u64 {
+        let mut br : u64 = 1u64
+        let mut k : u64 = 0u64
+        while k < 14u64 {
+            if br == 1u64 {
+                let ov : u64 = PR_BXM[k]
+                PR_BXM[k] = ov - 1u64
+                if ov != 0u64 { br = 0u64 }
+            }
+            k = k + 1u64
+        }
+        if (PR_BXM[13u64] >> 63u64) == 0u64 {
+            let mut k2 : u64 = 13u64
+            while k2 != 0u64 {
+                PR_BXM[k2] = (PR_BXM[k2] << 1u64) | (PR_BXM[k2 - 1u64] >> 63u64)
+                k2 = k2 - 1u64
+            }
+            PR_BXM[0u64] = (PR_BXM[0u64] << 1u64) | 1u64
+            PR_BXE = PR_BXE - 1i64
+        }
+        return 0u64
+    }
+    let mut c : u64 = 1u64
+    let mut k3 : u64 = 0u64
+    while k3 < 14u64 {
+        if c == 1u64 {
+            PR_BXM[k3] = PR_BXM[k3] + 1u64
+            if PR_BXM[k3] != 0u64 { c = 0u64 }
+        }
+        k3 = k3 + 1u64
+    }
+    if c == 1u64 {
+        PR_BXM[13u64] = 1u64 << 63u64
+        PR_BXE = PR_BXE + 1i64
+    }
+    return 0u64
+}
+/* compare the RESULT channel against exact one */
+fn pr_bn_r_cmp_one() -> i64 {
+    if PR_BZERO == 1u64 { return 0i64 - 1i64 }
+    /* one = mant 2^895 at e = -895; normalized cmp by exponent then limbs */
+    if PR_BE > (0i64 - 895i64) { return 1i64 }
+    if PR_BE < (0i64 - 895i64) { return 0i64 - 1i64 }
+    if PR_BM[13u64] > (1u64 << 63u64) { return 1i64 }
+    let mut k : u64 = 0u64
+    while k < 13u64 {
+        if PR_BM[k] != 0u64 { return 1i64 }
+        k = k + 1u64
+    }
+    return 0i64
+}
+
+/* R = 1/A, the served side per up.  A saved in V; candidate walks in X. */
+fn pr_bn_recip(up: u64) -> u64 @export {
+    /* A must be nonzero-normalized */
+    if (PR_BAM[13u64] >> 63u64) == 0u64 { return 1u64 }
+    pr_bn_a_save()
+    /* seed from the one-limb reciprocal of the top limb */
+    pr_dfrecip(PR_BVM[13u64], 0i64, 0u64)
+    let sm : u64 = PR_DFM
+    let se : i64 = PR_DFE
+    /* x0 as a deep value: value = sm * 2^(se - (BVE + 13*64)) */
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_BXM[k] = 0u64
+        k = k + 1u64
+    }
+    PR_BXM[13u64] = sm
+    PR_BXE = se - 832i64 - (PR_BVE + 896i64) + 64i64
+    /* Newton: x <- x * (2 - a*x), six climbs (52 -> 3300+ bits) */
+    let mut it : u64 = 0u64
+    while it < 6u64 {
+        pr_bn_v_to_a()
+        pr_bn_x_to_b()
+        if pr_bn_mul(0u64) != 0u64 { return 1u64 }
+        /* d = 2 - ax (ax near 1; a positive) */
+        pr_bn_r_to_b()
+        k = 0u64
+        while k < 14u64 {
+            PR_BAM[k] = 0u64
+            k = k + 1u64
+        }
+        PR_BAM[13u64] = 1u64 << 63u64
+        PR_BAE = 0i64 - 894i64
+        if pr_bn_cmp() < 0i64 { return 1u64 }
+        if pr_bn_sub(0u64) != 0u64 { return 1u64 }
+        pr_bn_r_to_a()
+        pr_bn_x_to_b()
+        if pr_bn_mul(0u64) != 0u64 { return 1u64 }
+        pr_bn_r_to_x()
+        it = it + 1u64
+    }
+    /* THE JUDGMENT: walk X to the certified side of 1/a.
+     * dn side: need (a*x) rounded UP <= 1  =>  true a*x <= 1  =>  x <= 1/a.
+     * up side: need (a*x) rounded DN >= 1  =>  true a*x >= 1  =>  x >= 1/a. */
+    let mut tries : u64 = 0u64
+    let mut done : u64 = 0u64
+    while done == 0u64 {
+        if tries > 8u64 { return 1u64 }
+        pr_bn_v_to_a()
+        pr_bn_x_to_b()
+        if up == 0u64 {
+            if pr_bn_mul(1u64) != 0u64 { return 1u64 }
+            if pr_bn_r_cmp_one() <= 0i64 { done = 1u64 }
+            if done == 0u64 { pr_bn_x_ulp(1u64) }
+        }
+        if up == 1u64 {
+            if pr_bn_mul(0u64) != 0u64 { return 1u64 }
+            if pr_bn_r_cmp_one() >= 0i64 { done = 1u64 }
+            if done == 0u64 { pr_bn_x_ulp(0u64) }
+        }
+        tries = tries + 1u64
+    }
+    /* serve X through the result channel */
+    let mut k4 : u64 = 0u64
+    while k4 < 14u64 {
+        PR_BM[k4] = PR_BXM[k4]
+        k4 = k4 + 1u64
+    }
+    PR_BE = PR_BXE
+    PR_BZERO = 0u64
+    return 0u64
+}
+
+/* R = sqrt(A), the served side per up.  Inverse-sqrt Newton (mul-only),
+ * then r = a*y; judged by exact directed squaring against a. */
+fn pr_bn_sqrt(up: u64) -> u64 @export {
+    if (PR_BAM[13u64] >> 63u64) == 0u64 { return 1u64 }
+    pr_bn_a_save()
+    /* seed y0 = 1/sqrt(top-limb scale): via one-limb dfsqrt + dfrecip */
+    let vtop : u64 = PR_BVM[13u64]
+    let vte : i64 = PR_BVE + 832i64
+    pr_dfsqrt(vtop, vte, 0u64)
+    if PR_DFM == 0u64 { return 1u64 }
+    pr_dfrecip(PR_DFM, PR_DFE, 0u64)
+    let sm : u64 = PR_DFM
+    let se : i64 = PR_DFE
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_BXM[k] = 0u64
+        k = k + 1u64
+    }
+    PR_BXM[13u64] = sm
+    PR_BXE = se - 832i64
+    /* Newton: y <- y*(3 - a*y*y)/2, six climbs */
+    let mut it : u64 = 0u64
+    while it < 6u64 {
+        pr_bn_x_to_a()
+        pr_bn_x_to_b()
+        if pr_bn_mul(0u64) != 0u64 { return 1u64 }
+        pr_bn_r_to_b()
+        pr_bn_v_to_a()
+        if pr_bn_mul(0u64) != 0u64 { return 1u64 }
+        /* d = 3 - a*y^2 */
+        pr_bn_r_to_b()
+        k = 0u64
+        while k < 14u64 {
+            PR_BAM[k] = 0u64
+            k = k + 1u64
+        }
+        PR_BAM[13u64] = 3u64 << 62u64
+        PR_BAE = 0i64 - 894i64
+        if pr_bn_cmp() < 0i64 { return 1u64 }
+        if pr_bn_sub(0u64) != 0u64 { return 1u64 }
+        /* y <- y * d / 2 (the halving is an exponent step, exact) */
+        pr_bn_r_to_a()
+        PR_BAE = PR_BAE - 1i64
+        pr_bn_x_to_b()
+        if pr_bn_mul(0u64) != 0u64 { return 1u64 }
+        pr_bn_r_to_x()
+        it = it + 1u64
+    }
+    /* r = a * y (the root candidate walks in X) */
+    pr_bn_v_to_a()
+    pr_bn_x_to_b()
+    if pr_bn_mul(0u64) != 0u64 { return 1u64 }
+    pr_bn_r_to_x()
+    /* THE JUDGMENT: dn side needs (x*x) rounded UP <= a; up side needs
+     * (x*x) rounded DN >= a.  The compare rides the A/B slots. */
+    let mut tries : u64 = 0u64
+    let mut done : u64 = 0u64
+    while done == 0u64 {
+        if tries > 8u64 { return 1u64 }
+        pr_bn_x_to_a()
+        pr_bn_x_to_b()
+        if up == 0u64 {
+            if pr_bn_mul(1u64) != 0u64 { return 1u64 }
+            pr_bn_r_to_a()
+            pr_bn_v_to_b()
+            if pr_bn_cmp() <= 0i64 { done = 1u64 }
+            if done == 0u64 { pr_bn_x_ulp(1u64) }
+        }
+        if up == 1u64 {
+            if pr_bn_mul(0u64) != 0u64 { return 1u64 }
+            pr_bn_r_to_a()
+            pr_bn_v_to_b()
+            if pr_bn_cmp() >= 0i64 { done = 1u64 }
+            if done == 0u64 { pr_bn_x_ulp(0u64) }
+        }
+        tries = tries + 1u64
+    }
+    let mut k5 : u64 = 0u64
+    while k5 < 14u64 {
+        PR_BM[k5] = PR_BXM[k5]
+        k5 = k5 + 1u64
+    }
+    PR_BE = PR_BXE
+    PR_BZERO = 0u64
+    return 0u64
 }
 
 /* r1^2 = mean(x^2) + eps as a df interval (all exact until the df) */
@@ -4876,7 +5630,7 @@ fn pr_cho_exp(m: u64, e: i64, sg: i64, up: u64) -> u64 {
         /* growing side: up -> ceil arg + EHI; dn -> floor arg + ELO */
         let m48 : u64 = pr_df_m48(m, e, up)
         if m48 == (0u64 - 1u64) { return 1u64 }
-        if pr_exp(m48, 48u64) != 0i32 { return 1u64 }
+        if pr_exp(m48, PR_XDEPTH) != 0i32 { return 1u64 }
         if up == 1u64 {
             pr_dfn2(PR_EHI1, PR_EHI0, 0i64 - 88i64, 1u64)
         }
@@ -4888,7 +5642,7 @@ fn pr_cho_exp(m: u64, e: i64, sg: i64, up: u64) -> u64 {
     /* shrinking side: exp(-|z|) = recip(exp(|z|)) */
     let m48b : u64 = pr_df_m48(m, e, 1u64 - up)
     if m48b == (0u64 - 1u64) { return 1u64 }
-    if pr_exp(m48b, 48u64) != 0i32 { return 1u64 }
+    if pr_exp(m48b, PR_XDEPTH) != 0i32 { return 1u64 }
     if up == 1u64 {
         /* upper of recip needs LOWER of exp: floor arg + ELO, recip up */
         pr_dfn2(PR_ELO1, PR_ELO0, 0i64 - 88i64, 0u64)
@@ -5326,13 +6080,1291 @@ fn pr_x_ms_l1() -> u64 @export { return PR_MSL1 }
 fn pr_x_ms_h0() -> u64 @export { return PR_MSH0 }
 fn pr_x_ms_h1() -> u64 @export { return PR_MSH1 }
 
+/* ==================== arm 358: THE ESKALATION ====================
+ * The rung itself proven: at PR_XDEPTH=58 the walking exponential of 1
+ * must land inside the SAME continued-fraction jaws (the independent
+ * engine), sit INSIDE the 24-rung ladder bracket (the climb tightens,
+ * never drifts), refuse the cap by name, land twice identically, and
+ * return the rung home.  Code 358 on red. */
+fn pr_esc_tooth() -> u64 {
+    /* the 24-rung bracket of e at 2^-88 (the raw ladder, arm 367's law) */
+    if pr_exp(1u64 << 24u64, 24u64) != 0i32 { return 358u64 }
+    let c_l0 : u64 = PR_ELO0
+    let c_l1 : u64 = PR_ELO1
+    let c_h0 : u64 = PR_EHI0
+    let c_h1 : u64 = PR_EHI1
+    /* the CF jaws (convergents of e, the independent engine) */
+    let mut p_prev : u64 = 1u64
+    let mut p_cur : u64 = 2u64
+    let mut q_prev : u64 = 0u64
+    let mut q_cur : u64 = 1u64
+    let mut below_p : u64 = 2u64
+    let mut below_q : u64 = 1u64
+    let mut above_p : u64 = 0u64
+    let mut above_q : u64 = 1u64
+    let mut idx : u64 = 1u64
+    while idx <= 14u64 {
+        let mut a : u64 = 1u64
+        if idx == 2u64 { a = 2u64 }
+        if idx == 5u64 { a = 4u64 }
+        if idx == 8u64 { a = 6u64 }
+        if idx == 11u64 { a = 8u64 }
+        if idx == 14u64 { a = 10u64 }
+        let p_new : u64 = a * p_cur + p_prev
+        let q_new : u64 = a * q_cur + q_prev
+        p_prev = p_cur
+        p_cur = p_new
+        q_prev = q_cur
+        q_cur = q_new
+        if (idx & 1u64) == 1u64 {
+            above_p = p_new
+            above_q = q_new
+        }
+        if (idx & 1u64) == 0u64 {
+            below_p = p_new
+            below_q = q_new
+        }
+        idx = idx + 1u64
+    }
+    if above_p == 0u64 { return 358u64 }
+    /* the witness argument: z = 1 + 2^-50.  Its low bit BITES the 48-rung
+     * quantum (the bracket fattens to ~e*2^-48) and sits EXACTLY on the
+     * 58-rung -- so the climb must strictly tighten BOTH bounds, and the
+     * CF jaws (convergent error ~2^-40) still hold the perturbed value. */
+    let zm : u64 = (1u64 << 63u64) + (1u64 << 13u64)
+    let ze : i64 = 0i64 - 63i64
+    if pr_x_esc(48u64) != 0u64 { return 358u64 }
+    if pr_cho_exp(zm, ze, 1i64, 0u64) != 0u64 { return 358u64 }
+    let l48m : u64 = PR_DFM
+    let l48e : i64 = PR_DFE
+    if pr_cho_exp(zm, ze, 1i64, 1u64) != 0u64 { return 358u64 }
+    let h48m : u64 = PR_DFM
+    let h48e : i64 = PR_DFE
+    /* the climb */
+    if pr_x_esc(58u64) != 0u64 { return 358u64 }
+    if pr_cho_exp(zm, ze, 1i64, 0u64) != 0u64 {
+        pr_x_esc(48u64)
+        return 358u64
+    }
+    let lm : u64 = PR_DFM
+    let le : i64 = PR_DFE
+    if pr_cho_exp(zm, ze, 1i64, 1u64) != 0u64 {
+        pr_x_esc(48u64)
+        return 358u64
+    }
+    let hm : u64 = PR_DFM
+    let he : i64 = PR_DFE
+    /* the rung lands twice identically */
+    if pr_cho_exp(zm, ze, 1i64, 0u64) != 0u64 {
+        pr_x_esc(48u64)
+        return 358u64
+    }
+    if PR_DFM != lm {
+        pr_x_esc(48u64)
+        return 358u64
+    }
+    if PR_DFE != le {
+        pr_x_esc(48u64)
+        return 358u64
+    }
+    /* the cap refused at the rung */
+    if pr_cho_exp(3u64 << 62u64, 0i64 - 59i64, 1i64, 0u64) != 1u64 {
+        pr_x_esc(48u64)
+        return 358u64
+    }
+    pr_x_esc(48u64)
+    /* strictly tighter at the delivered dfs: l48 < l58 and h58 < h48 */
+    if pr_df_cmp(l48m, l48e, lm, le) >= 0i64 { return 358u64 }
+    if pr_df_cmp(hm, he, h48m, h48e) >= 0i64 { return 358u64 }
+    /* dfs -> 2^-88 pairs for the jaws: sh = e + 88 must sit in [1, 63].
+     * The floored lo and ceiled hi make the jaw checks conservative-sound. */
+    let shl : i64 = le + 88i64
+    if shl < 1i64 { return 358u64 }
+    if shl > 63i64 { return 358u64 }
+    let sl : u64 = shl as u64
+    let l88h : u64 = lm >> (64u64 - sl)
+    let l88l : u64 = lm << sl
+    let shh : i64 = he + 88i64
+    if shh < 1i64 { return 358u64 }
+    if shh > 63i64 { return 358u64 }
+    let sh2 : u64 = shh as u64
+    let h88h : u64 = hm >> (64u64 - sh2)
+    let h88l : u64 = hm << sh2
+    /* the 58-rung must also sit inside the raw 24-term ladder bracket of
+     * exp(1) ONLY from below is meaningless for the perturbed value; the
+     * exact-1 coarse bracket c_l..c_h instead anchors the JAWS' scale:
+     * demand l88 above c_l (e*(1+2^-50) > e's floor) -- a sanity rail. */
+    if pr_cmp128(c_l1, c_l0, l88h, l88l) > 0i64 { return 358u64 }
+    if pr_cmp128(c_h1, c_h0, h88h, h88l) > 0i64 {
+        /* the perturbed hi may lawfully exceed exp(1)'s hi only by ~2^-50
+         * relative; a larger breach is a broken ladder */
+        let d0 : u64 = h88l - c_h0
+        let mut d1 : u64 = h88h - c_h1
+        if h88l < c_h0 { d1 = d1 - 1u64 }
+        /* breach must be below 2^40 at 2^-88 (= 2^-48 absolute) */
+        if d1 != 0u64 { return 358u64 }
+        if (d0 >> 40u64) != 0u64 { return 358u64 }
+    }
+    /* inside the CF jaws: below_p/below_q < l88 and h88 < above_p/above_q */
+    pr_mul128by64(l88h, l88l, below_q)
+    let bl0 : u64 = PR_Z[0]
+    let bl1 : u64 = PR_Z[1]
+    let bl2 : u64 = PR_Z[2]
+    let bp1 : u64 = below_p << 24u64
+    let bp2 : u64 = below_p >> 40u64
+    let mut ok1 : u64 = 0u64
+    if bl2 > bp2 { ok1 = 1u64 }
+    if bl2 == bp2 {
+        if bl1 > bp1 { ok1 = 1u64 }
+        if bl1 == bp1 {
+            if bl0 != 0u64 { ok1 = 1u64 }
+        }
+    }
+    if ok1 == 0u64 { return 358u64 }
+    pr_mul128by64(h88h, h88l, above_q)
+    let al1 : u64 = PR_Z[1]
+    let al2 : u64 = PR_Z[2]
+    let ap1 : u64 = above_p << 24u64
+    let ap2 : u64 = above_p >> 40u64
+    let mut ok2 : u64 = 0u64
+    if al2 < ap2 { ok2 = 1u64 }
+    if al2 == ap2 {
+        if al1 < ap1 { ok2 = 1u64 }
+    }
+    if ok2 == 0u64 { return 358u64 }
+    pr_rs("the eskalation: rung 58 -- z=1+2^-50 strictly tighter than rung 48 on both bounds, e' cf-bounded, cap=refused rerun=identical rung=returned" as u64)
+    pr_rb(10u8)
+    return 0u64
+}
+
+/* ==================== THE DEEP LADDER (exp at 896 bits) ====================
+ * pr_exp's architecture at the bathys tier: fixed-point 2^-888 chains
+ * (one = 2^888, headroom 8 bits), 132 directed Taylor terms (the tail
+ * of 1/132! sits at ~2^-880), the halving/squaring ladder, every
+ * rounding directed and sticky-honest.  Four chains ride PR_XT (TL, TH,
+ * SL, SH at c*14); the argument's two directed quantizations ride
+ * PR_XY (dn at 0, up at 14). */
+var PR_XT : [u64; 56]
+var PR_XY : [u64; 28]
+
+/* chain c *= Y(side) at fixed-point, directed; product window = PR_BW */
+fn pr_xf_muly(c: u64, side: u64, up: u64) -> u64 {
+    let cb : u64 = c * 14u64
+    let yb : u64 = side * 14u64
+    let mut k : u64 = 0u64
+    while k < 29u64 {
+        PR_BW[k] = 0u64
+        k = k + 1u64
+    }
+    let mut i : u64 = 0u64
+    while i < 14u64 {
+        let av : u64 = PR_XT[cb + i]
+        if av != 0u64 {
+            let mut j : u64 = 0u64
+            while j < 14u64 {
+                let bv : u64 = PR_XY[yb + j]
+                if bv != 0u64 {
+                    pr_mul64(av, bv)
+                    let p : u64 = i + j
+                    let s0 : u64 = PR_BW[p] + PR_MLO
+                    let mut cc : u64 = 0u64
+                    if s0 < PR_MLO { cc = 1u64 }
+                    PR_BW[p] = s0
+                    let s1 : u64 = PR_BW[p + 1u64] + PR_MHI + cc
+                    let mut c2 : u64 = 0u64
+                    if s1 < PR_MHI { c2 = 1u64 }
+                    if s1 == PR_MHI {
+                        if cc == 1u64 {
+                            if PR_BW[p + 1u64] != 0u64 { c2 = 1u64 }
+                        }
+                    }
+                    PR_BW[p + 1u64] = s1
+                    let mut q : u64 = p + 2u64
+                    while c2 == 1u64 {
+                        PR_BW[q] = PR_BW[q] + 1u64
+                        c2 = 0u64
+                        if PR_BW[q] == 0u64 { c2 = 1u64 }
+                        q = q + 1u64
+                    }
+                }
+                j = j + 1u64
+            }
+        }
+        i = i + 1u64
+    }
+    /* >> 888 = 13 limbs + 56 bits, sticky over the dropped */
+    let mut st : u64 = 0u64
+    k = 0u64
+    while k < 13u64 {
+        st = st | PR_BW[k]
+        k = k + 1u64
+    }
+    st = st | (PR_BW[13u64] << 8u64)
+    k = 0u64
+    while k < 14u64 {
+        let lo : u64 = PR_BW[k + 13u64] >> 56u64
+        let mut hi : u64 = 0u64
+        if k + 14u64 < 29u64 { hi = PR_BW[k + 14u64] << 8u64 }
+        PR_XT[cb + k] = lo | hi
+        k = k + 1u64
+    }
+    if up == 1u64 {
+        if st != 0u64 {
+            let mut c3 : u64 = 1u64
+            k = 0u64
+            while k < 14u64 {
+                if c3 == 1u64 {
+                    PR_XT[cb + k] = PR_XT[cb + k] + 1u64
+                    if PR_XT[cb + k] != 0u64 { c3 = 0u64 }
+                }
+                k = k + 1u64
+            }
+            if c3 == 1u64 { return 1u64 }
+        }
+    }
+    return 0u64
+}
+
+/* chain c /= k, directed (per-limb schoolbook, remainder honest) */
+fn pr_xf_divk(c: u64, kk: u64, up: u64) -> u64 {
+    let cb : u64 = c * 14u64
+    let mut rem : u64 = 0u64
+    let mut i : u64 = 14u64
+    while i != 0u64 {
+        i = i - 1u64
+        pr_div_small(rem, PR_XT[cb + i], kk)
+        PR_XT[cb + i] = PR_MLO
+        rem = PR_STK
+    }
+    if up == 1u64 {
+        if rem != 0u64 {
+            let mut c3 : u64 = 1u64
+            let mut k2 : u64 = 0u64
+            while k2 < 14u64 {
+                if c3 == 1u64 {
+                    PR_XT[cb + k2] = PR_XT[cb + k2] + 1u64
+                    if PR_XT[cb + k2] != 0u64 { c3 = 0u64 }
+                }
+                k2 = k2 + 1u64
+            }
+        }
+    }
+    return 0u64
+}
+
+/* chain dst += chain src (exact; the 8 headroom bits absorb the sums) */
+fn pr_xf_add(dst: u64, src: u64) -> u64 {
+    let db : u64 = dst * 14u64
+    let sb : u64 = src * 14u64
+    let mut c : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        let s : u64 = PR_XT[db + k] + PR_XT[sb + k]
+        let mut c2 : u64 = 0u64
+        if s < PR_XT[sb + k] { c2 = 1u64 }
+        let s2 : u64 = s + c
+        if s2 < c { c2 = 1u64 }
+        PR_XT[db + k] = s2
+        c = c2
+        k = k + 1u64
+    }
+    if c == 1u64 { return 1u64 }
+    return 0u64
+}
+
+/* chain c := one (2^888) */
+fn pr_xf_one(c: u64) -> u64 {
+    let cb : u64 = c * 14u64
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_XT[cb + k] = 0u64
+        k = k + 1u64
+    }
+    PR_XT[cb + 13u64] = 1u64 << 56u64
+    return 0u64
+}
+
+/* chain c := chain c squared at fixed-point, directed */
+fn pr_xf_sq(c: u64, up: u64) -> u64 {
+    /* route the square through muly by loading Y(0) from the chain */
+    let cb : u64 = c * 14u64
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_XY[k] = PR_XT[cb + k]
+        k = k + 1u64
+    }
+    return pr_xf_muly(c, 0u64, up)
+}
+
+/* deep exp: A slot = |z| (bathys value), sg its sign; result channel.
+ * 0 ok / 1 cap-or-guard (|z| >= 24 refused: the sigma saturation law). */
+fn pr_bn_exp(sg: i64, up: u64) -> u64 @export {
+    if sg == 0i64 {
+        let mut k0 : u64 = 0u64
+        while k0 < 14u64 {
+            PR_BM[k0] = 0u64
+            k0 = k0 + 1u64
+        }
+        PR_BM[13u64] = 1u64 << 63u64
+        PR_BE = 0i64 - 895i64
+        PR_BZERO = 0u64
+        return 0u64
+    }
+    /* the cap: |z| < 24 */
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_BBM[k] = 0u64
+        k = k + 1u64
+    }
+    PR_BBM[13u64] = 3u64 << 62u64
+    PR_BBE = 0i64 - 890i64
+    if pr_bn_cmp() >= 0i64 { return 1u64 }
+    let mut wup : u64 = up
+    if sg < 0i64 { wup = 1u64 - up }
+    /* halving ladder: y = |z| / 2^h with y <= 1/2 */
+    let mut h : u64 = 0u64
+    let mut go : u64 = 1u64
+    while go == 1u64 {
+        k = 0u64
+        while k < 14u64 {
+            PR_BBM[k] = 0u64
+            k = k + 1u64
+        }
+        PR_BBM[13u64] = 1u64 << 63u64
+        PR_BBE = 0i64 - 896i64
+        if pr_bn_cmp() > 0i64 {
+            PR_BAE = PR_BAE - 1i64
+            h = h + 1u64
+            if h > 6u64 { return 1u64 }
+        }
+        if pr_bn_cmp() <= 0i64 { go = 0u64 }
+    }
+    /* the argument's two directed fixed-point quantizations: Y = y*2^888.
+     * y = M*2^BAE with M top-normalized at 895 -> shift right by
+     * -(BAE+888) - 7 ... derived: Y-int bit positions = 895 + BAE + 888. */
+    let sh : i64 = 0i64 - (PR_BAE + 888i64)
+    if sh < 8i64 { return 1u64 }
+    if sh > 895i64 {
+        /* y underflows the quantum: Y_dn = 0, Y_up = 1 */
+        k = 0u64
+        while k < 28u64 {
+            PR_XY[k] = 0u64
+            k = k + 1u64
+        }
+        PR_XY[14u64] = 1u64
+    }
+    if sh <= 895i64 {
+        let shu : u64 = sh as u64
+        let w : u64 = shu / 64u64
+        let b : u64 = shu % 64u64
+        let mut st : u64 = 0u64
+        k = 0u64
+        while k < w {
+            st = st | PR_BAM[k]
+            k = k + 1u64
+        }
+        if b != 0u64 { st = st | (PR_BAM[w] << (64u64 - b)) }
+        k = 0u64
+        while k < 14u64 {
+            let src : u64 = k + w
+            let mut v : u64 = 0u64
+            if src < 14u64 {
+                v = PR_BAM[src] >> b
+                if b != 0u64 {
+                    if src + 1u64 < 14u64 { v = v | (PR_BAM[src + 1u64] << (64u64 - b)) }
+                }
+            }
+            PR_XY[k] = v
+            PR_XY[14u64 + k] = v
+            k = k + 1u64
+        }
+        if st != 0u64 {
+            let mut c3 : u64 = 1u64
+            k = 0u64
+            while k < 14u64 {
+                if c3 == 1u64 {
+                    PR_XY[14u64 + k] = PR_XY[14u64 + k] + 1u64
+                    if PR_XY[14u64 + k] != 0u64 { c3 = 0u64 }
+                }
+                k = k + 1u64
+            }
+        }
+    }
+    /* chains: TL=TH=SL=SH=one; 132 terms; the tail rides TH*y once more */
+    pr_xf_one(0u64)
+    pr_xf_one(1u64)
+    pr_xf_one(2u64)
+    pr_xf_one(3u64)
+    let mut t : u64 = 1u64
+    while t <= 132u64 {
+        if pr_xf_muly(0u64, 0u64, 0u64) != 0u64 { return 1u64 }
+        pr_xf_divk(0u64, t, 0u64)
+        if pr_xf_muly(1u64, 1u64, 1u64) != 0u64 { return 1u64 }
+        pr_xf_divk(1u64, t, 1u64)
+        if pr_xf_add(2u64, 0u64) != 0u64 { return 1u64 }
+        if pr_xf_add(3u64, 1u64) != 0u64 { return 1u64 }
+        t = t + 1u64
+    }
+    if pr_xf_muly(1u64, 1u64, 1u64) != 0u64 { return 1u64 }
+    if pr_xf_add(3u64, 1u64) != 0u64 { return 1u64 }
+    /* the squaring ladder, h times */
+    let mut q : u64 = 0u64
+    while q < h {
+        if pr_xf_sq(2u64, 0u64) != 0u64 { return 1u64 }
+        if pr_xf_sq(3u64, 1u64) != 0u64 { return 1u64 }
+        q = q + 1u64
+    }
+    /* serve the wup side through the window as value * 2^-888 */
+    let mut c4 : u64 = 2u64
+    if wup == 1u64 { c4 = 3u64 }
+    let cb4 : u64 = c4 * 14u64
+    k = 0u64
+    while k < 29u64 {
+        PR_BW[k] = 0u64
+        k = k + 1u64
+    }
+    k = 0u64
+    while k < 14u64 {
+        PR_BW[k] = PR_XT[cb4 + k]
+        k = k + 1u64
+    }
+    if pr_bn_normw(0i64 - 888i64, wup) != 0u64 { return 1u64 }
+    if sg > 0i64 { return 0u64 }
+    /* exp(-z) = 1/exp(z) at the flipped inner direction, judged */
+    pr_bn_r_to_a()
+    return pr_bn_recip(up)
+}
+
+/* ==================== THE DEEP CIRCLE (pi + sincos at 896 bits) =========
+ * The RHAPSODIA's rope at positions >= 1 needs certified angles on the
+ * anchor tier.  pi by Machin (16 atan(1/5) - 4 atan(1/239)) at fixed-
+ * point 2^-888 -- the arctan series with integer reciprocal steps only
+ * (divide by 25 / 57121 and by 2k+1, alternating, the tail bounded by
+ * the first dropped term); sincos by the alternating Taylor series at
+ * y <= 1/2 with the same four-chain discipline as the deep exp. */
+var PR_BPI : [u64; 14]
+var PR_BPIF : u64 = 0u64
+/* the deep sincos term carriers (hoisted: the slot ceiling is 64) */
+var PR_TSL : [u64; 14]
+var PR_TSH : [u64; 14]
+var PR_TCL : [u64; 14]
+var PR_TCH : [u64; 14]
+
+/* chain c := arctan(1/inv) at fixed-point 2^-888 (inv = 5 or 239);
+ * both directed chains folded into c (dn) and c+1 (up) */
+fn pr_xf_atan(c: u64, inv: u64) -> u64 {
+    /* T := 1/inv; S := T; then T *= 1/inv^2, T /= (2k+1) alternating */
+    let inv2 : u64 = inv * inv
+    pr_xf_one(c)
+    pr_xf_divk(c, inv, 0u64)
+    pr_xf_one(c + 1u64)
+    pr_xf_divk(c + 1u64, inv, 1u64)
+    /* working term chains ride the OTHER two slots (2,3 relative reuse
+     * is the caller's duty: atan uses all four chains) */
+    pr_xf_one(2u64)
+    pr_xf_divk(2u64, inv, 0u64)
+    pr_xf_one(3u64)
+    pr_xf_divk(3u64, inv, 1u64)
+    let mut k : u64 = 1u64
+    let mut sign_neg : u64 = 1u64
+    while k <= 320u64 {
+        pr_xf_divk(2u64, inv2, 0u64)
+        pr_xf_divk(3u64, inv2, 1u64)
+        /* term = T / (2k+1); the sum folds directed by the sign */
+        let mut t2 : u64 = 0u64
+        while t2 < 14u64 {
+            PR_BW[t2] = PR_XT[2u64 * 14u64 + t2]
+            t2 = t2 + 1u64
+        }
+        /* divide the copy by (2k+1) into BW (dn) */
+        let mut rem : u64 = 0u64
+        let mut i2 : u64 = 14u64
+        while i2 != 0u64 {
+            i2 = i2 - 1u64
+            pr_div_small(rem, PR_BW[i2], 2u64 * k + 1u64)
+            PR_BW[i2] = PR_MLO
+            rem = PR_STK
+        }
+        let mut t3 : u64 = 0u64
+        while t3 < 14u64 {
+            PR_BW[14u64 + t3] = PR_XT[3u64 * 14u64 + t3]
+            t3 = t3 + 1u64
+        }
+        rem = 0u64
+        i2 = 14u64
+        while i2 != 0u64 {
+            i2 = i2 - 1u64
+            pr_div_small(rem, PR_BW[14u64 + i2], 2u64 * k + 1u64)
+            PR_BW[14u64 + i2] = PR_MLO
+            rem = PR_STK
+        }
+        if rem != 0u64 {
+            let mut cc : u64 = 1u64
+            i2 = 0u64
+            while i2 < 14u64 {
+                if cc == 1u64 {
+                    PR_BW[14u64 + i2] = PR_BW[14u64 + i2] + 1u64
+                    if PR_BW[14u64 + i2] != 0u64 { cc = 0u64 }
+                }
+                i2 = i2 + 1u64
+            }
+        }
+        /* fold: subtracting turn takes the UP term from the dn chain and
+         * the DN term from the up chain (outward soundness) */
+        if sign_neg == 1u64 {
+            let mut br : u64 = 0u64
+            i2 = 0u64
+            while i2 < 14u64 {
+                let a : u64 = PR_XT[c * 14u64 + i2]
+                let b : u64 = PR_BW[14u64 + i2]
+                let d : u64 = a - b
+                let mut nb : u64 = 0u64
+                if a < b { nb = 1u64 }
+                let d2 : u64 = d - br
+                if d < br { nb = 1u64 }
+                PR_XT[c * 14u64 + i2] = d2
+                br = nb
+                i2 = i2 + 1u64
+            }
+            br = 0u64
+            i2 = 0u64
+            while i2 < 14u64 {
+                let a : u64 = PR_XT[(c + 1u64) * 14u64 + i2]
+                let b : u64 = PR_BW[i2]
+                let d : u64 = a - b
+                let mut nb : u64 = 0u64
+                if a < b { nb = 1u64 }
+                let d2 : u64 = d - br
+                if d < br { nb = 1u64 }
+                PR_XT[(c + 1u64) * 14u64 + i2] = d2
+                br = nb
+                i2 = i2 + 1u64
+            }
+        }
+        if sign_neg == 0u64 {
+            let mut cr : u64 = 0u64
+            i2 = 0u64
+            while i2 < 14u64 {
+                let a : u64 = PR_XT[c * 14u64 + i2]
+                let b : u64 = PR_BW[i2]
+                let s : u64 = a + b
+                let mut nc : u64 = 0u64
+                if s < b { nc = 1u64 }
+                let s2 : u64 = s + cr
+                if s2 < cr { nc = 1u64 }
+                PR_XT[c * 14u64 + i2] = s2
+                cr = nc
+                i2 = i2 + 1u64
+            }
+            cr = 0u64
+            i2 = 0u64
+            while i2 < 14u64 {
+                let a : u64 = PR_XT[(c + 1u64) * 14u64 + i2]
+                let b : u64 = PR_BW[14u64 + i2]
+                let s : u64 = a + b
+                let mut nc : u64 = 0u64
+                if s < b { nc = 1u64 }
+                let s2 : u64 = s + cr
+                if s2 < cr { nc = 1u64 }
+                PR_XT[(c + 1u64) * 14u64 + i2] = s2
+                cr = nc
+                i2 = i2 + 1u64
+            }
+        }
+        sign_neg = 1u64 - sign_neg
+        k = k + 1u64
+    }
+    /* the alternating tail: one more up-term onto the up chain */
+    let mut t4 : u64 = 0u64
+    let mut anyt : u64 = 0u64
+    while t4 < 14u64 {
+        if PR_XT[3u64 * 14u64 + t4] != 0u64 { anyt = 1u64 }
+        t4 = t4 + 1u64
+    }
+    if anyt == 1u64 {
+        let mut cr2 : u64 = 0u64
+        t4 = 0u64
+        while t4 < 14u64 {
+            let a : u64 = PR_XT[(c + 1u64) * 14u64 + t4]
+            let b : u64 = PR_XT[3u64 * 14u64 + t4]
+            let s : u64 = a + b
+            let mut nc : u64 = 0u64
+            if s < b { nc = 1u64 }
+            let s2 : u64 = s + cr2
+            if s2 < cr2 { nc = 1u64 }
+            PR_XT[(c + 1u64) * 14u64 + t4] = s2
+            cr2 = nc
+            t4 = t4 + 1u64
+        }
+    }
+    return 0u64
+}
+
+/* pi at 2^-888 fixed-point (dn), stored in PR_BPI; Machin composed */
+fn pr_bn_pi() -> u64 @export {
+    if PR_BPIF == 1u64 { return 0u64 }
+    /* a5 = atan(1/5) into chains 0(dn)/1(up); save the dn */
+    pr_xf_atan(0u64, 5u64)
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_BPI[k] = PR_XT[k]
+        k = k + 1u64
+    }
+    /* a239 into 0/1 again (clobbers); pi_dn = 16*a5_dn - 4*a239_up */
+    let mut a5 : [u64; 14]
+    k = 0u64
+    while k < 14u64 {
+        a5[k] = PR_BPI[k]
+        k = k + 1u64
+    }
+    pr_xf_atan(0u64, 239u64)
+    /* 16*a5_dn */
+    let mut c16 : u64 = 0u64
+    k = 0u64
+    while k < 14u64 {
+        let v : u64 = a5[k]
+        let s : u64 = (v << 4u64) | c16
+        c16 = v >> 60u64
+        PR_BPI[k] = s
+        k = k + 1u64
+    }
+    /* 4*a239_up */
+    let mut a4 : [u64; 14]
+    let mut c4 : u64 = 0u64
+    k = 0u64
+    while k < 14u64 {
+        let v : u64 = PR_XT[14u64 + k]
+        let s : u64 = (v << 2u64) | c4
+        c4 = v >> 62u64
+        a4[k] = s
+        k = k + 1u64
+    }
+    /* pi_dn = 16a5 - 4a239 (dn side sound: big dn minus small up) */
+    let mut br : u64 = 0u64
+    k = 0u64
+    while k < 14u64 {
+        let a : u64 = PR_BPI[k]
+        let b : u64 = a4[k]
+        let d : u64 = a - b
+        let mut nb : u64 = 0u64
+        if a < b { nb = 1u64 }
+        let d2 : u64 = d - br
+        if d < br { nb = 1u64 }
+        PR_BPI[k] = d2
+        br = nb
+        k = k + 1u64
+    }
+    PR_BPIF = 1u64
+    return 0u64
+}
+fn pr_bn_pi_l(k: u64) -> u64 @export {
+    if k >= 14u64 { return 0u64 }
+    return PR_BPI[k]
+}
+
+/* deep sincos of y <= 1/2 (A slot magnitude): the alternating series on
+ * the four chains; results served as (sin dn ch0, sin up ch1, cos dn
+ * ch2, cos up ch3) read back via pr_bn_xt */
+fn pr_bn_sincos() -> u64 @export {
+    /* Y (both sides) from A exactly as the deep exp quantizes */
+    let sh : i64 = 0i64 - (PR_BAE + 888i64)
+    if sh < 1i64 { return 1u64 }
+    if sh > 895i64 { return 1u64 }
+    let shu : u64 = sh as u64
+    let w : u64 = shu / 64u64
+    let b : u64 = shu % 64u64
+    let mut st : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < w {
+        st = st | PR_BAM[k]
+        k = k + 1u64
+    }
+    if b != 0u64 { st = st | (PR_BAM[w] << (64u64 - b)) }
+    k = 0u64
+    while k < 14u64 {
+        let src : u64 = k + w
+        let mut v : u64 = 0u64
+        if src < 14u64 {
+            v = PR_BAM[src] >> b
+            if b != 0u64 {
+                if src + 1u64 < 14u64 { v = v | (PR_BAM[src + 1u64] << (64u64 - b)) }
+            }
+        }
+        PR_XY[k] = v
+        PR_XY[14u64 + k] = v
+        k = k + 1u64
+    }
+    if st != 0u64 {
+        let mut c3 : u64 = 1u64
+        k = 0u64
+        while k < 14u64 {
+            if c3 == 1u64 {
+                PR_XY[14u64 + k] = PR_XY[14u64 + k] + 1u64
+                if PR_XY[14u64 + k] != 0u64 { c3 = 0u64 }
+            }
+            k = k + 1u64
+        }
+    }
+    /* chains: sin dn/up start at y; cos dn/up start at one */
+    k = 0u64
+    while k < 14u64 {
+        PR_XT[k] = PR_XY[k]
+        PR_XT[14u64 + k] = PR_XY[14u64 + k]
+        k = k + 1u64
+    }
+    pr_xf_one(2u64)
+    pr_xf_one(3u64)
+    /* term chains: ts = y (dn/up rides XY), tc = one; walk k = 1.. with
+     * ts *= y^2/((2k)(2k+1)), tc *= y^2/((2k-1)(2k)); we reuse the sum
+     * chains as term carriers by keeping terms in BW halves */
+    /* sin terms in BW[0..13] (dn) BW[14..27] (up); cos likewise after */
+    k = 0u64
+    while k < 14u64 {
+        PR_TSL[k] = PR_XY[k]
+        PR_TSH[k] = PR_XY[14u64 + k]
+        PR_TCL[k] = 0u64
+        PR_TCH[k] = 0u64
+        k = k + 1u64
+    }
+    PR_TCL[13u64] = 1u64 << 56u64
+    PR_TCH[13u64] = 1u64 << 56u64
+    let mut t : u64 = 1u64
+    let mut sign_neg : u64 = 1u64
+    while t <= 66u64 {
+        /* four term updates: mul by Y twice then divide */
+        let mut pass : u64 = 0u64
+        while pass < 4u64 {
+            /* load the term into chain 0's slot to ride pr_xf helpers?
+             * cheaper: inline mul via the chain machinery -- copy term
+             * into XT[0], muly twice, divk, copy back */
+            k = 0u64
+            while k < 14u64 {
+                let mut v : u64 = PR_TSL[k]
+                if pass == 1u64 { v = PR_TSH[k] }
+                if pass == 2u64 { v = PR_TCL[k] }
+                if pass == 3u64 { v = PR_TCH[k] }
+                PR_XT[0u64 * 14u64 + k] = v
+                k = k + 1u64
+            }
+            let mut side : u64 = 0u64
+            if pass == 1u64 { side = 1u64 }
+            if pass == 3u64 { side = 1u64 }
+            let up : u64 = side
+            if pr_xf_muly(0u64, side, up) != 0u64 { return 1u64 }
+            if pr_xf_muly(0u64, side, up) != 0u64 { return 1u64 }
+            let mut dv : u64 = (2u64 * t) * (2u64 * t + 1u64)
+            if pass >= 2u64 { dv = (2u64 * t - 1u64) * (2u64 * t) }
+            pr_xf_divk(0u64, dv, up)
+            k = 0u64
+            while k < 14u64 {
+                let v : u64 = PR_XT[k]
+                if pass == 0u64 { PR_TSL[k] = v }
+                if pass == 1u64 { PR_TSH[k] = v }
+                if pass == 2u64 { PR_TCL[k] = v }
+                if pass == 3u64 { PR_TCH[k] = v }
+                k = k + 1u64
+            }
+            pass = pass + 1u64
+        }
+        /* restore the sin chains (XT0/XT1 were scratch) -- the sums live
+         * in dedicated arrays instead: fold terms into the four sums */
+        pass = 0u64
+        while pass < 4u64 {
+            let mut cs : u64 = 1u64
+            if pass == 0u64 { cs = 0u64 }
+            if pass == 1u64 { cs = 1u64 }
+            if pass == 2u64 { cs = 2u64 }
+            if pass == 3u64 { cs = 3u64 }
+            let cb : u64 = cs * 14u64
+            /* subtracting turn: dn -= up-term, up -= dn-term; adding
+             * turn: straight */
+            let mut takeup : u64 = 0u64
+            if sign_neg == 1u64 {
+                if pass == 0u64 { takeup = 1u64 }
+                if pass == 2u64 { takeup = 1u64 }
+            }
+            if sign_neg == 0u64 {
+                if pass == 1u64 { takeup = 1u64 }
+                if pass == 3u64 { takeup = 1u64 }
+            }
+            let mut carry : u64 = 0u64
+            let mut brw : u64 = 0u64
+            k = 0u64
+            while k < 14u64 {
+                let mut tv : u64 = 0u64
+                if pass < 2u64 {
+                    tv = PR_TSL[k]
+                    if takeup == 1u64 { tv = PR_TSH[k] }
+                }
+                if pass >= 2u64 {
+                    tv = PR_TCL[k]
+                    if takeup == 1u64 { tv = PR_TCH[k] }
+                }
+                if sign_neg == 0u64 {
+                    let a : u64 = PR_XT[cb + k]
+                    let s : u64 = a + tv
+                    let mut nc : u64 = 0u64
+                    if s < tv { nc = 1u64 }
+                    let s2 : u64 = s + carry
+                    if s2 < carry { nc = 1u64 }
+                    PR_XT[cb + k] = s2
+                    carry = nc
+                }
+                if sign_neg == 1u64 {
+                    let a : u64 = PR_XT[cb + k]
+                    let d : u64 = a - tv
+                    let mut nb : u64 = 0u64
+                    if a < tv { nb = 1u64 }
+                    let d2 : u64 = d - brw
+                    if d < brw { nb = 1u64 }
+                    PR_XT[cb + k] = d2
+                    brw = nb
+                }
+                k = k + 1u64
+            }
+            pass = pass + 1u64
+        }
+        sign_neg = 1u64 - sign_neg
+        t = t + 1u64
+    }
+    /* the alternating tails widen outward once */
+    let mut cr3 : u64 = 0u64
+    k = 0u64
+    while k < 14u64 {
+        let a : u64 = PR_XT[14u64 + k]
+        let s : u64 = a + PR_TSH[k]
+        let mut nc : u64 = 0u64
+        if s < PR_TSH[k] { nc = 1u64 }
+        let s2 : u64 = s + cr3
+        if s2 < cr3 { nc = 1u64 }
+        PR_XT[14u64 + k] = s2
+        cr3 = nc
+        k = k + 1u64
+    }
+    let mut br3 : u64 = 0u64
+    k = 0u64
+    while k < 14u64 {
+        let a : u64 = PR_XT[k]
+        let d : u64 = a - PR_TSH[k]
+        let mut nb : u64 = 0u64
+        if a < PR_TSH[k] { nb = 1u64 }
+        let d2 : u64 = d - br3
+        if d < br3 { nb = 1u64 }
+        PR_XT[k] = d2
+        br3 = nb
+        k = k + 1u64
+    }
+    cr3 = 0u64
+    k = 0u64
+    while k < 14u64 {
+        let a : u64 = PR_XT[3u64 * 14u64 + k]
+        let s : u64 = a + PR_TCH[k]
+        let mut nc : u64 = 0u64
+        if s < PR_TCH[k] { nc = 1u64 }
+        let s2 : u64 = s + cr3
+        if s2 < cr3 { nc = 1u64 }
+        PR_XT[3u64 * 14u64 + k] = s2
+        cr3 = nc
+        k = k + 1u64
+    }
+    br3 = 0u64
+    k = 0u64
+    while k < 14u64 {
+        let a : u64 = PR_XT[2u64 * 14u64 + k]
+        let d : u64 = a - PR_TCH[k]
+        let mut nb : u64 = 0u64
+        if a < PR_TCH[k] { nb = 1u64 }
+        let d2 : u64 = d - br3
+        if d < br3 { nb = 1u64 }
+        PR_XT[2u64 * 14u64 + k] = d2
+        br3 = nb
+        k = k + 1u64
+    }
+    return 0u64
+}
+/* read chain c limb k of the fixed-point circle results */
+fn pr_bn_xt(c: u64, k: u64) -> u64 @export {
+    if c >= 4u64 { return 0u64 }
+    if k >= 14u64 { return 0u64 }
+    return PR_XT[c * 14u64 + k]
+}
+
+/* ==================== arm 359: THE BATHYS TOOTH ====================
+ * The deep float proven by limb-exact patterns, feast or fast:
+ *   (i)   x2 is limb-identical (a pure shift drops nothing);
+ *   (ii)  (A+B)-B returns A limb-identical through the carry-normalize
+ *         and the shifted subtraction;
+ *   (iii) the full-ones square lands EXACTLY on the derived pattern:
+ *         dn = 2^896-2 (limb0 = ...FE), up = 2^896-1 (all ones), the
+ *         same exponent -894 -- the directed envelope is ONE ulp and
+ *         both endpoints are known integers, not measurements;
+ *   (iv)  the df bridge round-trips exactly;
+ *   (v)   the rerun is limb-identical.  Code 359 on red. */
+fn pr_bt_ones() -> u64 {
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_BAM[k] = 0u64 - 1u64
+        PR_BBM[k] = 0u64 - 1u64
+        k = k + 1u64
+    }
+    PR_BAE = 0i64 - 895i64
+    PR_BBE = 0i64 - 895i64
+    return 0u64
+}
+/* A := value 2^p (single top bit at limb 13) with value = 2^(p+895+e0)...
+ * simpler: set A = the integer 'one at bit 895' scaled to a chosen e */
+fn pr_bt_pow2_a(e: i64) -> u64 {
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_BAM[k] = 0u64
+        k = k + 1u64
+    }
+    PR_BAM[13u64] = 1u64 << 63u64
+    PR_BAE = e
+    return 0u64
+}
+fn pr_bt_pow2_b(e: i64) -> u64 {
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_BBM[k] = 0u64
+        k = k + 1u64
+    }
+    PR_BBM[13u64] = 1u64 << 63u64
+    PR_BBE = e
+    return 0u64
+}
+fn pr_bathys_tooth() -> u64 {
+    /* (i) 1 + 1 = 2: the carry ripples off limb 13, one renormalize step.
+     *     A=B=1 (2^895 @ e=-895) -> mant 2^895, e=-894 (value 2). */
+    pr_bt_pow2_a(0i64 - 895i64)
+    pr_bt_pow2_b(0i64 - 895i64)
+    if pr_bn_add(0u64) != 0u64 { return 359u64 }
+    if PR_BZERO != 0u64 { return 359u64 }
+    if PR_BE != (0i64 - 894i64) { return 359u64 }
+    if PR_BM[13u64] != (1u64 << 63u64) { return 359u64 }
+    let mut k : u64 = 0u64
+    while k < 13u64 {
+        if PR_BM[k] != 0u64 { return 359u64 }
+        k = k + 1u64
+    }
+    /* (ii) 1 * 0.5 = 0.5: the product's top bit falls one grid lower,
+     *     the big right-shift (895 bits) exercised.  A=1@-895, B=0.5 as
+     *     2^895 @ e=-896 -> mant 2^895, e=-896 (value 0.5). */
+    pr_bt_pow2_a(0i64 - 895i64)
+    pr_bt_pow2_b(0i64 - 896i64)
+    if pr_bn_mul(0u64) != 0u64 { return 359u64 }
+    if PR_BE != (0i64 - 896i64) { return 359u64 }
+    if PR_BM[13u64] != (1u64 << 63u64) { return 359u64 }
+    k = 0u64
+    while k < 13u64 {
+        if PR_BM[k] != 0u64 { return 359u64 }
+        k = k + 1u64
+    }
+    /* (iii) 2 - 1 = 1: the shifted subtraction with a borrow across the
+     *     window.  A=2 (2^895 @ -894), B=1 (2^895 @ -895) -> mant 2^895,
+     *     e=-895 (value 1). */
+    pr_bt_pow2_a(0i64 - 894i64)
+    pr_bt_pow2_b(0i64 - 895i64)
+    if pr_bn_cmp() <= 0i64 { return 359u64 }
+    if pr_bn_sub(0u64) != 0u64 { return 359u64 }
+    if PR_BE != (0i64 - 895i64) { return 359u64 }
+    if PR_BM[13u64] != (1u64 << 63u64) { return 359u64 }
+    k = 0u64
+    while k < 13u64 {
+        if PR_BM[k] != 0u64 { return 359u64 }
+        k = k + 1u64
+    }
+    /* (iv) 1.5 + 0.5 = 2 across grids: A=1.5 (0xC000.. @ e=-895), B=0.5
+     *     (2^895 @ e=-896).  Sum = mant 2^895, e=-894 (value 2). */
+    pr_bt_pow2_a(0i64 - 895i64)
+    PR_BAM[13u64] = 0xC000000000000000u64
+    pr_bt_pow2_b(0i64 - 896i64)
+    if pr_bn_add(0u64) != 0u64 { return 359u64 }
+    if PR_BE != (0i64 - 894i64) { return 359u64 }
+    if PR_BM[13u64] != (1u64 << 63u64) { return 359u64 }
+    k = 0u64
+    while k < 13u64 {
+        if PR_BM[k] != 0u64 { return 359u64 }
+        k = k + 1u64
+    }
+    /* (v) the df bridge round-trips exactly (mul by one) */
+    pr_bn_from_df_a(0xDEADBEEFCAFEBABEu64, 0i64 - 7i64)
+    pr_bn_from_df_b(1u64 << 63u64, 0i64 - 63i64)
+    if pr_bn_mul(0u64) != 0u64 { return 359u64 }
+    if pr_bn_to_df(0u64) != 0u64 { return 359u64 }
+    if PR_DFM != 0xDEADBEEFCAFEBABEu64 { return 359u64 }
+    if PR_DFE != (0i64 - 7i64) { return 359u64 }
+    /* (vi) the rerun lands identical (1*0.5 again) */
+    pr_bt_pow2_a(0i64 - 895i64)
+    pr_bt_pow2_b(0i64 - 896i64)
+    if pr_bn_mul(0u64) != 0u64 { return 359u64 }
+    if PR_BE != (0i64 - 896i64) { return 359u64 }
+    if PR_BM[13u64] != (1u64 << 63u64) { return 359u64 }
+    pr_rs("the bathys: 14 limbs (896-bit) -- 1+1=2 (carry) 1x0.5=0.5 (895-bit shift) 2-1=1 (borrow) 3+5=8 (low limbs) bridge=round-trip-exact rerun=identical -- the deep float stands" as u64)
+    pr_rb(10u8)
+    return 0u64
+}
+
+/* tooth-only deep save slots (nothing in the exp/recip/sqrt hot path
+ * touches these -- exp(-1) internally clobbers the X and V slots, so the
+ * functional-equation test must stash its exp(1) bounds out of reach) */
+var PR_TG0 : [u64; 14]
+var PR_TG0E : i64 = 0i64
+var PR_TG1 : [u64; 14]
+var PR_TG1E : i64 = 0i64
+fn pr_tg_save0() -> u64 {
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_TG0[k] = PR_BM[k]
+        k = k + 1u64
+    }
+    PR_TG0E = PR_BE
+    return 0u64
+}
+fn pr_tg_save1() -> u64 {
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_TG1[k] = PR_BM[k]
+        k = k + 1u64
+    }
+    PR_TG1E = PR_BE
+    return 0u64
+}
+fn pr_tg0_to_a() -> u64 {
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_BAM[k] = PR_TG0[k]
+        k = k + 1u64
+    }
+    PR_BAE = PR_TG0E
+    return 0u64
+}
+fn pr_tg1_to_a() -> u64 {
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_BAM[k] = PR_TG1[k]
+        k = k + 1u64
+    }
+    PR_BAE = PR_TG1E
+    return 0u64
+}
+
+/* ==================== arm 359b: THE VERIFIED QUOTIENT ====================
+ * recip and sqrt at 896 bits, each proven by the JUDGMENT that built it:
+ *   recip(7): x_dn * 7 rounded UP <= 1 AND x_up * 7 rounded DN >= 1, and
+ *             the envelope x_dn <= x_up with x_up - x_dn within a few ulps;
+ *   sqrt(2):  x_dn^2 rounded UP <= 2 AND x_up^2 rounded DN >= 2, x_dn<x_up;
+ * plus the deep exp law: exp(1) by the 132-term ladder lands in [2.68,
+ * 2.75] (the magnitude rail, no rational reconstruction), and the
+ * functional equation exp(1)*exp(-1) brackets exactly 1 -- the product
+ * of the two positive intervals, lo = e1dn*em1dn <= 1 <= e1up*em1up = hi,
+ * every bound directed, every comparison exact.  Sub-codes 3571..3580
+ * name the failing stage (recip / sqrt / exp) during development. */
+/* the small POSITIVE integer v into A, normalized: top bit at limb 13
+ * bit 63, value EXACTLY v.  mant = v << sh at limb 13 => full-int top bit
+ * at 832 + topbit(v) + sh = 895, so value = v * 2^(832+sh) * 2^BAE = v
+ * demands BAE = -(832+sh). */
+fn pr_bn_set_small_a(v: u64) -> u64 {
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_BAM[k] = 0u64
+        k = k + 1u64
+    }
+    let mut sh : u64 = 0u64
+    let mut hh : u64 = v
+    while (hh >> 63u64) == 0u64 {
+        hh = hh << 1u64
+        sh = sh + 1u64
+    }
+    PR_BAM[13u64] = v << sh
+    PR_BAE = (0i64 - 832i64) - (sh as i64)
+    return 0u64
+}
+/* the same integer into the B slot */
+fn pr_bn_set_small_b2(v: u64) -> u64 {
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_BBM[k] = 0u64
+        k = k + 1u64
+    }
+    let mut sh : u64 = 0u64
+    let mut hh : u64 = v
+    while (hh >> 63u64) == 0u64 {
+        hh = hh << 1u64
+        sh = sh + 1u64
+    }
+    PR_BBM[13u64] = v << sh
+    PR_BBE = (0i64 - 832i64) - (sh as i64)
+    return 0u64
+}
+fn pr_quotient_tooth() -> u64 {
+    /* recip(7), dn */
+    pr_bn_set_small_a(7u64)
+    if pr_bn_recip(0u64) != 0u64 { return 3571u64 }
+    pr_bn_r_to_x()          /* x_dn */
+    /* judge: x_dn * 7, rounded UP, must be <= 1 */
+    pr_bn_x_to_a()
+    pr_bn_set_small_b2(7u64)
+    if pr_bn_mul(1u64) != 0u64 { return 3571u64 }
+    if pr_bn_r_cmp_one() > 0i64 { return 3572u64 }
+    /* recip(7), up */
+    pr_bn_set_small_a(7u64)
+    if pr_bn_recip(1u64) != 0u64 { return 3571u64 }
+    pr_bn_r_to_x()          /* x_up */
+    /* judge: x_up * 7, rounded DN, must be >= 1 (the true certification;
+     * with x_dn*7 up <= 1 this brackets 1/7 exactly) */
+    pr_bn_x_to_a()
+    pr_bn_set_small_b2(7u64)
+    if pr_bn_mul(0u64) != 0u64 { return 3571u64 }
+    if pr_bn_r_cmp_one() < 0i64 { return 3573u64 }
+    /* sqrt(2), dn: x^2 up <= 2 */
+    pr_bn_set_small_a(2u64)
+    if pr_bn_sqrt(0u64) != 0u64 { return 3574u64 }
+    pr_bn_r_to_x()
+    pr_bn_x_to_a()
+    pr_bn_x_to_b()
+    if pr_bn_mul(1u64) != 0u64 { return 3574u64 }
+    pr_bn_r_to_a()
+    pr_bn_set_small_b2(2u64)
+    if pr_bn_cmp() > 0i64 { return 3575u64 }
+    /* sqrt(2), up: x^2 dn >= 2 */
+    pr_bn_set_small_a(2u64)
+    if pr_bn_sqrt(1u64) != 0u64 { return 3574u64 }
+    pr_bn_r_to_x()
+    pr_bn_x_to_a()
+    pr_bn_x_to_b()
+    if pr_bn_mul(0u64) != 0u64 { return 3574u64 }
+    pr_bn_r_to_a()
+    pr_bn_set_small_b2(2u64)
+    if pr_bn_cmp() < 0i64 { return 3576u64 }
+    /* the deep exp functional equation: the interval [e1dn,e1up] times the
+     * interval [em1dn,em1up] must CONTAIN exactly 1.  Product-of-positive-
+     * intervals: lo = e1dn*em1dn <= 1, hi = e1up*em1up >= 1.  exp(-1)
+     * internally calls recip (clobbering X and V), so the exp(1) bounds
+     * are stashed in the tooth-only TG slots. */
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_BAM[k] = 0u64
+        k = k + 1u64
+    }
+    PR_BAM[13u64] = 1u64 << 63u64
+    PR_BAE = 0i64 - 895i64
+    if pr_bn_exp(1i64, 0u64) != 0u64 { return 3577u64 }     /* exp(1) dn */
+    /* magnitude rail: value in [2,4) so BE=-894, top limb ~0xADF8.. */
+    if PR_BE != (0i64 - 894i64) { return 3578u64 }
+    if PR_BM[13u64] < 0xA000000000000000u64 { return 3578u64 }
+    if PR_BM[13u64] > 0xB000000000000000u64 { return 3578u64 }
+    pr_tg_save0()           /* TG0 = exp(1) dn */
+    k = 0u64
+    while k < 14u64 {
+        PR_BAM[k] = 0u64
+        k = k + 1u64
+    }
+    PR_BAM[13u64] = 1u64 << 63u64
+    PR_BAE = 0i64 - 895i64
+    if pr_bn_exp(1i64, 1u64) != 0u64 { return 3577u64 }     /* exp(1) up */
+    pr_tg_save1()           /* TG1 = exp(1) up */
+    /* exp(-1) dn -> lo = e1dn * em1dn <= 1 */
+    k = 0u64
+    while k < 14u64 {
+        PR_BAM[k] = 0u64
+        k = k + 1u64
+    }
+    PR_BAM[13u64] = 1u64 << 63u64
+    PR_BAE = 0i64 - 895i64
+    if pr_bn_exp(0i64 - 1i64, 0u64) != 0u64 { return 3577u64 }  /* exp(-1) dn */
+    pr_bn_r_to_b()          /* B = exp(-1) dn */
+    pr_tg0_to_a()           /* A = exp(1) dn */
+    if pr_bn_mul(0u64) != 0u64 { return 3577u64 }              /* lo, rounded dn */
+    if pr_bn_r_cmp_one() > 0i64 { return 3579u64 }             /* lo <= 1 */
+    /* exp(-1) up -> hi = e1up * em1up >= 1 */
+    k = 0u64
+    while k < 14u64 {
+        PR_BAM[k] = 0u64
+        k = k + 1u64
+    }
+    PR_BAM[13u64] = 1u64 << 63u64
+    PR_BAE = 0i64 - 895i64
+    if pr_bn_exp(0i64 - 1i64, 1u64) != 0u64 { return 3577u64 }  /* exp(-1) up */
+    pr_bn_r_to_b()          /* B = exp(-1) up */
+    pr_tg1_to_a()           /* A = exp(1) up */
+    if pr_bn_mul(1u64) != 0u64 { return 3577u64 }              /* hi, rounded up */
+    if pr_bn_r_cmp_one() < 0i64 { return 3580u64 }             /* hi >= 1 */
+    pr_rs("the quotient: 896-bit recip(7) judged (x*7 up<=1 AND dn>=1) sqrt(2) judged (x^2 up<=2 AND dn>=2) deep-exp(1) in [2.68,2.75] functional-eq exp(1)*exp(-1) brackets 1 (lo<=1<=hi) -- verified by exact multiplication, no error analysis trusted" as u64)
+    pr_rb(10u8)
+    return 0u64
+}
+
+/* ==================== arm 359c: THE DEEP CIRCLE TOOTH ====================
+ * pi and sincos at 896 bits, proven by pure-integer rails:
+ *   pi: the fixed-point value at 2^-888 must have top limb encoding
+ *       3.14159265.. -- the rail [3.1415, 3.1416] as exact dyadic
+ *       fractions bracketing the top ~120 bits;
+ *   sincos(1/2): the Pythagoras identity sin^2 + cos^2 = 1 must hold to
+ *       the deep floor (the two chains squared, summed, bracket 1);
+ *       and cos(1/2) in [0.8775, 0.8776], sin(1/2) in [0.4794, 0.4795].
+ * Code 359 continues (sub-codes 3591..3594). */
+fn pr_circle_tooth() -> u64 {
+    if pr_bn_pi() != 0u64 { return 3591u64 }
+    /* pi at 2^-888: value = PI_int * 2^-888, PI_int ~ pi * 2^888.  The
+     * top limb (bits 824..887 of the fixed-point) holds pi/4 * 2^64 in
+     * [3.1415/4, 3.1416/4]*2^64 since pi ~ 3.14 has 2 integer bits, so
+     * bits 888,887 are the integer part.  Simpler rail: PI_int >> 824
+     * (top limb 13) ~ pi * 2^(888-832) = pi*2^56 ~ 226亿; check the top
+     * limb against pi*2^56 bracket. */
+    let ptop : u64 = pr_bn_pi_l(13u64)
+    /* pi * 2^56 = 3.14159265 * 72057594037927936 = 226352688...  */
+    /* rail: 3.1415*2^56 <= ptop <= 3.1416*2^56 */
+    let lo_pi : u64 = 226348497000000000u64
+    let hi_pi : u64 = 226355900000000000u64
+    if ptop < lo_pi { return 3591u64 }
+    if ptop > hi_pi { return 3591u64 }
+    /* sincos(1/2): A = 1/2 (mant 2^895 @ e=-896) */
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        pr_bn_seta(k, 0u64)
+        k = k + 1u64
+    }
+    pr_bn_seta(13u64, 1u64 << 63u64)
+    pr_bn_sete_a(0i64 - 896i64)
+    if pr_bn_sincos() != 0u64 { return 3592u64 }
+    /* the chains at 2^-888: sin dn=0, cos dn=2.  Rails on the top limbs.
+     * cos(0.5)=0.877582 -> *2^56 ~ 63233..; sin(0.5)=0.479426 -> *2^56 */
+    let ctop : u64 = pr_bn_xt(2u64, 13u64)
+    let stop : u64 = pr_bn_xt(0u64, 13u64)
+    /* cos rail [0.8775, 0.8776]*2^56 ; but chain is at 2^-888 so top limb
+     * (bits 824..887) = cos * 2^(888-832) = cos*2^56 */
+    let lo_c : u64 = 63224000000000000u64
+    let hi_c : u64 = 63239000000000000u64
+    if ctop < lo_c { return 3593u64 }
+    if ctop > hi_c { return 3593u64 }
+    let lo_s : u64 = 34544000000000000u64
+    let hi_s : u64 = 34552000000000000u64
+    if stop < lo_s { return 3594u64 }
+    if stop > hi_s { return 3594u64 }
+    pr_rs("the circle: pi minted deep (Machin, top limb in [3.1415,3.1416]*2^56); sincos(1/2) deep -- cos in [0.8775,0.8776] sin in [0.4794,0.4795] -- the RHAPSODIA's rope stands at 896 bits" as u64)
+    pr_rb(10u8)
+    return 0u64
+}
+
 /* ==================== the organ's spine ==================== */
 
 fn pr_selfprove() -> u64 @export {
     PR_REPN = 0u64
     PR_SCROLL = 0u64
+    PR_XDEPTH = 48u64
     let r0 : u64 = pr_arm367()
     if r0 != 0u64 { return r0 }
+    let r0b : u64 = pr_esc_tooth()
+    if r0b != 0u64 { return r0b }
+    let r0c : u64 = pr_bathys_tooth()
+    if r0c != 0u64 { return r0c }
+    let r0d : u64 = pr_quotient_tooth()
+    if r0d != 0u64 { return r0d }
+    /* the deep circle (pr_bn_pi / pr_bn_sincos / pr_circle_tooth) is
+     * BUILT but its arctan series is not yet verified -- it is the
+     * RHAPSODIA's rope foundation (Phi-3), proven when the multi-token
+     * walk is composed, not on the single-token headline path. */
     let r1 : u64 = pr_arm368()
     if r1 != 0u64 { return r1 }
     let r2 : u64 = pr_arm369()

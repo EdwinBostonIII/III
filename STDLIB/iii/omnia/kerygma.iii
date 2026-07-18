@@ -1,0 +1,777 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\kerygma.iii
+ *
+ * III STDLIB - omnia::kerygma  --  THE PROCLAMATION: III's one derived, self-
+ * describing self-portrait, sealed at ONE address in the ONE LOGOS.
+ *
+ * THE DISEASE (the architect's own words): III is so big that a development
+ * session ends with the system forgetting what it does, what it has, and how
+ * it coheres.  The profound primitives -- EIDOLON (1,1,1), the kardia, the
+ * ripples -- give diminishing returns because the whole organism never gets on
+ * board at once.  The cure is NOT to rewrite 300 modules to speak one format
+ * (that IS the treadmill that produces the diminishing returns).  The cure is
+ * ONE derived source of truth: a mirror that reflects the whole system in the
+ * canonical EIDOLOS tongue, is REGENERATED FROM THE TREE so it can never rot,
+ * is SEALED by the barometer so it stays honest, and is queryable by any
+ * module, any session, any future self, at ONE canonical address.
+ *
+ * KERYGMA is that mirror.  It is NOT a new island: it stands on the bones the
+ * architect named -- self_cartographer (the native tree-walk), self_atlas (the
+ * native module graph), and EIDOLOS (the one barometer that keeps truth).  It
+ * ADDS the one thing missing: it FOLDS the whole self-image into the logos and
+ * seals it as a KEPT HOUSE, so the self-portrait lives under the SAME judgment
+ * law as every other truth in the tree.
+ *
+ * THE TWO TIERS (honest about EIDOLOS's 256-claim house; no silent truncation):
+ *   - THE DETAIL lives in self_atlas -- the full module graph (every .iii and
+ *     its `from` edges), already content-addressable via satlas_commit.  Its
+ *     32-byte fingerprint is folded into the portrait as the DETAIL PIN, so the
+ *     one kerygma address transitively binds every module's content: change any
+ *     module and the atlas fingerprint changes and the kerygma address changes.
+ *   - THE PORTRAIT lives in EIDOLOS -- the canonical summary sealed at one
+ *     address: the SUBSYSTEM ROSTER (each family under the organism), the
+ *     DETAIL PIN, and the two laws the self-image obeys.
+ *
+ * THE SCROLL (the (1,1,1) self-image, canonical -- same knowledge, same bytes,
+ * same address, regardless of walk order, because eol_write canonicalizes):
+ *     [<subsystem> < iii]   ... one per family, LIVE from the tree
+ *     [atlas k<64hex> < iii] the detail pin: the full graph's content-address
+ *     [iii < rederivation]   THE LAW: the organism stands under its own
+ *                            re-derivation (the boundary-synod's own theorem
+ *                            [house < rederivation], spoken of the whole self)
+ *     [portrait = iii]       THE (1,1,1): the map IS the territory's self-
+ *                            knowledge -- shape, logic and address are one
+ *
+ * ANTI-AMNESIA / ANTI-ROT: the portrait is never a stored-and-trusted snapshot.
+ * The stored form is only its address; eol_verify re-derives the address from
+ * the text or the memory is a LYING memory (the tree's universal event-line
+ * law).  kerygma_reseal re-walks the LIVE tree and returns the fresh address;
+ * a caller that sealed an address earlier compares -- an unequal address is
+ * DRIFT (the organism grew or a module changed), named, never silent.
+ *
+ * Truth is a CONDITION OF MOTION: kerygma_selfprove (PURE -- no filesystem, so
+ * green is environment-independent) re-derives the whole law every invocation:
+ * a coherent portrait seals and self-verifies; a DIFFERENT organism gets a
+ * DIFFERENT name (drift changes the address); and no portrait verifies against
+ * the wrong address (a stale name can never pass).  No gate, no KAT -- the
+ * kardia/doxa/eidolos discipline: verification lives INSIDE.
+ *
+ * Ring R0.  K 0.98 (filesystem-bound tool for the derivation; the seal + the
+ * selfprove are pure).  Composes eidolos + self_cartographer + self_atlas + fs
+ * + capability.  NIH: no island, no external generator, ASCII only, libc-free.
+ * Hexad: kind_essence (it builds the self-image) + kind_glyph (it speaks it). */
+
+module omnia_kerygma
+
+/* ---- the one barometer (EIDOLOS): build, seal, verify a scroll ---- */
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_keep() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_lawcheck() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_entails(a_addr: u64, a_len: u64, verb: u64, b_addr: u64, b_len: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_verify(base: u64, len: u64, expect: u64) -> u64 from "eidolos.iii"
+
+/* ---- the native tree-walk + the native module graph (the bones) ---- */
+extern @abi(c-msvc-x64) fn scarto_map(cap: u64, root_ptr: u64, root_len: u64) -> u32 from "self_cartographer.iii"
+extern @abi(c-msvc-x64) fn satlas_node_count() -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_edge_count() -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_commit(out32: u64) -> i32 from "self_atlas.iii"
+
+/* ---- the capability-gated directory organ (the roster walk) ---- */
+extern @abi(c-msvc-x64) fn fs_dir_open(cap: u64, path: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_read(h: u64) -> u8 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_name() -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_name_len() -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_is_dir() -> u8 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_close(h: u64) -> i32 from "fs.iii"
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+
+/* ---- THE SILICON SELF: the ring-0 / core-capture readings (the KERYGMA
+ * dynamic tier -- the "electron variance" the architect named) ----
+ * STATIC (canonical, reproducible on this host): the CPUID identity crystal
+ * and the sealed silicon-fact census, each a 32-byte content-address (the
+ * hash IS the identity, drift-checkable).  DYNAMIC (provisional, NON-
+ * reproducible): the 48-bit behavioral/timing fingerprint -- the silicon's
+ * micro-variance, pinned to a content-address of its dependence and
+ * DEFAULT-DENIED from the canonical self by the ONE firewall. */
+extern @abi(c-msvc-x64) fn katabasis_cpu_census_build() -> i32 from "cpu_census.iii"
+extern @abi(c-msvc-x64) fn katabasis_cpu_census_hash(out_addr: u64) -> i32 from "cpu_census.iii"
+extern @abi(c-msvc-x64) fn katabasis_census_init() -> i32 from "census.iii"
+extern @abi(c-msvc-x64) fn katabasis_census_hash(out_addr: u64) -> i32 from "census.iii"
+extern @abi(c-msvc-x64) fn bfp_compute48() -> u64 from "behavioral_fp.iii"
+extern @abi(c-msvc-x64) fn reach_oracle_pin(pin_bytes: u64, pin_len: u64, out_pin: u64) -> u32 from "reach_oracle.iii"
+extern @abi(c-msvc-x64) fn reach_oracle_admit_canonical(tier: u32) -> i32 from "reach_oracle.iii"
+
+const KER_BLDCAP : u64 = 8192u64
+const KER_TIER_CANONICAL   : u32 = 0u32
+const KER_TIER_PROVISIONAL : u32 = 1u32
+
+/* the scroll build buffer (canonical claim text, assembled then read+sealed) */
+var KER_BLD  : [u8; 8192]
+var KER_BN   : u64 = 0u64
+var KER_ADDR : u64 = 0u64                 /* the sealed portrait address (0 = not built / refused) */
+var KER_SUBN : u64 = 0u64                 /* subsystem families found in the roster walk */
+var KER_NODES : u64 = 0u64                /* atlas node count (modules) */
+var KER_EDGES : u64 = 0u64               /* atlas edge count (from-dependencies) */
+
+var KER_ATLAS : [u8; 32]                  /* the full graph's content-address (the detail pin) */
+var KER_ROOT  : [u8; 16]                  /* NUL-terminated self-tree root */
+var KER_HEX   : [u8; 16]                  /* the lowercase hex digit table */
+
+/* ---- KERYGMA v2: THE SCROLL-OF-SCROLLS (the merkle self-portrait) ----
+ * Each subsystem family becomes its own SEALED shard scroll -- one
+ * [<module> < <family>] claim per .iii, sealed at one address in the one
+ * logos, so the detail is no longer an opaque 32-byte atlas hash but a
+ * REASONING-ACCESSIBLE house the barometer can answer claim by claim
+ * (what is in aether? does aether derive X?).  The root scroll binds each
+ * shard's address as [<family> k<16hex> < iii] -- change any module, its
+ * shard address changes, the root claim changes, the root address changes:
+ * a content-addressed merkle tree of the whole organism, module-granular,
+ * every level under the SAME re-derivation law.  A family over the logos's
+ * claim ceiling (240 here, headroom under 256) SUB-SHARDS by window: part
+ * 0, part 1, ... each sealed, each pinned -- never silently truncated. */
+const KER_SHARD_CAP : u64 = 240u64        /* claims per shard (headroom under the 256 ceiling) */
+var KER_SHARD : [u8; 16384]               /* one shard's canonical claim text */
+var KER_SHN   : u64 = 0u64                /* shard build length */
+var KER_SHADDR : u64 = 0u64               /* the last shard's sealed address */
+var KER_SHMORE : u64 = 0u64               /* 1 = the family has more modules past this window */
+var KER_SHCOUNT : u64 = 0u64              /* modules emitted into the last shard */
+var KER_PATH  : [u8; 96]                  /* scratch path <root>/<family> */
+var KER_FAMS  : [u8; 640]                 /* collected family names, NUL-separated */
+var KER_FAMOFF : [u64; 32]                /* offset of each family name in KER_FAMS */
+var KER_FAMLEN : [u64; 32]                /* length of each family name */
+var KER_NFAM  : u64 = 0u64                /* families collected in the roster walk */
+var KER_NSHARD : u64 = 0u64               /* shard scrolls sealed this build (>= NFAM) */
+var KER_QFAM  : u64 = 0u64                /* the family index whose shard is being served */
+var KER_QPART : u64 = 0u64                /* the part index being served */
+
+/* ---- the silicon self-portrait (the dynamic tier) ---- */
+var KER_CPU   : [u8; 32]                  /* CPUID crystal content-address */
+var KER_SIL   : [u8; 32]                  /* silicon-fact census content-address */
+var KER_SIL_STATIC : u64 = 0u64           /* the CANONICAL silicon-self address */
+var KER_SIL_DYN    : u64 = 0u64           /* the PROVISIONAL behavioral-self address */
+var KER_SIL_STIER  : u32 = 0u32           /* static tier (CANONICAL) */
+var KER_SIL_DTIER  : u32 = 0u32           /* dynamic tier (PROVISIONAL) */
+var KER_SIL_FP     : u64 = 0u64           /* the last 48-bit behavioral fingerprint */
+var KER_SILPIN     : [u8; 32]             /* the dynamic reading's oracle-pin */
+var KER_SILBLD     : [u8; 512]            /* the silicon scroll build buffer */
+var KER_SILN       : u64 = 0u64
+var KER_FPBYTES    : [u8; 24]             /* fingerprint||epoch bytes to pin */
+
+/* ---- small byte helpers (no forward references) ---- */
+fn ker_bput(c: u8) -> i32 {
+    if KER_BN < KER_BLDCAP { KER_BLD[KER_BN] = c   KER_BN = KER_BN + 1u64 }
+    return 0i32
+}
+
+/* append a NUL-terminated literal to the build buffer; returns its length */
+fn ker_bputz(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { ker_bput(p[i])   i = i + 1u64 }
+    return i
+}
+
+/* c-string length (to NUL) */
+fn ker_slen(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut n : u64 = 0u64
+    while p[n] != 0u8 { n = n + 1u64 }
+    return n
+}
+
+/* copy a NUL-terminated literal into KER_ROOT (NUL-terminated); returns length */
+fn ker_set_root(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { if i < 15u64 { KER_ROOT[i] = p[i] }   i = i + 1u64 }
+    KER_ROOT[i] = 0u8
+    return i
+}
+
+fn ker_hex_init() -> i32 {
+    KER_HEX[0u64]=48u8  KER_HEX[1u64]=49u8  KER_HEX[2u64]=50u8  KER_HEX[3u64]=51u8
+    KER_HEX[4u64]=52u8  KER_HEX[5u64]=53u8  KER_HEX[6u64]=54u8  KER_HEX[7u64]=55u8
+    KER_HEX[8u64]=56u8  KER_HEX[9u64]=57u8  KER_HEX[10u64]=97u8 KER_HEX[11u64]=98u8
+    KER_HEX[12u64]=99u8 KER_HEX[13u64]=100u8 KER_HEX[14u64]=101u8 KER_HEX[15u64]=102u8
+    return 0i32
+}
+
+/* eol_read / eol_verify over a NUL-terminated literal (eidolos's eol_readz and
+ * eol_vz are private; these are the same one line over the exported faces). */
+fn eol_readz_here(s: u64) -> i64 { return eol_read(s, ker_slen(s)) }
+fn ker_vz(s: u64, expect: u64) -> u64 { return eol_verify(s, ker_slen(s), expect) }
+
+/* emit one subsystem-roster claim: "[<name> < iii] " with the name filtered to
+ * legal EIDOLOS word bytes (lowercase a-z, 0-9, '_' , '-'; A-Z folded to a-z;
+ * anything else dropped).  Returns 1 if a claim was emitted, 0 if the name
+ * filtered to empty (emitting nothing). */
+fn ker_emit_sub(name_ptr: u64, name_len: u64) -> u64 {
+    let p : *u8 = name_ptr as *u8
+    /* pre-scan: does the name carry at least one legal, lowercased word byte? */
+    let mut has : u64 = 0u64
+    let mut j : u64 = 0u64
+    while j < name_len {
+        let c0 : u8 = p[j]
+        let mut c : u8 = c0
+        if c >= 65u8 { if c <= 90u8 { c = c + 32u8 } }
+        let mut ok : u64 = 0u64
+        if c >= 97u8 { if c <= 122u8 { ok = 1u64 } }
+        if c >= 48u8 { if c <= 57u8 { ok = 1u64 } }
+        if c == 95u8 { ok = 1u64 }
+        if c == 45u8 { ok = 1u64 }
+        if ok == 1u64 { has = 1u64 }
+        j = j + 1u64
+    }
+    if has == 0u64 { return 0u64 }
+    /* a phrase must START with a lowercase letter: if the first legal byte is a
+     * digit, prefix 's' so the roster word is always a legal phrase head. */
+    ker_bput(91u8)                                    /* '[' */
+    let mut wrote_head : u64 = 0u64
+    j = 0u64
+    while j < name_len {
+        let d0 : u8 = p[j]
+        let mut d : u8 = d0
+        if d >= 65u8 { if d <= 90u8 { d = d + 32u8 } }
+        let mut ok2 : u64 = 0u64
+        let mut islow : u64 = 0u64
+        if d >= 97u8 { if d <= 122u8 { ok2 = 1u64   islow = 1u64 } }
+        if d >= 48u8 { if d <= 57u8 { ok2 = 1u64 } }
+        if d == 95u8 { ok2 = 1u64 }
+        if d == 45u8 { ok2 = 1u64 }
+        if ok2 == 1u64 {
+            if wrote_head == 0u64 { if islow == 0u64 { ker_bput(115u8) }   wrote_head = 1u64 }
+            ker_bput(d)
+        }
+        j = j + 1u64
+    }
+    ker_bputz(" < iii] " as u64)                      /* verb + organism + separator */
+    return 1u64
+}
+
+/* emit the detail pin: "[atlas k<64hex of KER_ATLAS> < iii] " */
+fn ker_emit_atlas_pin() -> i32 {
+    ker_bputz("[atlas k" as u64)
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        let b : u64 = KER_ATLAS[i] as u64
+        ker_bput(KER_HEX[(b >> 4u64) & 15u64])
+        ker_bput(KER_HEX[b & 15u64])
+        i = i + 1u64
+    }
+    ker_bputz(" < iii] " as u64)
+    return 0i32
+}
+
+/* the roster walk: open the self-tree root, emit one "[<dir> < iii]" per
+ * subdirectory (each subsystem family), AND collect the family names so the
+ * shard pass (which opens each family subdir) never nests a directory
+ * handle inside the root's.  Returns the number of families. */
+fn ker_walk_roster(cap: u64) -> u64 {
+    let dh : u64 = fs_dir_open(cap, (&KER_ROOT) as u64)
+    if dh == 0u64 { return 0u64 }
+    let mut n : u64 = 0u64
+    KER_NFAM = 0u64
+    let mut famw : u64 = 0u64
+    while fs_dir_read(dh) == 1u8 {
+        let nm : u64 = fs_dir_name()
+        let ln : u64 = fs_dir_name_len()
+        let isd : u8 = fs_dir_is_dir()
+        if isd == 1u8 {
+            /* skip "." and ".." (a leading '.' name is not a subsystem) */
+            let p : *u8 = nm as *u8
+            let mut dot : u64 = 0u64
+            if ln >= 1u64 { if p[0u64] == 46u8 { dot = 1u64 } }
+            if dot == 0u64 {
+                let emitted : u64 = ker_emit_sub(nm, ln)
+                n = n + emitted
+                /* collect the family name for the shard pass */
+                if emitted == 1u64 {
+                    if KER_NFAM < 32u64 {
+                        if famw + ln + 1u64 <= 640u64 {
+                            KER_FAMOFF[KER_NFAM] = famw
+                            KER_FAMLEN[KER_NFAM] = ln
+                            let sp : *u8 = nm as *u8
+                            let mut c : u64 = 0u64
+                            while c < ln { KER_FAMS[famw + c] = sp[c]   c = c + 1u64 }
+                            KER_FAMS[famw + ln] = 0u8
+                            famw = famw + ln + 1u64
+                            KER_NFAM = KER_NFAM + 1u64
+                        }
+                    }
+                }
+            }
+        }
+    }
+    fs_dir_close(dh)
+    return n
+}
+
+/* build KER_PATH = <KER_ROOT>/<family>, NUL-terminated; returns its length */
+fn ker_fam_path(fam_ptr: u64, fam_len: u64) -> u64 {
+    let r : *u8 = (&KER_ROOT) as *u8
+    let mut i : u64 = 0u64
+    while r[i] != 0u8 { if i < 95u64 { KER_PATH[i] = r[i] }   i = i + 1u64 }
+    if i < 95u64 { KER_PATH[i] = 47u8   i = i + 1u64 }        /* '/' */
+    let f : *u8 = fam_ptr as *u8
+    let mut j : u64 = 0u64
+    while j < fam_len { if i < 95u64 { KER_PATH[i] = f[j]   i = i + 1u64 }   j = j + 1u64 }
+    KER_PATH[i] = 0u8
+    return i
+}
+
+/* emit one shard claim "[<module> < <family>] " into KER_SHARD, the module
+ * basename filtered to legal EIDOLOS word bytes exactly as the roster does.
+ * base_ptr/base_len name the module WITHOUT its ".iii".  Returns 1 if a
+ * claim was emitted, 0 if the basename filtered empty. */
+fn ker_shemit(base_ptr: u64, base_len: u64, fam_ptr: u64, fam_len: u64) -> u64 {
+    let p : *u8 = base_ptr as *u8
+    let mut has : u64 = 0u64
+    let mut j : u64 = 0u64
+    while j < base_len {
+        let mut c : u8 = p[j]
+        if c >= 65u8 { if c <= 90u8 { c = c + 32u8 } }
+        if c >= 97u8 { if c <= 122u8 { has = 1u64 } }
+        if c >= 48u8 { if c <= 57u8 { has = 1u64 } }
+        if c == 95u8 { has = 1u64 }
+        if c == 45u8 { has = 1u64 }
+        j = j + 1u64
+    }
+    if has == 0u64 { return 0u64 }
+    if KER_SHN < 16000u64 { KER_SHARD[KER_SHN] = 91u8   KER_SHN = KER_SHN + 1u64 }  /* '[' */
+    let mut wrote_head : u64 = 0u64
+    j = 0u64
+    while j < base_len {
+        let mut d : u8 = p[j]
+        if d >= 65u8 { if d <= 90u8 { d = d + 32u8 } }
+        let mut ok : u64 = 0u64
+        let mut islow : u64 = 0u64
+        if d >= 97u8 { if d <= 122u8 { ok = 1u64   islow = 1u64 } }
+        if d >= 48u8 { if d <= 57u8 { ok = 1u64 } }
+        if d == 95u8 { ok = 1u64 }
+        if d == 45u8 { ok = 1u64 }
+        if ok == 1u64 {
+            if wrote_head == 0u64 { if islow == 0u64 { if KER_SHN < 16000u64 { KER_SHARD[KER_SHN] = 115u8   KER_SHN = KER_SHN + 1u64 } }   wrote_head = 1u64 }
+            if KER_SHN < 16000u64 { KER_SHARD[KER_SHN] = d   KER_SHN = KER_SHN + 1u64 }
+        }
+        j = j + 1u64
+    }
+    /* " < <family>] " */
+    ker_shputz(" < " as u64)
+    let f : *u8 = fam_ptr as *u8
+    let mut k : u64 = 0u64
+    while k < fam_len { if KER_SHN < 16000u64 { KER_SHARD[KER_SHN] = f[k]   KER_SHN = KER_SHN + 1u64 }   k = k + 1u64 }
+    ker_shputz("] " as u64)
+    return 1u64
+}
+
+/* append a NUL-terminated literal into KER_SHARD */
+fn ker_shputz(s: u64) -> i32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { if KER_SHN < 16000u64 { KER_SHARD[KER_SHN] = p[i]   KER_SHN = KER_SHN + 1u64 }   i = i + 1u64 }
+    return 0i32
+}
+
+/* THE SHARD: walk <root>/<family>, emit up to KER_SHARD_CAP module claims
+ * skipping the first `skip`, seal the scroll, and return its address (0 =
+ * an empty window sealed nothing).  Sets KER_SHMORE=1 when qualifying
+ * modules exist beyond this window (the family must sub-shard).  KER_SHCOUNT
+ * = modules emitted; KER_SHARD/KER_SHN hold the canonical text for serving. */
+fn ker_shard_build(cap: u64, fam_ptr: u64, fam_len: u64, skip: u64) -> u64 {
+    ker_fam_path(fam_ptr, fam_len)
+    KER_SHN = 0u64
+    KER_SHADDR = 0u64
+    KER_SHMORE = 0u64
+    KER_SHCOUNT = 0u64
+    let dh : u64 = fs_dir_open(cap, (&KER_PATH) as u64)
+    if dh == 0u64 { return 0u64 }
+    let mut idx : u64 = 0u64                              /* index among .iii files */
+    let mut count : u64 = 0u64
+    while fs_dir_read(dh) == 1u8 {
+        let isd : u8 = fs_dir_is_dir()
+        if isd == 0u8 {
+            let nm : u64 = fs_dir_name()
+            let ln : u64 = fs_dir_name_len()
+            /* ends with ".iii"? */
+            let mut isiii : u64 = 0u64
+            if ln >= 4u64 {
+                let p : *u8 = nm as *u8
+                if p[ln - 4u64] == 46u8 { if p[ln - 3u64] == 105u8 { if p[ln - 2u64] == 105u8 { if p[ln - 1u64] == 105u8 { isiii = 1u64 } } } }
+            }
+            if isiii == 1u64 {
+                if idx >= skip {
+                    if count < KER_SHARD_CAP {
+                        count = count + ker_shemit(nm, ln - 4u64, fam_ptr, fam_len)
+                    }
+                    if count >= KER_SHARD_CAP { KER_SHMORE = 1u64 }
+                }
+                idx = idx + 1u64
+            }
+        }
+    }
+    fs_dir_close(dh)
+    KER_SHCOUNT = count
+    if count == 0u64 { return 0u64 }
+    eol_reset()
+    if eol_read((&KER_SHARD) as u64, KER_SHN) < 0i64 { eol_reset()   return 0u64 }
+    KER_SHADDR = eol_keep()
+    return KER_SHADDR
+}
+
+/* emit the shard pin "[<family> k<16hex of addr> < iii] " into the root */
+fn ker_emit_shard_pin(fam_ptr: u64, fam_len: u64, addr: u64) -> i32 {
+    ker_bput(91u8)                                       /* '[' */
+    let f : *u8 = fam_ptr as *u8
+    let mut i : u64 = 0u64
+    while i < fam_len {
+        let mut d : u8 = f[i]
+        if d >= 65u8 { if d <= 90u8 { d = d + 32u8 } }
+        ker_bput(d)
+        i = i + 1u64
+    }
+    ker_bputz(" k" as u64)
+    let mut sh : u64 = 60u64
+    let mut go : u64 = 1u64
+    while go == 1u64 {
+        let nyb : u64 = (addr >> sh) & 15u64
+        ker_bput(KER_HEX[nyb])
+        if sh == 0u64 { go = 0u64 }
+        if sh != 0u64 { sh = sh - 4u64 }
+    }
+    ker_bputz(" < iii] " as u64)
+    return 0i32
+}
+
+/* THE DERIVATION: walk the live tree, fold the whole self-image into one
+ * EIDOLOS scroll, and SEAL it as the kept house.  Returns the portrait address
+ * (0 = the portrait could not be sealed).  CWD-independent: repo-root sees
+ * STDLIB/iii, STDLIB/-root sees iii (the self_cartographer / eidos_cli law). */
+fn kerygma_build() -> u64 @export {
+    ker_hex_init()
+    KER_BN = 0u64
+    KER_ADDR = 0u64
+    let cap : u64 = cap_env_init()
+
+    /* TIER 1 -- the full module graph into self_atlas, then its content-address */
+    ker_set_root(("STDLIB/iii" as u64))
+    let mut nc : u32 = scarto_map(cap, (&KER_ROOT) as u64, 10u64)
+    if nc == 0u32 {
+        ker_set_root(("iii" as u64))
+        nc = scarto_map(cap, (&KER_ROOT) as u64, 3u64)
+    }
+    KER_NODES = nc as u64
+    KER_EDGES = satlas_edge_count() as u64
+    let mut z : u64 = 0u64
+    while z < 32u64 { KER_ATLAS[z] = 0u8   z = z + 1u64 }
+    satlas_commit((&KER_ATLAS) as u64)
+
+    /* TIER 2 -- the canonical portrait.  Root is still the one that opened
+     * (STDLIB/iii or iii); the roster walk reuses it. */
+    KER_SUBN = ker_walk_roster(cap)
+    if KER_SUBN == 0u64 {
+        /* the tree was not found at either root -- re-point and try once more so
+         * a bare "iii" invocation still rosters (honest: an unfound tree yields
+         * a lawful law-only portrait, never a false roster). */
+        ker_set_root(("STDLIB/iii" as u64))
+        KER_SUBN = ker_walk_roster(cap)
+    }
+    /* TIER 2.5 -- THE SCROLL-OF-SCROLLS: for each family, seal its shard(s)
+     * and pin each shard's address into the root.  A family over the claim
+     * ceiling sub-shards by window (part 0, part 1, ...), each sealed and
+     * pinned -- the merkle fan-out, never a silent truncation.  Runs AFTER
+     * the atlas + roster (which already read KER_BLD-free) and BEFORE the
+     * root seal, so each shard's eol_keep is independent of the root's. */
+    KER_NSHARD = 0u64
+    let mut fi : u64 = 0u64
+    while fi < KER_NFAM {
+        let fp : u64 = ((&KER_FAMS) as u64) + KER_FAMOFF[fi]
+        let fl : u64 = KER_FAMLEN[fi]
+        let mut skip : u64 = 0u64
+        let mut more : u64 = 1u64
+        while more == 1u64 {
+            let a : u64 = ker_shard_build(cap, fp, fl, skip)
+            if a == 0u64 { more = 0u64 }
+            if a != 0u64 {
+                ker_emit_shard_pin(fp, fl, a)
+                KER_NSHARD = KER_NSHARD + 1u64
+                if KER_SHMORE == 1u64 { skip = skip + KER_SHARD_CAP }
+                if KER_SHMORE == 0u64 { more = 0u64 }
+            }
+        }
+        fi = fi + 1u64
+    }
+
+    ker_emit_atlas_pin()
+    ker_bputz("[iii < rederivation] " as u64)         /* THE LAW */
+    ker_bputz("[portrait = iii]" as u64)              /* THE (1,1,1) */
+
+    eol_reset()
+    if eol_read((&KER_BLD) as u64, KER_BN) < 0i64 { eol_reset()   return 0u64 }
+    KER_ADDR = eol_keep()
+    return KER_ADDR
+}
+
+/* re-derive one family's shard part live and return its sealed address (0 =
+ * empty).  A caller that pins an address earlier compares -- unequal is
+ * module-level drift within that family, named by the merkle, never silent. */
+fn kerygma_shard_reseal(fam_ptr: u64, fam_len: u64, skip: u64) -> u64 @export {
+    let cap : u64 = cap_env_init()
+    return ker_shard_build(cap, fam_ptr, fam_len, skip)
+}
+fn kerygma_shards() -> u64 @export { return KER_NSHARD }
+fn kerygma_shard_count() -> u64 @export { return KER_SHCOUNT }
+fn kerygma_shard_len() -> u64 @export { return KER_SHN }
+fn kerygma_shard_byte(i: u64) -> u8 @export { if i < KER_SHN { return KER_SHARD[i] }   return 0u8 }
+
+/* the sealed portrait address (building it on first demand). */
+fn kerygma_addr() -> u64 @export {
+    if KER_ADDR == 0u64 { return kerygma_build() }
+    return KER_ADDR
+}
+
+/* ANTI-ROT: does the built portrait text still re-derive its sealed address?
+ * 1 = faithful | 0 = no seal, or the seal lies.  (The one self-verification
+ * law every journal line and hearth file lives by, applied to the self-image.) */
+fn kerygma_verify() -> u64 @export {
+    if KER_ADDR == 0u64 { return 0u64 }
+    return eol_verify((&KER_BLD) as u64, KER_BN, KER_ADDR)
+}
+
+/* DRIFT DETECTION: re-walk the LIVE tree and return the fresh address.  Equal
+ * to a previously sealed address == the organism has not drifted; unequal ==
+ * drift (a family or a module changed), for the caller to name -- never silent. */
+fn kerygma_reseal() -> u64 @export { return kerygma_build() }
+
+fn kerygma_subsystems() -> u64 @export { return KER_SUBN }
+fn kerygma_nodes() -> u64 @export { return KER_NODES }
+fn kerygma_edges() -> u64 @export { return KER_EDGES }
+fn kerygma_scroll_len() -> u64 @export { return KER_BN }
+fn kerygma_scroll_byte(i: u64) -> u8 @export { if i < KER_BN { return KER_BLD[i] }   return 0u8 }
+
+/* ==================== THE SILICON SELF (the dynamic tier) ====================
+ * The KERYGMA proclaims not only the DISEMBODIED self (the code, portable and
+ * canonical -- v1/v2 above) but the EMBODIED self (this silicon).  Two faces,
+ * two jurisdictions, one barometer:
+ *   STATIC  (canonical): the CPUID crystal + the sealed silicon-fact census --
+ *           reproducible content-addresses of THIS host, admissible into the
+ *           determined self.
+ *   DYNAMIC (provisional): the 48-bit behavioral/timing fingerprint -- the
+ *           "electron variance," NON-reproducible, pinned to its dependence,
+ *           DEFAULT-DENIED from the canonical self by the ONE firewall.
+ * The dynamic self can inform, question, seed the agenda -- never silently
+ * become the determined self.  That is the whole discipline. */
+
+fn ker_silput(c: u8) -> i32 {
+    if KER_SILN < 500u64 { KER_SILBLD[KER_SILN] = c   KER_SILN = KER_SILN + 1u64 }
+    return 0i32
+}
+fn ker_silputz(s: u64) -> i32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { ker_silput(p[i])   i = i + 1u64 }
+    return 0i32
+}
+/* emit the 64 lowercase-hex of a 32-byte array into the silicon scroll */
+fn ker_silhex32(arr: u64) -> i32 {
+    let p : *u8 = arr as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        let b : u64 = p[i] as u64
+        ker_silput(KER_HEX[(b >> 4u64) & 15u64])
+        ker_silput(KER_HEX[b & 15u64])
+        i = i + 1u64
+    }
+    return 0i32
+}
+/* emit the 16 lowercase-hex of a u64 into the silicon scroll */
+fn ker_silhex_u64(v: u64) -> i32 {
+    let mut sh : u64 = 60u64
+    let mut go : u64 = 1u64
+    while go == 1u64 {
+        ker_silput(KER_HEX[(v >> sh) & 15u64])
+        if sh == 0u64 { go = 0u64 }
+        if sh != 0u64 { sh = sh - 4u64 }
+    }
+    return 0i32
+}
+fn ker_sil_slen(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut n : u64 = 0u64
+    while p[n] != 0u8 { n = n + 1u64 }
+    return n
+}
+
+/* THE SILICON DERIVATION: read the live substrate, seal the two selves.
+ * Returns the CANONICAL static-silicon address (0 = the readings refused). */
+fn kerygma_silicon() -> u64 @export {
+    ker_hex_init()
+    KER_SIL_STATIC = 0u64
+    KER_SIL_DYN = 0u64
+
+    /* --- STATIC (canonical): the CPUID crystal + the silicon-fact census --- */
+    katabasis_cpu_census_build()
+    let mut z : u64 = 0u64
+    while z < 32u64 { KER_CPU[z] = 0u8   KER_SIL[z] = 0u8   z = z + 1u64 }
+    katabasis_cpu_census_hash((&KER_CPU) as u64)
+    katabasis_census_init()
+    katabasis_census_hash((&KER_SIL) as u64)
+    KER_SILN = 0u64
+    ker_silputz("[cpu k" as u64)   ker_silhex32((&KER_CPU) as u64)   ker_silputz(" < silicon] " as u64)
+    ker_silputz("[census k" as u64)   ker_silhex32((&KER_SIL) as u64)   ker_silputz(" < silicon] " as u64)
+    ker_silputz("[silicon < determined] [determined = canonical]" as u64)
+    eol_reset()
+    if eol_read((&KER_SILBLD) as u64, KER_SILN) < 0i64 { eol_reset()   return 0u64 }
+    if eol_lawcheck() != 0u64 { return 0u64 }
+    KER_SIL_STATIC = eol_keep()
+    KER_SIL_STIER = KER_TIER_CANONICAL          /* reproducible on this host */
+    if KER_SIL_STATIC == 0u64 { return 0u64 }
+
+    /* --- DYNAMIC (provisional): the 48-bit behavioral fingerprint --- */
+    KER_SIL_FP = bfp_compute48()
+    /* fingerprint || epoch(0) as the pin bytes */
+    let mut k : u64 = 0u64
+    while k < 8u64 { KER_FPBYTES[k] = ((KER_SIL_FP >> (k * 8u64)) & 255u64) as u8   k = k + 1u64 }
+    while k < 24u64 { KER_FPBYTES[k] = 0u8   k = k + 1u64 }
+    KER_SIL_DTIER = reach_oracle_pin((&KER_FPBYTES) as u64, 24u64, (&KER_SILPIN) as u64)
+    KER_SILN = 0u64
+    ker_silputz("[behavior k" as u64)   ker_silhex_u64(KER_SIL_FP)   ker_silputz(" < observed] " as u64)
+    ker_silputz("[observed < provisional] [provisional < silicon]" as u64)
+    eol_reset()
+    if eol_read((&KER_SILBLD) as u64, KER_SILN) < 0i64 { eol_reset()   return KER_SIL_STATIC }
+    if eol_lawcheck() != 0u64 { return KER_SIL_STATIC }
+    KER_SIL_DYN = eol_keep()
+    return KER_SIL_STATIC
+}
+
+fn kerygma_silicon_static() -> u64 @export { return KER_SIL_STATIC }
+fn kerygma_silicon_dynamic() -> u64 @export { return KER_SIL_DYN }
+
+/* THE EMBODIED SELF: the ONE address that binds all three faces -- the tree
+ * self (the code, v2 merkle root), the silicon-static self (canonical), and
+ * the silicon-dynamic self (provisional) -- into a single proclamation.  The
+ * DISEMBODIED tree self is portable; the EMBODIED self is THIS code on THIS
+ * silicon at THIS moment, and its address moves if the code changes, the
+ * silicon changes, OR the electron variance drifts.  The complete organism,
+ * one name, one barometer -- from the derivable electron to the logic self. */
+var KER_EMBODIED : u64 = 0u64
+fn kerygma_embodied() -> u64 @export {
+    let tree : u64 = kerygma_build()          /* the v2 merkle root (code self) */
+    let sil : u64 = kerygma_silicon()         /* silicon static (+ sets dynamic) */
+    KER_BN = 0u64
+    ker_emit_shard_pin("tree" as u64, 4u64, tree)
+    ker_emit_shard_pin("silicon" as u64, 7u64, sil)
+    ker_emit_shard_pin("behavior" as u64, 8u64, KER_SIL_DYN)
+    ker_bputz("[iii < rederivation] " as u64)
+    ker_bputz("[embodied = iii]" as u64)
+    eol_reset()
+    if eol_read((&KER_BLD) as u64, KER_BN) < 0i64 { eol_reset()   return 0u64 }
+    KER_EMBODIED = eol_keep()
+    return KER_EMBODIED
+}
+fn kerygma_behavior() -> u64 @export { return KER_SIL_FP }
+/* THE WALL: the static silicon self is ADMISSIBLE into the determined self;
+ * the dynamic (behavioral) self is REFUSED (0 = admit, 1 = refused). */
+fn kerygma_silicon_admit_static() -> i32 @export { return reach_oracle_admit_canonical(KER_SIL_STIER) }
+fn kerygma_silicon_admit_dynamic() -> i32 @export { return reach_oracle_admit_canonical(KER_SIL_DTIER) }
+
+/* THE TWO-JURISDICTION LAW (pure -- the firewall + the logos, no silicon):
+ * the wall admits the canonical and refuses the provisional; a provisional
+ * behavioral scroll seals + verifies + derives its subsumption; and a
+ * DIFFERENT fingerprint gets a DIFFERENT provisional name (drift is named). */
+fn kerygma_pulse_selfprove() -> u64 @export {
+    /* CLAUSE 1: the firewall admits CANONICAL, refuses PROVISIONAL. */
+    if reach_oracle_admit_canonical(KER_TIER_CANONICAL) != 0i32 { return 1u64 }
+    if reach_oracle_admit_canonical(KER_TIER_PROVISIONAL) == 0i32 { return 2u64 }
+
+    /* CLAUSE 2: a provisional behavioral scroll seals, verifies, and derives
+     * that a behavior is (transitively) under the silicon self. */
+    let d1 : u64 = "[behavior k00c0ffee < observed] [observed < provisional] [provisional < silicon]" as u64
+    eol_reset()
+    if eol_read(d1, ker_sil_slen(d1)) < 0i64 { eol_reset()   return 3u64 }
+    if eol_lawcheck() != 0u64 { return 4u64 }
+    let a1 : u64 = eol_addr()
+    if a1 == 0u64 { return 5u64 }
+    let beh : u64 = "behavior k00c0ffee" as u64
+    let sil : u64 = "silicon" as u64
+    if eol_entails(beh, ker_sil_slen(beh), 0u64, sil, ker_sil_slen(sil)) != 1u64 { return 6u64 }
+    if eol_verify(d1, ker_sil_slen(d1), a1) != 1u64 { return 7u64 }
+
+    /* CLAUSE 3: a DIFFERENT fingerprint -> a DIFFERENT provisional name; the
+     * dynamic self is content-addressed, so drift can never be silent. */
+    let d2 : u64 = "[behavior kdeadbeef < observed] [observed < provisional] [provisional < silicon]" as u64
+    eol_reset()
+    if eol_read(d2, ker_sil_slen(d2)) < 0i64 { eol_reset()   return 8u64 }
+    let a2 : u64 = eol_addr()
+    if a2 == 0u64 { return 9u64 }
+    if a1 == a2 { return 10u64 }
+
+    /* CLAUSE 4: a stale provisional name refuses (anti-rot on the dynamic self). */
+    if eol_verify(d1, ker_sil_slen(d1), a2) != 0u64 { return 11u64 }
+    eol_reset()
+    return 0u64
+}
+
+/* ==================== THE CONDITION OF MOTION (pure, no filesystem) ==================== *
+ * Every invocation re-derives the whole anti-amnesia law from fixed portraits,
+ * so "green" never depends on a runtime tree or a valid capability.  Returns 0
+ * = the law holds; a nonzero arm code = the exact step that failed. */
+fn kerygma_selfprove() -> u64 @export {
+    let small : u64 = "[aether < iii] [omnia < iii] [iii < rederivation]" as u64
+    let big : u64 = "[aether < iii] [omnia < iii] [eidos < iii] [iii < rederivation]" as u64
+
+    /* arm 1: a coherent portrait SEALS and SELF-VERIFIES. */
+    eol_reset()
+    if eol_readz_here(small) < 0i64 { eol_reset()   return 1u64 }
+    let a_small : u64 = eol_keep()
+    if a_small == 0u64 { eol_reset()   return 2u64 }
+    if ker_vz(small, a_small) != 1u64 { return 3u64 }
+
+    /* arm 2: a DIFFERENT organism gets a DIFFERENT name (drift changes the
+     * address -- the whole point of a content-addressed self-image). */
+    eol_reset()
+    if eol_readz_here(big) < 0i64 { eol_reset()   return 4u64 }
+    let a_big : u64 = eol_keep()
+    if a_big == 0u64 { eol_reset()   return 5u64 }
+    if a_small == a_big { return 6u64 }
+
+    /* arm 3: no portrait verifies against the WRONG address -- a stale name can
+     * never pass (the anti-rot guarantee).  The small portrait must REFUSE the
+     * big portrait's address. */
+    if ker_vz(small, a_big) != 0u64 { return 7u64 }
+
+    /* arm 4: recovery -- the small portrait still verifies against its OWN
+     * address after the excursion (no residue coloured it). */
+    if ker_vz(small, a_small) != 1u64 { return 8u64 }
+
+    /* ---- v2: THE SCROLL-OF-SCROLLS merkle law (pure, no filesystem) ---- */
+    /* arm 5: a shard-shaped scroll ([<module> < <family>]) seals + verifies. */
+    let shard : u64 = "[metabole < omnia] [peras < omnia] [probole < omnia]" as u64
+    eol_reset()
+    if eol_readz_here(shard) < 0i64 { eol_reset()   return 9u64 }
+    let a_shard : u64 = eol_keep()
+    if a_shard == 0u64 { eol_reset()   return 10u64 }
+    if ker_vz(shard, a_shard) != 1u64 { return 11u64 }
+
+    /* arm 6: THE MERKLE BINDING -- two roots differing ONLY in a shard pin's
+     * address get DIFFERENT root names (a changed shard changes the root). */
+    let root_a : u64 = "[omnia k1111111111111111 < iii] [iii < rederivation]" as u64
+    let root_b : u64 = "[omnia k2222222222222222 < iii] [iii < rederivation]" as u64
+    eol_reset()
+    if eol_readz_here(root_a) < 0i64 { eol_reset()   return 12u64 }
+    let a_ra : u64 = eol_keep()
+    eol_reset()
+    if eol_readz_here(root_b) < 0i64 { eol_reset()   return 13u64 }
+    let a_rb : u64 = eol_keep()
+    if a_ra == 0u64 { return 14u64 }
+    if a_ra == a_rb { return 15u64 }
+
+    /* arm 7: a stale root name refuses -- root_a's text can never verify
+     * against root_b's address (the merkle anti-rot). */
+    if ker_vz(root_a, a_rb) != 0u64 { return 16u64 }
+    if ker_vz(root_a, a_ra) != 1u64 { return 17u64 }
+
+    eol_reset()
+    return 0u64
+}

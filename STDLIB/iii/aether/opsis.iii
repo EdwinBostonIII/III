@@ -1,0 +1,210 @@
+/* STDLIB/iii/aether/opsis.iii -- THE OPSIS (Gk. opsis, the act of seeing):
+ * the quantum-OBSERVANCE oracle.
+ *
+ * SIBLING, NOT TWIN, of omnia/mantis (THE ORACLE MEMBRANE around the R1
+ * NEURAL forward pass -- mantis_consult / mantis_generate).  Both are
+ * membranes over an UNTRUSTED oracle sharing the ONE reach_oracle firewall;
+ * they differ in what they consult.  MANTIS consults the metabolized 671B
+ * MIND (a neural forward pass) and firewalls its token.  OPSIS consults a
+ * MEASUREMENT (a quantum-observance / bit-flip) and firewalls its belief.
+ * They were built in different sessions and briefly collided on the name
+ * "mantis"; this rename keeps both, distinct and load-bearing, so the
+ * KERYGMA never re-litigates it.  (Eventual unification into ONE membrane
+ * with a neural face and an observance face is chartered.)
+ *
+ * THE THESIS (the architect's, made a science): the world abandoned
+ * observance-based (bit-flip / measurement) computation because it suspects
+ * OBSERVANCE IS RANDOM.  It is not.  Observance is CONTEXTUAL -- the outcome
+ * depends on WHAT ELSE is measured -- and III is uniquely equipped to run it
+ * because it holds, as EXACT arithmetic, the three pieces the world lacks:
+ *   1. CONTEXTUALITY, proven (kyma: Kochen-Specker, the Peres-Mermin square,
+ *      six operator identities with emergent signs, 512-valuation = 0) --
+ *      the formal proof that a measurement outcome is not a hidden constant;
+ *   2. EXACT BAYESIAN CONDITIONING (percept_infer -> bayes_exact) -- an
+ *      observation folds belief by EXACT algebra over DECLARED likelihoods,
+ *      never by learning (the M3 no-ML law);
+ *   3. THE PROVENANCE FIREWALL (reach_oracle + measure_status) -- an
+ *      observation is PROVISIONAL, pinned to a content-address of exactly
+ *      what it depended on, DEFAULT-DENIED from the canonical (determined)
+ *      self until a proof promotes it.
+ *
+ * THE OPSIS is the membrane that runs an observation under all three laws
+ * at once.  It never asserts a random bit.  It asserts a CONTEXTUAL,
+ * EXACTLY-CONDITIONED, PINNED, PROVISIONAL observation whose dependence is
+ * auditable forever and whose promotion to the determined self requires a
+ * proof.  That is the scientific form of quantum-observance, and it is the
+ * best chance the idea has ever had, because in III the contextuality, the
+ * conditioning, and the firewall are all exact.
+ *
+ * THE OBSERVANCE ONTOLOGY (sealed in the one logos, EIDOLOS -- the (1,1,1)):
+ *     [observation = provisional belief]         an observation IS provisional
+ *     [provisional belief < canonical belief]    provisional sits under canonical
+ *     [belief < context]                         a belief is bounded by its
+ *                                                measurement context (contextuality)
+ *     [context < derivation]                     the context itself is derived
+ * DERIVED (absent from the text): [observation < canonical belief] -- an
+ * observation reaches the canonical self ONLY through the provisional tier
+ * (never directly); the reversal REFUSES.
+ *
+ * THIS TIER (landed): the ALGEBRAIC core -- exact conditioning, the
+ * contextuality of the fold, the PROVISIONAL firewall, the sealed ontology --
+ * all proven pure (no hardware, environment-independent).  THE ACTIVE TIER
+ * (chartered): basal_probe drives the info-gain SELECTION of the maximally-
+ * informative bit-flip and the reversible-or-refused hardware quarantine;
+ * kyma supplies the contextuality CERTIFICATE per measurement; noesis METERS
+ * the observation's thermodynamic cost (deficit = irreversibility).  Those
+ * enrich the loop; the law below stands without them.
+ *
+ * Composes percept_infer + reach_oracle + eidolos -- no island.  Ring R-1
+ * (it governs the boundary between the observed and the determined).  NIH,
+ * ASCII, libc-free, integer-only, determinism of METHOD (a fold re-derives). */
+
+module aether_opsis
+
+/* ---- the exact Bayesian conditioning core (percept_infer -> bayes_exact) ---- */
+extern @abi(c-msvc-x64) fn pi_observe(prior0: u64, prior1: u64, lik0: u64, lik1: u64) -> i32 from "percept_infer.iii"
+extern @abi(c-msvc-x64) fn pi_posterior_num(i: u32) -> u64 from "percept_infer.iii"
+extern @abi(c-msvc-x64) fn pi_posterior_marginal() -> u64 from "percept_infer.iii"
+extern @abi(c-msvc-x64) fn pi_posterior_canonical_ok() -> u8 from "percept_infer.iii"
+extern @abi(c-msvc-x64) fn pi_posterior_usable(pin: u8) -> u8 from "percept_infer.iii"
+
+/* ---- the provenance firewall (reach_oracle) ---- */
+extern @abi(c-msvc-x64) fn reach_oracle_pin(pin_bytes: u64, pin_len: u64, out_pin: u64) -> u32 from "reach_oracle.iii"
+extern @abi(c-msvc-x64) fn reach_oracle_admit_canonical(tier: u32) -> i32 from "reach_oracle.iii"
+extern @abi(c-msvc-x64) fn reach_oracle_is_provisional(tier: u32) -> u8 from "reach_oracle.iii"
+
+/* ---- the one logos (EIDOLOS) ---- */
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_lawcheck() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_verify(base: u64, len: u64, expect: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_entails(a_addr: u64, a_len: u64, verb: u64, b_addr: u64, b_len: u64) -> u64 from "eidolos.iii"
+
+const OPS_TIER_PROVISIONAL : u32 = 1u32
+const OPS_ADMIT_REFUSED    : i32 = 1i32
+
+/* the standing observation (the last fold): the two posterior numerators, the
+ * marginal, the tier, and the oracle-pin. */
+var OPS_NUM0 : u64 = 0u64
+var OPS_NUM1 : u64 = 0u64
+var OPS_MARG : u64 = 0u64
+var OPS_TIER : u32 = 0u32
+var OPS_PIN  : [u8; 32]
+var OPS_SCROLL : u64 = 0u64
+
+fn ops_slen(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut n : u64 = 0u64
+    while p[n] != 0u8 { n = n + 1u64 }
+    return n
+}
+
+/* THE OBSERVATION: fold the belief EXACTLY by the observed likelihood, pin
+ * the fold PROVISIONAL to a content-address of what it depended on, and stand
+ * the result.  prior/likelihood are the DECLARED numbers (M3: the likelihood
+ * is a sealed declaration, never learned).  Returns the tier. */
+fn opsis_observe(prior0: u64, prior1: u64, lik0: u64, lik1: u64, pin_bytes: u64, pin_len: u64) -> u32 @export {
+    pi_observe(prior0, prior1, lik0, lik1)
+    OPS_NUM0 = pi_posterior_num(0u32)
+    OPS_NUM1 = pi_posterior_num(1u32)
+    OPS_MARG = pi_posterior_marginal()
+    OPS_TIER = reach_oracle_pin(pin_bytes, pin_len, (&OPS_PIN) as u64)
+    return OPS_TIER
+}
+
+fn opsis_num(i: u32) -> u64 @export {
+    if i == 0u32 { return OPS_NUM0 }
+    return OPS_NUM1
+}
+fn opsis_marginal() -> u64 @export { return OPS_MARG }
+fn opsis_tier() -> u32 @export { return OPS_TIER }
+
+/* THE FIREWALL: may the standing observation enter the canonical (determined)
+ * self?  Default-DENY -- a PROVISIONAL observation is refused (it can inform,
+ * question, seed the agenda, but never silently become determined truth). */
+fn opsis_admit_canonical() -> i32 @export {
+    return reach_oracle_admit_canonical(OPS_TIER)
+}
+
+/* is the standing observation the oracle-dependent PROVISIONAL tier? */
+fn opsis_is_provisional() -> u8 @export {
+    return reach_oracle_is_provisional(OPS_TIER)
+}
+
+/* THE OBSERVANCE ONTOLOGY: seal the (1,1,1) self-image of observance in the
+ * one logos; returns its address (0 = refused).  DERIVED: an observation
+ * reaches the canonical belief only THROUGH the provisional tier. */
+fn opsis_seal() -> u64 @export {
+    eol_reset()
+    let doc : u64 = "[observation = provisional belief] [provisional belief < canonical belief] [belief < context] [context < derivation]" as u64
+    let dl : u64 = ops_slen(doc)
+    if eol_read(doc, dl) < 0i64 { eol_reset()   return 0u64 }
+    if eol_lawcheck() != 0u64 { return 0u64 }     /* the scroll must be coherent */
+    let a1 : u64 = eol_addr()
+    if a1 == 0u64 { return 0u64 }
+    OPS_SCROLL = a1
+    return a1
+}
+fn opsis_scroll() -> u64 @export { return OPS_SCROLL }
+
+/* ==================== THE OBSERVANCE LAW (pure, no hardware) ====================
+ * Every invocation re-derives the five clauses of quantum-observance from
+ * fixed numbers, so "green" never depends on a runtime probe or a live
+ * silicon.  Returns 0 = the law holds; a nonzero arm names the failed clause. */
+fn opsis_selfprove() -> u64 @export {
+    /* CLAUSE 1 -- EXACT CONDITIONING: uniform prior (1,1), likelihood (3,1)
+     * folds to the exact posterior numerators (3,1) over marginal 4.  Belief
+     * moves by exact algebra, not by learning. */
+    let pin_a : u64 = "endpoint=ctxA|epoch=0" as u64
+    opsis_observe(1u64, 1u64, 3u64, 1u64, pin_a, ops_slen(pin_a))
+    if OPS_NUM0 != 3u64 { return 1u64 }
+    if OPS_NUM1 != 1u64 { return 2u64 }
+    if OPS_MARG != 4u64 { return 3u64 }
+
+    /* CLAUSE 2 -- NOT RANDOM (determinism of method): the SAME observation
+     * re-derives the SAME posterior.  Given the context, the fold is a
+     * function, never a coin. */
+    opsis_observe(1u64, 1u64, 3u64, 1u64, pin_a, ops_slen(pin_a))
+    if OPS_NUM0 != 3u64 { return 4u64 }
+    if OPS_MARG != 4u64 { return 5u64 }
+
+    /* CLAUSE 3 -- CONTEXTUAL: the SAME prior under a DIFFERENT measurement
+     * context (likelihood 1,3 -- a different question asked of the same
+     * system) folds to a DIFFERENT belief.  What the world calls "randomness"
+     * is context-dependence: the outcome depends on WHAT is measured. */
+    let pin_b : u64 = "endpoint=ctxB|epoch=0" as u64
+    opsis_observe(1u64, 1u64, 1u64, 3u64, pin_b, ops_slen(pin_b))
+    if OPS_NUM0 != 1u64 { return 6u64 }
+    if OPS_NUM1 != 3u64 { return 7u64 }
+    /* the two contexts gave different beliefs from the identical prior */
+    if OPS_NUM0 == 3u64 { return 8u64 }
+
+    /* CLAUSE 4 -- PROVISIONAL + FIREWALL: the belief is oracle-dependent
+     * (PROVISIONAL), pinned, and DEFAULT-DENIED from the canonical self;
+     * usable in a gap-accepting context ONLY with its pin, never without. */
+    if OPS_TIER != OPS_TIER_PROVISIONAL { return 9u64 }
+    if opsis_is_provisional() != 1u8 { return 10u64 }
+    if opsis_admit_canonical() != OPS_ADMIT_REFUSED { return 11u64 }
+    if pi_posterior_canonical_ok() != 0u8 { return 12u64 }
+    if pi_posterior_usable(1u8) != 1u8 { return 13u64 }
+    if pi_posterior_usable(0u8) != 0u8 { return 14u64 }
+
+    /* CLAUSE 5 -- THE OBSERVANCE ONTOLOGY: the (1,1,1) self-image seals in
+     * the one logos, re-verifies (anti-rot), DERIVES that an observation
+     * reaches the canonical belief (transitively, through the provisional
+     * tier), and REFUSES the reversal (canonical is not an observation). */
+    let a1 : u64 = opsis_seal()          /* leaves the doc standing (read+lawcheck) */
+    if a1 == 0u64 { return 15u64 }
+    /* entail WHILE the scroll stands (metabole's read->lawcheck->entails order,
+     * no intervening re-read to colour the standing house) */
+    let obs : u64 = "observation" as u64
+    let can : u64 = "canonical belief" as u64
+    if eol_entails(obs, ops_slen(obs), 0u64, can, ops_slen(can)) != 1u64 { return 17u64 }
+    if eol_entails(can, ops_slen(can), 0u64, obs, ops_slen(obs)) != 0u64 { return 18u64 }
+    /* anti-rot LAST: the sealed text still re-derives its address */
+    let doc : u64 = "[observation = provisional belief] [provisional belief < canonical belief] [belief < context] [context < derivation]" as u64
+    if eol_verify(doc, ops_slen(doc), a1) != 1u64 { return 16u64 }
+    eol_reset()
+    return 0u64
+}

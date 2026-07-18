@@ -193,6 +193,7 @@ grep -q "^scroll metabole = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO MET
 grep -q "^the peras: exp0=exact e=cf-bounded feq=overlap monotone=separated" "$T/run1.txt" || { echo "[summit_gate] NO PERAS BOUND"; exit 6; }
 grep -q "^scroll peras = [0-9]" "$T/run1.txt" || { echo "[summit_gate] NO PERAS SCROLL"; exit 6; }
 if grep -q "^the feast: absent" "$T/run1.txt"; then
+    grep -q "^the anatomia: fasting" "$T/run1.txt" || { echo "[summit_gate] NO FASTING BODY"; exit 6; }
     grep -q "^the discharge: fasting" "$T/run1.txt" || { echo "[summit_gate] NO FASTING DISCHARGE"; exit 6; }
     grep -q "^the choir: fasting" "$T/run1.txt" || { echo "[summit_gate] NO FASTING CHOIR"; exit 6; }
     grep -q "^the probole: fasting" "$T/run1.txt" || { echo "[summit_gate] NO FASTING PROJECTION"; exit 6; }
@@ -245,7 +246,15 @@ else
     # by the same four weavers through the 3D expert tensors, gated by the
     # certified sigmoid weight.  Three real layers of R1 composed exactly.
     grep -q "^the anabasis: layer 2 DENSE X'' recomputed sign-straddle=" "$T/run1.txt" || { echo "[summit_gate] THE ASCENT STALLED"; exit 6; }
-    grep -q "^the synodos: layer 3 MoE -- router elected top-8 of 256 (interval logits)" "$T/run1.txt" || { echo "[summit_gate] THE SYNOD DID NOT CONVENE"; exit 6; }
+    # SYNODOS II: the TRUE election -- selection on sigmoid(logit) + the
+    # ledger's exp_probs_b bias, weights on sigmoid alone; the gap CERTIFIED;
+    # a straddled election CLIMBS the ladder rung (48 -> 58) before it
+    # refuses; an undecided election REFUSES the enclosure by name.
+    grep -q "^the synodos: layer 3 MoE -- router elected top-8 of 256 (sigmoid+bias scores) bias=" "$T/run1.txt" || { echo "[summit_gate] THE SYNOD DID NOT CONVENE"; exit 6; }
+    # THE ANATOMIA: the whole body on the registry -- 61 layers, 3 dense,
+    # 58 MoE each with norm + router + six expert tensors, the specials on
+    # the table, the over-layer name refused, the deep selector exercised.
+    grep -q "^the anatomia: layers=61 attn=61/61 dense-ffn=3/3 moe=58/58 router=58/58 bias=58/58 specials=3/3 voc=129280 twins(shape)=548 over-layer-refused=ok sel-exercise=ok" "$T/run1.txt" || { echo "[summit_gate] THE BODY UNKNOWN"; exit 6; }
 fi
 grep -q "^the tropos: .*two-form-overlap=ok pythagoras=contained.*contains 2 =ok" "$T/run1.txt" || { echo "[summit_gate] THE TURN FAILED"; exit 6; }
 grep -q "^the omega: .*power-round-trip: omega\^32 x 10000 contains 1 =ok.*BRIDGED" "$T/run1.txt" || { echo "[summit_gate] THE BRIDGE FELL"; exit 6; }
@@ -258,6 +267,13 @@ grep -q "^the omega: .*power-round-trip: omega\^32 x 10000 contains 1 =ok.*BRIDG
 grep -q "^the pi: machin 16 atan(1/5) - 4 atan(1/239) certified; sin(pi/4)\^2 contains 1/2 =ok" "$T/run1.txt" || { echo "[summit_gate] THE CIRCLE UNCLOSED"; exit 6; }
 grep -q "^the yarn: factor=40 mscale = 1 + ln(40)/10 certified in \[13688/10000, 13689/10000\]" "$T/run1.txt" || { echo "[summit_gate] THE YARN UNSPUN"; exit 6; }
 grep -q "^the yarn frequencies: ln(pi) minted .*ramp t pinned: lane0=interp(t=0) lane31=extrap(t=1)" "$T/run1.txt" || { echo "[summit_gate] THE YARN FREQUENCIES ADRIFT"; exit 6; }
+# THE EKLOGION + THE ESKALATION: the election core proven on exact dyadics
+# (the bias chooses a seat, the gap limb-exact, the riser refused, the rerun
+# identical) and the ladder rung proven against the continued-fraction jaws
+# (58 tighter than 24, the cap refused, the rung returned).  Machine-
+# independent: they stand feast or fast.
+grep -q "^the eklogion: election core on exact dyadics -- bias-won seat=ok decisive gap=25/64 limb-exact refusal-at-riser=ok negative-gap=-1/64 exact rerun=identical" "$T/run1.txt" || { echo "[summit_gate] THE ELECTION CORE UNPROVEN"; exit 6; }
+grep -q "^the eskalation: rung 58 -- z=1+2^-50 strictly tighter than rung 48 on both bounds, e' cf-bounded, cap=refused rerun=identical rung=returned" "$T/run1.txt" || { echo "[summit_gate] THE RUNG UNPROVEN"; exit 6; }
 # THE HARMONIA: all 32 omega lanes off the one certified omega_1 (five power
 # round trips, three rational islands, strict monotone separation) -- the
 # lane bank stands on every machine; the fleshed assembly (exact P/X, the

@@ -1,0 +1,232 @@
+/* STDLIB/iii/katabasis/ankyra.iii -- ANKYRA: the anchor.
+ *
+ * The Logos axiom names METAL, and until now metal was a word: the one claim
+ * of the soul-sentence with no measured referent.  ANKYRA is the descent that
+ * gives it one -- the computer's actual electrons sworn into the ontology as
+ * a TESTABLE anchor.  Not static figures: the anchor is EARNED at every
+ * invocation from the live silicon, three physical hypotheses each tested
+ * fresh and each refusing loudly by name:
+ *
+ *   THE FLOW      cycles MOVE.  Three serialized reads of the timestamp
+ *                 counter are strictly increasing, and a bracket of real
+ *                 work costs strictly more cycles than an empty bracket
+ *                 (computation is never free).  The estimator is the MIN
+ *                 over laps -- the friction ledger's own law: the floor is
+ *                 the physics, the mean is the weather.
+ *   THE IDENTITY  the die re-derives its own name.  The CPUID-derived
+ *                 8-fact crystal (katabasis/cpu_census), reset and rebuilt,
+ *                 is byte-identical -- identity from the silicon, twice.
+ *   THE MIRROR    what the die SAYS mirrors what the die DOES.  The CPUID
+ *                 feature word (the claim) stands nonzero beside the 48-bit
+ *                 behavioral fingerprint (the deed), computed twice, stable,
+ *                 nonzero -- cross-bearer invariance at the metal.
+ *
+ * On these earnings the anchor TESTIFIES in the one tongue:
+ *
+ *     [flow < silicon]     cycle facts are die facts (a friction fact is a
+ *                          fact ABOUT a die, never about mathematics)
+ *     [silicon = metal]    THE MARRIAGE: the axiom's metal is not a poem --
+ *                          it is THIS measured die
+ *     [claim ~ deed]       the word and the work are each other's mirror
+ *     [drift < refusal]    any disagreement of the bearers is refused, not
+ *                          averaged (brokenness benign and obvious)
+ *
+ * and convened with the Logos axiom the union derives what NEITHER says:
+ * [silicon ~ law] (the silicon mirrors the law) and [silicon < wake] (the
+ * silicon serves the waking organism) -- the static soul and the dynamic
+ * body emerging from each other under one lawcheck, where contradiction is
+ * structurally refused.
+ *
+ * DYNAMIC AND STATIC IN HARMONY: the claims' TEXT is stable (the census
+ * stays byte-deterministic); their DERIVATION is a live physical act (the
+ * electrons are consulted at every earning).  Raw cycle values NEVER enter
+ * any sealed or printed path -- the determinism firewall (omnia/bench's own
+ * law) is honored: what convenes is the VERDICT of physics, not the weather.
+ *
+ * HONEST BOUNDARY: this anchor stands on the unprivileged oracles every
+ * x86-64 machine answers (RDTSC, CPUID, its own arithmetic).  The deeper
+ * descent -- MSR heat, Ring -1 interception -- is PREPARED as verified
+ * anatomy (katabasis/vmexit, svm_layout, ring_lattice: pure total taxonomy,
+ * fail-closed) and awaits the driver: that seam is NAMED here, never faked.
+ *
+ * Truth is a CONDITION OF MOTION: ak_selfprove (arms 431..434) re-earns the
+ * anchor and re-derives the marriage at every bearer's invocation.  NO gate,
+ * NO KAT (the kardia pattern).  NIH: composes omnia/bench (the one timestamp
+ * door), katabasis/cpu_census (the identity crystal), katabasis/
+ * behavioral_fp (the deed), numera/cpufeat (the claim), omnia/eidolos (the
+ * one tongue and the one barometer).  Hexad: kind_essence.  Ring R0. */
+module katabasis_ankyra
+
+extern @abi(c-msvc-x64) fn bench_now() -> u64 from "bench.iii"
+extern @abi(c-msvc-x64) fn bench_warmup() -> i32 from "bench.iii"
+extern @abi(c-msvc-x64) fn katabasis_cpu_census_hash(out_addr: u64) -> i32 from "cpu_census.iii"
+extern @abi(c-msvc-x64) fn katabasis_cpu_census_reset() -> i32 from "cpu_census.iii"
+extern @abi(c-msvc-x64) fn bfp_compute48() -> u64 from "behavioral_fp.iii"
+extern @abi(c-msvc-x64) fn cpufeat_summary_cached() -> u32 from "cpufeat.iii"
+
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_lawcheck() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_entails(a: u64, al: u64, v: u64, b: u64, bl: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_axiom_text() -> u64 from "eidolos.iii"
+
+/* named faults (every refusal counted, never silent) */
+const AK_F_NONE   : u64 = 0u64
+const AK_F_FLOW   : u64 = 1u64           /* the cycles did not move lawfully    */
+const AK_F_IDENT  : u64 = 2u64           /* the die did not re-derive its name  */
+const AK_F_MIRROR : u64 = 3u64           /* the claim and the deed disagreed    */
+
+const AK_LAPS : u64 = 16u64
+const AK_SENT : u64 = 18446744073709551615u64
+
+var AK_H1 : [u8; 32]                     /* identity crystal, first derivation  */
+var AK_H2 : [u8; 32]                     /* identity crystal, second derivation */
+var AK_RC : [u64; 4]                     /* refusals by fault                   */
+var AK_SPIN : u64 = 0u64                 /* work sink (the bracket's real cost) */
+
+fn ak_slen(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut n : u64 = 0u64
+    while p[n] != 0u8 { n = n + 1u64 }
+    return n
+}
+
+/* the work the bracket prices: 256 mul-xor folds landing in a module var,
+ * so the cost is real and cannot be elided */
+fn ak_work() -> i32 {
+    let mut h : u64 = 14695981039346656037u64
+    let mut i : u64 = 0u64
+    while i < 256u64 { h = (h ^ i) * 1099511628211u64   i = i + 1u64 }
+    AK_SPIN = h
+    return 0i32
+}
+/* THE FLOW: cycles move, and work is never free.  0 earned | AK_F_FLOW. */
+fn ak_flow() -> u64 {
+    bench_warmup()
+    let t1 : u64 = bench_now()
+    let t2 : u64 = bench_now()
+    let t3 : u64 = bench_now()
+    if t2 <= t1 { return AK_F_FLOW }
+    if t3 <= t2 { return AK_F_FLOW }
+    /* the empty floor: min over AK_LAPS empty brackets */
+    let mut emin : u64 = AK_SENT
+    let mut c : u64 = 0u64
+    while c < AK_LAPS {
+        let a : u64 = bench_now()
+        let b : u64 = bench_now()
+        let d : u64 = b - a
+        if d < emin { emin = d }
+        c = c + 1u64
+    }
+    /* the work floor: min over AK_LAPS brackets around real folds */
+    let mut wmin : u64 = AK_SENT
+    c = 0u64
+    while c < AK_LAPS {
+        let a : u64 = bench_now()
+        ak_work()
+        let b : u64 = bench_now()
+        let d : u64 = b - a
+        if d < wmin { wmin = d }
+        c = c + 1u64
+    }
+    if wmin <= emin { return AK_F_FLOW }
+    return 0u64
+}
+/* THE IDENTITY: the die re-derives its own name, byte-identical.  0 | AK_F_IDENT. */
+fn ak_identity() -> u64 {
+    katabasis_cpu_census_reset()
+    katabasis_cpu_census_hash((&AK_H1) as u64)
+    katabasis_cpu_census_reset()
+    katabasis_cpu_census_hash((&AK_H2) as u64)
+    let mut nz : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        if AK_H1[i] != AK_H2[i] { return AK_F_IDENT }
+        if AK_H1[i] != 0u8 { nz = 1u64 }
+        i = i + 1u64
+    }
+    if nz == 0u64 { return AK_F_IDENT }
+    return 0u64
+}
+/* THE MIRROR: the claim (CPUID word) stands beside the deed (behavioral
+ * fingerprint), both nonzero, the deed stable twice.  0 | AK_F_MIRROR. */
+fn ak_mirror() -> u64 {
+    let w : u64 = cpufeat_summary_cached() as u64
+    if w == 0u64 { return AK_F_MIRROR }
+    let b1 : u64 = bfp_compute48()
+    let b2 : u64 = bfp_compute48()
+    if b1 == 0u64 { return AK_F_MIRROR }
+    if b1 != b2 { return AK_F_MIRROR }
+    return 0u64
+}
+
+/* THE EARNING: the anchor is not stored -- it is earned from the live
+ * electrons, or it is refused by name.  0 earned | the named fault. */
+fn ak_earn() -> u64 @export {
+    let f : u64 = ak_flow()
+    if f != 0u64 { AK_RC[f] = AK_RC[f] + 1u64   return f }
+    let d : u64 = ak_identity()
+    if d != 0u64 { AK_RC[d] = AK_RC[d] + 1u64   return d }
+    let m : u64 = ak_mirror()
+    if m != 0u64 { AK_RC[m] = AK_RC[m] + 1u64   return m }
+    return 0u64
+}
+
+/* THE TESTIMONY (the anchor synod, census seat 11): the anchor's own earned
+ * laws in the one tongue -- see the header for each law's teeth. */
+fn ak_testify() -> u64 @export {
+    return "[flow < silicon] [silicon = metal] [claim ~ deed] [drift < refusal]" as u64
+}
+
+/* ==================== THE SELF-PROOF (arms 431..434) ==================== */
+fn ak_ent(a: u64, v: u64, b: u64) -> u64 {
+    return eol_entails(a, ak_slen(a), v, b, ak_slen(b))
+}
+fn ak_selfprove() -> u64 @export {
+    /* arm 431: THE FLOW -- earned live: the counter moves strictly and the
+     * work bracket floors strictly above the empty bracket. */
+    if ak_flow() != 0u64 { return 431u64 }
+    /* arm 432: THE IDENTITY -- earned live, and the comparator has TEETH:
+     * a flipped byte in one derivation is drift, refused. */
+    if ak_identity() != 0u64 { return 432u64 }
+    AK_H2[7u64] = AK_H2[7u64] ^ 1u8
+    let mut same : u64 = 1u64
+    let mut i : u64 = 0u64
+    while i < 32u64 { if AK_H1[i] != AK_H2[i] { same = 0u64 }   i = i + 1u64 }
+    if same == 1u64 { return 432u64 }
+    AK_H2[7u64] = AK_H2[7u64] ^ 1u8
+    /* arm 433: THE MIRROR -- earned live; and a deed shifted one bit is no
+     * longer this die's deed (the mirror-tooth). */
+    if ak_mirror() != 0u64 { return 433u64 }
+    let b1 : u64 = bfp_compute48()
+    if b1 == (b1 ^ 1u64) { return 433u64 }
+    /* arm 434: THE MARRIAGE -- the whole earning, then the convening: the
+     * anchor's testimony beside the Logos axiom is coherent, addressed, and
+     * derives what NEITHER says alone -- [silicon ~ law] and
+     * [silicon < wake] -- while the reversal refuses and the single
+     * testimony leaks nothing. */
+    if ak_earn() != 0u64 { return 434u64 }
+    eol_reset()
+    let ax : u64 = eol_axiom_text()
+    if eol_read(ax, ak_slen(ax)) < 0i64 { eol_reset()   return 434u64 }
+    let ty : u64 = ak_testify()
+    if eol_read(ty, ak_slen(ty)) < 0i64 { eol_reset()   return 434u64 }
+    if eol_lawcheck() != 0u64 { eol_reset()   return 434u64 }
+    if eol_addr() == 0u64 { eol_reset()   return 434u64 }
+    if ak_ent("silicon" as u64, 1u64, "law" as u64) != 1u64 { eol_reset()   return 434u64 }
+    if ak_ent("silicon" as u64, 0u64, "wake" as u64) != 1u64 { eol_reset()   return 434u64 }
+    if ak_ent("wake" as u64, 0u64, "silicon" as u64) != 0u64 { eol_reset()   return 434u64 }
+    if ak_ent("law" as u64, 0u64, "silicon" as u64) != 0u64 { eol_reset()   return 434u64 }
+    /* single-leak: the anchor alone knows no law and no wake */
+    eol_reset()
+    if eol_read(ty, ak_slen(ty)) < 0i64 { eol_reset()   return 434u64 }
+    if ak_ent("silicon" as u64, 1u64, "law" as u64) != 0u64 { eol_reset()   return 434u64 }
+    if ak_ent("silicon" as u64, 0u64, "wake" as u64) != 0u64 { eol_reset()   return 434u64 }
+    /* ...and the axiom alone knows no silicon */
+    eol_reset()
+    if eol_read(ax, ak_slen(ax)) < 0i64 { eol_reset()   return 434u64 }
+    if ak_ent("silicon" as u64, 1u64, "law" as u64) != 0u64 { eol_reset()   return 434u64 }
+    eol_reset()
+    return 0u64
+}

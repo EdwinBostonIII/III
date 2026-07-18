@@ -51,6 +51,22 @@ extern @abi(c-msvc-x64) fn mb_pb_set_ex(i: u64, s: i64, l0: u64, l1: u64, l2: u6
 extern @abi(c-msvc-x64) fn mb_pb_mark(nl: u64, nh: u64, nx: u64) -> u64 from "metabole.iii"
 extern @abi(c-msvc-x64) fn mb_gz_eps_m() -> i64 from "metabole.iii"
 extern @abi(c-msvc-x64) fn mb_gz_eps_e() -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_ld_normw(slot: u64, n: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_nw_m(i: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_nw_e(i: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_g_ne(slot: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_g_ne0(slot: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_g_present(slot: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_moe_present() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_moe_router_row(e: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_rw_m(i: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_rw_e(i: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_me_ne(role: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_me_ne0(role: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_moe_scale_bits() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_moe_used() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_pb_run_exp(role: u64, expert: u64, n: u64, rows: u64, bank: u64, passes: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_pb_run_shexp(role: u64, n: u64, rows: u64, bank: u64, passes: u64) -> u64 from "metabole.iii"
 
 extern @abi(c-msvc-x64) fn pr_x_chok() -> u64 from "peras.iii"
 extern @abi(c-msvc-x64) fn pr_x_dfm() -> u64 from "peras.iii"
@@ -1390,6 +1406,1015 @@ fn pb_arm385() -> u64 {
     return 0u64
 }
 
+/* ============ arms 388-389: THE ANABASIS (the multi-layer walk) ============
+ * Layer 0 proved that a transformer block is an organ: X -> X''.  The dense
+ * layers 1 and 2 are its twins -- the SAME law on new weights, with the
+ * previous layer's homecoming X'' as the new input.  The forward is built
+ * ENTIRELY from the standing machinery: interval matvecs (run_par against
+ * a deposited interval thought), general interval RMSNorm, and the reused
+ * SiLU hull.  A single token makes the softmax DEGENERATE-EXACT (one
+ * position -> attention weight is the exact rational 1, and RoPE at
+ * position 0 is the identity), so the attention output is o_proj(V), with
+ * V the interval value read through kv_a -> kv_norm -> kv_b.  The interval
+ * widths GROW with depth (each matvec re-normalizes an 8-limb sum to a
+ * one-limb bound); the walk REPORTS that growth -- the straddle census and
+ * the shadow per layer -- rather than pretending the machine sees through
+ * three layers with no loss.  What the sign survives, it swears. */
+
+/* the standing activation (a one-limb df interval, widest = 18432) and a
+ * 7168-wide save for the two residual homecomings */
+var PB_WKLS : [i64; 18432]
+var PB_WKLM : [u64; 18432]
+var PB_WKLE : [i64; 18432]
+var PB_WKHS : [i64; 18432]
+var PB_WKHM : [u64; 18432]
+var PB_WKHE : [i64; 18432]
+var PB_WKN : u64 = 0u64
+var PB_SVLS : [i64; 7168]
+var PB_SVLM : [u64; 7168]
+var PB_SVLE : [i64; 7168]
+var PB_SVHS : [i64; 7168]
+var PB_SVHM : [u64; 7168]
+var PB_SVHE : [i64; 7168]
+var PB_WALK_OK : u64 = 0u64
+var PB_WSTRAD : u64 = 0u64
+var PB_WWMAX : i64 = 0i64
+
+/* load layer 0's homecoming X'' (the pepsis output) into the activation */
+fn pb_wk_from_x2() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 7168u64 {
+        PB_WKLS[i] = PB_2LS[i]
+        PB_WKLM[i] = PB_2LM[i]
+        PB_WKLE[i] = PB_2LE[i]
+        PB_WKHS[i] = PB_2HS[i]
+        PB_WKHM[i] = PB_2HM[i]
+        PB_WKHE[i] = PB_2HE[i]
+        i = i + 1u64
+    }
+    PB_WKN = 7168u64
+    return 0u64
+}
+
+/* deposit the activation [0..n) as the standing thought (lo, hi, mid) */
+fn pb_deposit(n: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < n {
+        mb_pb_set_lo(i, PB_WKLS[i], PB_WKLM[i], 0u64, 0u64, 0u64, PB_WKLE[i])
+        mb_pb_set_hi(i, PB_WKHS[i], PB_WKHM[i], 0u64, 0u64, 0u64, PB_WKHE[i])
+        pb_sadd(PB_WKLS[i], PB_WKLM[i], PB_WKLE[i], PB_WKHS[i], PB_WKHM[i], PB_WKHE[i], 0u64)
+        let ms : i64 = PB_SDS
+        let mm : u64 = PB_SDM
+        let mut me : i64 = PB_SDE
+        if ms != 0i64 { me = me - 1i64 }
+        mb_pb_set_ex(i, ms, mm, 0u64, 0u64, 0u64, me)
+        i = i + 1u64
+    }
+    mb_pb_mark(n, n, n)
+    return 0u64
+}
+
+/* normalize a bank's [0..rows) interval output into the activation */
+fn pb_bank_to_wk(bank: u64, rows: u64) -> u64 {
+    let mut r : u64 = 0u64
+    while r < rows {
+        pb_odf(bank, r, 0u64, 0u64)
+        PB_WKLS[r] = PB_ODS
+        PB_WKLM[r] = PB_ODM
+        PB_WKLE[r] = PB_ODE
+        pb_odf(bank, r, 1u64, 1u64)
+        PB_WKHS[r] = PB_ODS
+        PB_WKHM[r] = PB_ODM
+        PB_WKHE[r] = PB_ODE
+        r = r + 1u64
+    }
+    PB_WKN = rows
+    return 0u64
+}
+
+/* extract the 16384-wide V from bank 4 (kv_b, [k128|v128] per head) */
+fn pb_extract_v() -> u64 {
+    let mut h : u64 = 0u64
+    while h < 128u64 {
+        let mut d : u64 = 0u64
+        while d < 128u64 {
+            let row : u64 = h * 256u64 + 128u64 + d
+            let vi : u64 = h * 128u64 + d
+            pb_odf(4u64, row, 0u64, 0u64)
+            PB_WKLS[vi] = PB_ODS
+            PB_WKLM[vi] = PB_ODM
+            PB_WKLE[vi] = PB_ODE
+            pb_odf(4u64, row, 1u64, 1u64)
+            PB_WKHS[vi] = PB_ODS
+            PB_WKHM[vi] = PB_ODM
+            PB_WKHE[vi] = PB_ODE
+            d = d + 1u64
+        }
+        h = h + 1u64
+    }
+    PB_WKN = 16384u64
+    return 0u64
+}
+
+fn pb_save_wk(n: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < n {
+        PB_SVLS[i] = PB_WKLS[i]
+        PB_SVLM[i] = PB_WKLM[i]
+        PB_SVLE[i] = PB_WKLE[i]
+        PB_SVHS[i] = PB_WKHS[i]
+        PB_SVHM[i] = PB_WKHM[i]
+        PB_SVHE[i] = PB_WKHE[i]
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+/* the residual homecoming: activation += the saved interval (dir per side) */
+fn pb_wk_add_saved(n: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < n {
+        pb_sadd(PB_WKLS[i], PB_WKLM[i], PB_WKLE[i], PB_SVLS[i], PB_SVLM[i], PB_SVLE[i], 0u64)
+        let nls : i64 = PB_SDS
+        let nlm : u64 = PB_SDM
+        let nle : i64 = PB_SDE
+        pb_sadd(PB_WKHS[i], PB_WKHM[i], PB_WKHE[i], PB_SVHS[i], PB_SVHM[i], PB_SVHE[i], 1u64)
+        PB_WKHS[i] = PB_SDS
+        PB_WKHM[i] = PB_SDM
+        PB_WKHE[i] = PB_SDE
+        PB_WKLS[i] = nls
+        PB_WKLM[i] = nlm
+        PB_WKLE[i] = nle
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+/* the square bound of activation dim i (mirror of pb_sqb over PB_WK) */
+fn pb_sqb_wk(i: u64, hi: u64) -> i32 {
+    let ls : i64 = PB_WKLS[i]
+    let hs : i64 = PB_WKHS[i]
+    let mut same : u64 = 0u64
+    if ls > 0i64 {
+        if hs > 0i64 { same = 1u64 }
+    }
+    if ls < 0i64 {
+        if hs < 0i64 { same = 1u64 }
+    }
+    let mut cm : i64 = 0i64
+    if ls == 0i64 {
+        if hs != 0i64 { cm = 0i64 - 1i64 }
+    }
+    if ls != 0i64 {
+        if hs == 0i64 { cm = 1i64 }
+        if hs != 0i64 { cm = pr_x_dfcmp(PB_WKLM[i], PB_WKLE[i], PB_WKHM[i], PB_WKHE[i]) }
+    }
+    if hi == 1u64 {
+        if ls == 0i64 {
+            if hs == 0i64 {
+                PB_SDS = 0i64
+                PB_SDM = 0u64
+                PB_SDE = 0i64
+                return 0i32
+            }
+        }
+        let mut mm : u64 = PB_WKHM[i]
+        let mut me : i64 = PB_WKHE[i]
+        if cm > 0i64 {
+            mm = PB_WKLM[i]
+            me = PB_WKLE[i]
+        }
+        pr_x_dfmul(mm, me, mm, me, 1u64)
+        PB_SDS = 1i64
+        PB_SDM = pr_x_dfm()
+        PB_SDE = pr_x_dfe()
+        return 0i32
+    }
+    if same == 0u64 {
+        PB_SDS = 0i64
+        PB_SDM = 0u64
+        PB_SDE = 0i64
+        return 0i32
+    }
+    let mut nm : u64 = PB_WKLM[i]
+    let mut ne : i64 = PB_WKLE[i]
+    if cm > 0i64 {
+        nm = PB_WKHM[i]
+        ne = PB_WKHE[i]
+    }
+    pr_x_dfmul(nm, ne, nm, ne, 0u64)
+    PB_SDS = 1i64
+    PB_SDM = pr_x_dfm()
+    PB_SDE = pr_x_dfe()
+    return 0i32
+}
+
+fn pb_sqfold_wk(n: u64, rev: u64) -> i32 {
+    let mut slm : u64 = 0u64
+    let mut sle : i64 = 0i64
+    let mut shm : u64 = 0u64
+    let mut she : i64 = 0i64
+    let mut t : u64 = 0u64
+    while t < n {
+        let mut i : u64 = t
+        if rev == 1u64 { i = n - 1u64 - t }
+        pb_sqb_wk(i, 0u64)
+        if PB_SDS != 0i64 {
+            pr_x_dfadd(slm, sle, PB_SDM, PB_SDE, 0u64)
+            slm = pr_x_dfm()
+            sle = pr_x_dfe()
+        }
+        pb_sqb_wk(i, 1u64)
+        if PB_SDS != 0i64 {
+            pr_x_dfadd(shm, she, PB_SDM, PB_SDE, 1u64)
+            shm = pr_x_dfm()
+            she = pr_x_dfe()
+        }
+        t = t + 1u64
+    }
+    if rev == 0u64 {
+        PB_QFLM = slm
+        PB_QFLE = sle
+        PB_QFHM = shm
+        PB_QFHE = she
+    }
+    if rev == 1u64 {
+        PB_QRLM = slm
+        PB_QRLE = sle
+        PB_QRHM = shm
+        PB_QRHE = she
+    }
+    return 0i32
+}
+
+/* mean/eps/sqrt/recip for a width-n rms (general form of pb_rms's finish) */
+fn pb_rms_finish(n: u64) -> u64 {
+    if PB_QFHM == 0u64 { return 1u64 }
+    pr_x_dfn2(0u64, n, 0i64, 0u64)
+    let sm : u64 = pr_x_dfm()
+    let se : i64 = pr_x_dfe()
+    pr_x_dfrecip(sm, se, 0u64)
+    let rdm : u64 = pr_x_dfm()
+    let rde : i64 = pr_x_dfe()
+    pr_x_dfrecip(sm, se, 1u64)
+    let rum : u64 = pr_x_dfm()
+    let rue : i64 = pr_x_dfe()
+    pr_x_dfmul(PB_QFLM, PB_QFLE, rdm, rde, 0u64)
+    let mut mlm : u64 = pr_x_dfm()
+    let mut mle : i64 = pr_x_dfe()
+    pr_x_dfmul(PB_QFHM, PB_QFHE, rum, rue, 1u64)
+    let mut mhm : u64 = pr_x_dfm()
+    let mut mhe : i64 = pr_x_dfe()
+    let em : i64 = mb_gz_eps_m()
+    if em > 0i64 {
+        let ee : i64 = mb_gz_eps_e()
+        pr_x_dfn2(0u64, em as u64, ee, 0u64)
+        let epm : u64 = pr_x_dfm()
+        let epe : i64 = pr_x_dfe()
+        pr_x_dfadd(mlm, mle, epm, epe, 0u64)
+        mlm = pr_x_dfm()
+        mle = pr_x_dfe()
+        pr_x_dfadd(mhm, mhe, epm, epe, 1u64)
+        mhm = pr_x_dfm()
+        mhe = pr_x_dfe()
+    }
+    if mlm == 0u64 { return 1u64 }
+    pr_x_dfsqrt(mlm, mle, 0u64)
+    PB_R4LM = pr_x_dfm()
+    PB_R4LE = pr_x_dfe()
+    pr_x_dfsqrt(mhm, mhe, 1u64)
+    PB_R4HM = pr_x_dfm()
+    PB_R4HE = pr_x_dfe()
+    pr_x_dfrecip(PB_R4HM, PB_R4HE, 0u64)
+    PB_I4LM = pr_x_dfm()
+    PB_I4LE = pr_x_dfe()
+    pr_x_dfrecip(PB_R4LM, PB_R4LE, 1u64)
+    PB_I4HM = pr_x_dfm()
+    PB_I4HE = pr_x_dfe()
+    return 0u64
+}
+
+/* x-hat_i = activation_i * normweight_i * (1/rms), in place (mirror of
+ * pb_xhat_one with a general norm weight source) */
+fn pb_xhat_wk_one(i: u64) -> u64 {
+    let gm : i64 = mb_nw_m(i)
+    let ge : i64 = mb_nw_e(i)
+    let mut dead : u64 = 0u64
+    if gm == 0i64 { dead = 1u64 }
+    if PB_WKLS[i] == 0i64 {
+        if PB_WKHS[i] == 0i64 { dead = 1u64 }
+    }
+    if dead == 1u64 {
+        PB_WKLS[i] = 0i64
+        PB_WKLM[i] = 0u64
+        PB_WKLE[i] = 0i64
+        PB_WKHS[i] = 0i64
+        PB_WKHM[i] = 0u64
+        PB_WKHE[i] = 0i64
+        return 0u64
+    }
+    let mut gs : i64 = 1i64
+    let mut gmm : u64 = gm as u64
+    if gm < 0i64 {
+        gs = 0i64 - 1i64
+        gmm = (0i64 - gm) as u64
+    }
+    pr_x_dfn2(0u64, gmm, ge, 0u64)
+    let gdm : u64 = pr_x_dfm()
+    let gde : i64 = pr_x_dfe()
+    let mut a : u64 = 0u64
+    if gs < 0i64 { a = 1u64 }
+    let mut es : i64 = PB_WKLS[i]
+    let mut em2 : u64 = PB_WKLM[i]
+    let mut ee2 : i64 = PB_WKLE[i]
+    if a == 1u64 {
+        es = PB_WKHS[i]
+        em2 = PB_WKHM[i]
+        ee2 = PB_WKHE[i]
+    }
+    pb_smul(es, em2, ee2, gs, gdm, gde, 0u64)
+    let t1ls : i64 = PB_SDS
+    let t1lm : u64 = PB_SDM
+    let t1le : i64 = PB_SDE
+    es = PB_WKHS[i]
+    em2 = PB_WKHM[i]
+    ee2 = PB_WKHE[i]
+    if a == 1u64 {
+        es = PB_WKLS[i]
+        em2 = PB_WKLM[i]
+        ee2 = PB_WKLE[i]
+    }
+    pb_smul(es, em2, ee2, gs, gdm, gde, 1u64)
+    let t1hs : i64 = PB_SDS
+    let t1hm : u64 = PB_SDM
+    let t1he : i64 = PB_SDE
+    let mut i4m : u64 = PB_I4LM
+    let mut i4e : i64 = PB_I4LE
+    if t1ls < 0i64 {
+        i4m = PB_I4HM
+        i4e = PB_I4HE
+    }
+    pb_smul(t1ls, t1lm, t1le, 1i64, i4m, i4e, 0u64)
+    PB_WKLS[i] = PB_SDS
+    PB_WKLM[i] = PB_SDM
+    PB_WKLE[i] = PB_SDE
+    i4m = PB_I4HM
+    i4e = PB_I4HE
+    if t1hs < 0i64 {
+        i4m = PB_I4LM
+        i4e = PB_I4LE
+    }
+    pb_smul(t1hs, t1hm, t1he, 1i64, i4m, i4e, 1u64)
+    PB_WKHS[i] = PB_SDS
+    PB_WKHM[i] = PB_SDM
+    PB_WKHE[i] = PB_SDE
+    return 0u64
+}
+
+/* general interval RMSNorm over the activation [0..n) times normweight slot */
+fn pb_rms_wk(n: u64, normslot: u64) -> u64 {
+    if mb_ld_normw(normslot, n) != 0u64 { return 1u64 }
+    pb_sqfold_wk(n, 0u64)
+    pb_sqfold_wk(n, 1u64)
+    if pr_x_dfcmp(PB_QFLM, PB_QFLE, PB_QRHM, PB_QRHE) > 0i64 { return 1u64 }
+    if pr_x_dfcmp(PB_QRLM, PB_QRLE, PB_QFHM, PB_QFHE) > 0i64 { return 1u64 }
+    if pb_rms_finish(n) != 0u64 { return 1u64 }
+    let mut i : u64 = 0u64
+    while i < n {
+        if pb_xhat_wk_one(i) != 0u64 { return 1u64 }
+        i = i + 1u64
+    }
+    PB_WKN = n
+    return 0u64
+}
+
+/* the attention half of a block: activation (X) -> activation (X'),
+ * single token so softmax=1 exact and rope@0=identity.  2 = geometry. */
+fn pb_layer_attn(lay: u64) -> u64 {
+    let b : u64 = lay * 12u64
+    let mut role : u64 = 0u64
+    while role < 8u64 {
+        if mb_g_present(b + role) != 1u64 { return 2u64 }
+        role = role + 1u64
+    }
+    if mb_g_ne0(b + 4u64) != 7168u64 { return 2u64 }
+    if mb_g_ne(b + 4u64) / 7168u64 != 576u64 { return 2u64 }
+    if mb_g_ne0(b + 6u64) != 512u64 { return 2u64 }
+    if mb_g_ne(b + 6u64) / 512u64 != 32768u64 { return 2u64 }
+    if mb_g_ne0(b + 7u64) != 16384u64 { return 2u64 }
+    pb_save_wk(7168u64)
+    if pb_rms_wk(7168u64, b + 0u64) != 0u64 { return 388u64 }
+    pb_deposit(7168u64)
+    if mb_pb_run_par(b + 4u64, 7168u64, 576u64, 3u64, 3u64) != 0u64 { return 388u64 }
+    pb_bank_to_wk(3u64, 576u64)
+    PB_WKN = 512u64
+    if pb_rms_wk(512u64, b + 5u64) != 0u64 { return 388u64 }
+    pb_deposit(512u64)
+    if mb_pb_run_par(b + 6u64, 512u64, 32768u64, 4u64, 3u64) != 0u64 { return 388u64 }
+    pb_extract_v()
+    pb_deposit(16384u64)
+    if mb_pb_run_par(b + 7u64, 16384u64, 7168u64, 0u64, 3u64) != 0u64 { return 388u64 }
+    pb_bank_to_wk(0u64, 7168u64)
+    pb_wk_add_saved(7168u64)
+    PB_WKN = 7168u64
+    return 0u64
+}
+
+/* the dense feed-forward half: activation (X') -> activation (X'') */
+fn pb_ffn_dense(lay: u64) -> u64 {
+    let b : u64 = lay * 12u64
+    let mut role : u64 = 8u64
+    while role < 12u64 {
+        if mb_g_present(b + role) != 1u64 { return 2u64 }
+        role = role + 1u64
+    }
+    if mb_g_ne0(b + 9u64) != 7168u64 { return 2u64 }
+    if mb_g_ne(b + 9u64) / 7168u64 != 18432u64 { return 2u64 }
+    if mb_g_ne0(b + 11u64) != 18432u64 { return 2u64 }
+    pb_save_wk(7168u64)
+    if pb_rms_wk(7168u64, b + 8u64) != 0u64 { return 388u64 }
+    pb_deposit(7168u64)
+    if mb_pb_run_par(b + 9u64, 7168u64, 18432u64, 1u64, 3u64) != 0u64 { return 388u64 }
+    if mb_pb_run_par(b + 10u64, 7168u64, 18432u64, 2u64, 3u64) != 0u64 { return 388u64 }
+    let mut j : u64 = 0u64
+    while j < 18432u64 {
+        if pb_sigh_one(j) != 0u64 { return 388u64 }
+        j = j + 1u64
+    }
+    mb_pb_mark(18432u64, 18432u64, 18432u64)
+    if mb_pb_run_par(b + 11u64, 18432u64, 7168u64, 3u64, 3u64) != 0u64 { return 388u64 }
+    pb_bank_to_wk(3u64, 7168u64)
+    pb_wk_add_saved(7168u64)
+    PB_WKN = 7168u64
+    return 0u64
+}
+
+/* one dense transformer block: activation (X) -> activation (X'') */
+fn pb_layer_dense(lay: u64) -> u64 {
+    let ra : u64 = pb_layer_attn(lay)
+    if ra != 0u64 { return ra }
+    let rf : u64 = pb_ffn_dense(lay)
+    if rf != 0u64 { return rf }
+    return 0u64
+}
+
+/* the sign-straddle + shadow census of the current activation */
+fn pb_wk_census() -> u64 {
+    PB_WSTRAD = 0u64
+    PB_WWMAX = 0i64 - 100000i64
+    let mut i : u64 = 0u64
+    while i < 7168u64 {
+        let mut str8 : u64 = 0u64
+        if PB_WKLS[i] < 0i64 {
+            if PB_WKHS[i] >= 0i64 { str8 = 1u64 }
+        }
+        if PB_WKLS[i] == 0i64 { str8 = 1u64 }
+        if PB_WKHS[i] == 0i64 { str8 = 1u64 }
+        if str8 == 1u64 { PB_WSTRAD = PB_WSTRAD + 1u64 }
+        pb_sadd(PB_WKHS[i], PB_WKHM[i], PB_WKHE[i], 0i64 - PB_WKLS[i], PB_WKLM[i], PB_WKLE[i], 1u64)
+        if PB_SDS != 0i64 {
+            let wexp : i64 = PB_SDE + 63i64
+            if wexp > PB_WWMAX { PB_WWMAX = wexp }
+        }
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+fn pb_arm388() -> u64 {
+    PB_WALK_OK = 0u64
+    if PB_THREP_OK != 1u64 {
+        pb_rs("the anabasis: fasting (no layer 0) -- the stair stands" as u64)
+        pb_rb(10u8)
+        return 0u64
+    }
+    /* the dense twins must be on the table (layers 1 and 2, slots 12+, 24+) */
+    if mb_g_present(12u64) != 1u64 {
+        pb_rs("the anabasis: layers 1-2 absent from the feast (named, lawful)" as u64)
+        pb_rb(10u8)
+        return 0u64
+    }
+    pb_wk_from_x2()
+    let d1 : u64 = pb_layer_dense(1u64)
+    if d1 == 2u64 {
+        pb_rs("the anabasis: layer 1 geometry foreign (named, lawful)" as u64)
+        pb_rb(10u8)
+        return 0u64
+    }
+    if d1 != 0u64 { return d1 }
+    pb_wk_census()
+    pb_rs("the anabasis: layer 1 DENSE (single-token: softmax=1 exact, rope@0=identity) X'' recomputed sign-straddle=" as u64)
+    pb_ru(PB_WSTRAD)
+    pb_rs("/7168 shadow(max-width-exp2)=" as u64)
+    pb_ri(PB_WWMAX)
+    pb_rb(10u8)
+    let d2 : u64 = pb_layer_dense(2u64)
+    if d2 == 2u64 {
+        pb_rs("the anabasis: layer 2 geometry foreign (named, lawful)" as u64)
+        pb_rb(10u8)
+        return 0u64
+    }
+    if d2 != 0u64 { return d2 }
+    pb_wk_census()
+    PB_WALK_OK = 1u64
+    pb_rs("the anabasis: layer 2 DENSE X'' recomputed sign-straddle=" as u64)
+    pb_ru(PB_WSTRAD)
+    pb_rs("/7168 shadow(max-width-exp2)=" as u64)
+    pb_ri(PB_WWMAX)
+    pb_rs(" -- three real layers of R1 composed in certified intervals; what the sign survives, it swears" as u64)
+    pb_rb(10u8)
+    return 0u64
+}
+
+/* ============ arm 389: THE SYNODOS (the mixture of experts) ============
+ * Layer 3 opens the MoE: the feed-forward is no longer one road but 256,
+ * of which a router elects 8 per token, plus a shared expert always on.
+ * The router is a matvec of the exact f32 gating weights against the
+ * INTERVAL hidden state -- so the election itself is interval-valued, and
+ * the top-8 set may or may not be DECIDABLE (if two experts' logit
+ * intervals straddle, the machine refuses to pretend it knows the order).
+ * The census reports the decidability honestly.  Each elected expert's
+ * SwiGLU is woven by the same four weavers through the 3D expert tensor
+ * (a per-expert row offset -- the law of arm 372 unchanged), gated by the
+ * certified sigmoid weight (normalized, scaled by the ledger's 2.5), and
+ * the shared expert added; the residual X'' = X' + MoE(X') closes the
+ * first sparse layer of R1 in the same certified intervals. */
+var PB_RGLS : [i64; 256]
+var PB_RGLM : [u64; 256]
+var PB_RGLE : [i64; 256]
+var PB_RGHS : [i64; 256]
+var PB_RGHM : [u64; 256]
+var PB_RGHE : [i64; 256]
+var PB_HLS2 : [i64; 7168]
+var PB_HLM2 : [u64; 7168]
+var PB_HLE2 : [i64; 7168]
+var PB_HHS2 : [i64; 7168]
+var PB_HHM2 : [u64; 7168]
+var PB_HHE2 : [i64; 7168]
+var PB_MOELS : [i64; 7168]
+var PB_MOELM : [u64; 7168]
+var PB_MOELE : [i64; 7168]
+var PB_MOEHS : [i64; 7168]
+var PB_MOEHM : [u64; 7168]
+var PB_MOEHE : [i64; 7168]
+var PB_TOP8 : [u64; 8]
+var PB_TOPUSED : [u8; 256]
+var PB_SIGLS : [i64; 8]
+var PB_SIGLM : [u64; 8]
+var PB_SIGLE : [i64; 8]
+var PB_SIGHS : [i64; 8]
+var PB_SIGHM : [u64; 8]
+var PB_SIGHE : [i64; 8]
+var PB_MOE_DECIDED : u64 = 0u64
+var PB_MOE_CERTAIN : u64 = 0u64
+var PB_MOE_OK : u64 = 0u64
+var PB_MOE_CONT : u64 = 0u64
+/* the general interval-product hull channel */
+var PB_HULLS : i64 = 0i64
+var PB_HULLM : u64 = 0u64
+var PB_HULLE : i64 = 0i64
+var PB_HUHS : i64 = 0i64
+var PB_HUHM : u64 = 0u64
+var PB_HUHE : i64 = 0i64
+
+/* the 4-corner hull of two signed df intervals -> PB_HULL* / PB_HUH* */
+fn pb_hull(als: i64, alm: u64, ale: i64, ahs: i64, ahm: u64, ahe: i64, bls: i64, blm: u64, ble: i64, bhs: i64, bhm: u64, bhe: i64) -> i32 {
+    pb_smul(als, alm, ale, bls, blm, ble, 0u64)
+    let mut ls : i64 = PB_SDS
+    let mut lm : u64 = PB_SDM
+    let mut le : i64 = PB_SDE
+    pb_smul(als, alm, ale, bhs, bhm, bhe, 0u64)
+    if pb_scmp(PB_SDS, PB_SDM, PB_SDE, ls, lm, le) < 0i64 {
+        ls = PB_SDS
+        lm = PB_SDM
+        le = PB_SDE
+    }
+    pb_smul(ahs, ahm, ahe, bls, blm, ble, 0u64)
+    if pb_scmp(PB_SDS, PB_SDM, PB_SDE, ls, lm, le) < 0i64 {
+        ls = PB_SDS
+        lm = PB_SDM
+        le = PB_SDE
+    }
+    pb_smul(ahs, ahm, ahe, bhs, bhm, bhe, 0u64)
+    if pb_scmp(PB_SDS, PB_SDM, PB_SDE, ls, lm, le) < 0i64 {
+        ls = PB_SDS
+        lm = PB_SDM
+        le = PB_SDE
+    }
+    PB_HULLS = ls
+    PB_HULLM = lm
+    PB_HULLE = le
+    pb_smul(als, alm, ale, bls, blm, ble, 1u64)
+    let mut hs : i64 = PB_SDS
+    let mut hm : u64 = PB_SDM
+    let mut he : i64 = PB_SDE
+    pb_smul(als, alm, ale, bhs, bhm, bhe, 1u64)
+    if pb_scmp(PB_SDS, PB_SDM, PB_SDE, hs, hm, he) > 0i64 {
+        hs = PB_SDS
+        hm = PB_SDM
+        he = PB_SDE
+    }
+    pb_smul(ahs, ahm, ahe, bls, blm, ble, 1u64)
+    if pb_scmp(PB_SDS, PB_SDM, PB_SDE, hs, hm, he) > 0i64 {
+        hs = PB_SDS
+        hm = PB_SDM
+        he = PB_SDE
+    }
+    pb_smul(ahs, ahm, ahe, bhs, bhm, bhe, 1u64)
+    if pb_scmp(PB_SDS, PB_SDM, PB_SDE, hs, hm, he) > 0i64 {
+        hs = PB_SDS
+        hm = PB_SDM
+        he = PB_SDE
+    }
+    PB_HUHS = hs
+    PB_HUHM = hm
+    PB_HUHE = he
+    return 0i32
+}
+
+fn pb_save_h() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 7168u64 {
+        PB_HLS2[i] = PB_WKLS[i]
+        PB_HLM2[i] = PB_WKLM[i]
+        PB_HLE2[i] = PB_WKLE[i]
+        PB_HHS2[i] = PB_WKHS[i]
+        PB_HHM2[i] = PB_WKHM[i]
+        PB_HHE2[i] = PB_WKHE[i]
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+/* deposit the saved h (7168) as the standing thought */
+fn pb_deposit_h() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 7168u64 {
+        mb_pb_set_lo(i, PB_HLS2[i], PB_HLM2[i], 0u64, 0u64, 0u64, PB_HLE2[i])
+        mb_pb_set_hi(i, PB_HHS2[i], PB_HHM2[i], 0u64, 0u64, 0u64, PB_HHE2[i])
+        pb_sadd(PB_HLS2[i], PB_HLM2[i], PB_HLE2[i], PB_HHS2[i], PB_HHM2[i], PB_HHE2[i], 0u64)
+        let ms : i64 = PB_SDS
+        let mm : u64 = PB_SDM
+        let mut me : i64 = PB_SDE
+        if ms != 0i64 { me = me - 1i64 }
+        mb_pb_set_ex(i, ms, mm, 0u64, 0u64, 0u64, me)
+        i = i + 1u64
+    }
+    mb_pb_mark(7168u64, 7168u64, 7168u64)
+    return 0u64
+}
+
+/* router logit e = f32 gating row e . h (interval), endpoint-selected */
+fn pb_router_dot(e: u64) -> u64 {
+    if mb_moe_router_row(e) != 0u64 { return 1u64 }
+    let mut ls : i64 = 0i64
+    let mut lm : u64 = 0u64
+    let mut le : i64 = 0i64
+    let mut hs : i64 = 0i64
+    let mut hm : u64 = 0u64
+    let mut he : i64 = 0i64
+    let mut i : u64 = 0u64
+    while i < 7168u64 {
+        let wm : i64 = mb_rw_m(i)
+        if wm != 0i64 {
+            let we : i64 = mb_rw_e(i)
+            let mut ws : i64 = 1i64
+            let mut wmm : u64 = wm as u64
+            if wm < 0i64 {
+                ws = 0i64 - 1i64
+                wmm = (0i64 - wm) as u64
+            }
+            pr_x_dfn2(0u64, wmm, we, 0u64)
+            let wdm : u64 = pr_x_dfm()
+            let wde : i64 = pr_x_dfe()
+            let mut a : u64 = 0u64
+            if ws < 0i64 { a = 1u64 }
+            let mut es : i64 = PB_HLS2[i]
+            let mut em : u64 = PB_HLM2[i]
+            let mut ee : i64 = PB_HLE2[i]
+            if a == 1u64 {
+                es = PB_HHS2[i]
+                em = PB_HHM2[i]
+                ee = PB_HHE2[i]
+            }
+            pb_smul(es, em, ee, ws, wdm, wde, 0u64)
+            pb_sadd(ls, lm, le, PB_SDS, PB_SDM, PB_SDE, 0u64)
+            ls = PB_SDS
+            lm = PB_SDM
+            le = PB_SDE
+            es = PB_HHS2[i]
+            em = PB_HHM2[i]
+            ee = PB_HHE2[i]
+            if a == 1u64 {
+                es = PB_HLS2[i]
+                em = PB_HLM2[i]
+                ee = PB_HLE2[i]
+            }
+            pb_smul(es, em, ee, ws, wdm, wde, 1u64)
+            pb_sadd(hs, hm, he, PB_SDS, PB_SDM, PB_SDE, 1u64)
+            hs = PB_SDS
+            hm = PB_SDM
+            he = PB_SDE
+        }
+        i = i + 1u64
+    }
+    PB_RGLS[e] = ls
+    PB_RGLM[e] = lm
+    PB_RGLE[e] = le
+    PB_RGHS[e] = hs
+    PB_RGHM[e] = hm
+    PB_RGHE[e] = he
+    return 0u64
+}
+
+/* elect the 8 highest-lo experts, then judge decidability: the set is
+ * decided iff min(selected lo) > max(unselected hi) */
+fn pb_top8() -> u64 {
+    let mut e : u64 = 0u64
+    while e < 256u64 {
+        PB_TOPUSED[e] = 0u8
+        e = e + 1u64
+    }
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        let mut best : u64 = 256u64
+        e = 0u64
+        while e < 256u64 {
+            if PB_TOPUSED[e] == 0u8 {
+                if best == 256u64 { best = e }
+                if best != e {
+                    if pb_scmp(PB_RGLS[e], PB_RGLM[e], PB_RGLE[e], PB_RGLS[best], PB_RGLM[best], PB_RGLE[best]) > 0i64 { best = e }
+                }
+            }
+            e = e + 1u64
+        }
+        PB_TOP8[k] = best
+        PB_TOPUSED[best] = 1u8
+        k = k + 1u64
+    }
+    /* min lo among selected */
+    let mut mls : i64 = PB_RGLS[PB_TOP8[0]]
+    let mut mlm : u64 = PB_RGLM[PB_TOP8[0]]
+    let mut mle : i64 = PB_RGLE[PB_TOP8[0]]
+    k = 1u64
+    while k < 8u64 {
+        let ee : u64 = PB_TOP8[k]
+        if pb_scmp(PB_RGLS[ee], PB_RGLM[ee], PB_RGLE[ee], mls, mlm, mle) < 0i64 {
+            mls = PB_RGLS[ee]
+            mlm = PB_RGLM[ee]
+            mle = PB_RGLE[ee]
+        }
+        k = k + 1u64
+    }
+    /* max hi among unselected */
+    let mut xhs : i64 = 0i64
+    let mut xhm : u64 = 0u64
+    let mut xhe : i64 = 0i64
+    let mut seen : u64 = 0u64
+    e = 0u64
+    while e < 256u64 {
+        if PB_TOPUSED[e] == 0u8 {
+            if seen == 0u64 {
+                xhs = PB_RGHS[e]
+                xhm = PB_RGHM[e]
+                xhe = PB_RGHE[e]
+                seen = 1u64
+            }
+            if seen == 1u64 {
+                if pb_scmp(PB_RGHS[e], PB_RGHM[e], PB_RGHE[e], xhs, xhm, xhe) > 0i64 {
+                    xhs = PB_RGHS[e]
+                    xhm = PB_RGHM[e]
+                    xhe = PB_RGHE[e]
+                }
+            }
+        }
+        e = e + 1u64
+    }
+    PB_MOE_DECIDED = 0u64
+    if pb_scmp(mls, mlm, mle, xhs, xhm, xhe) > 0i64 { PB_MOE_DECIDED = 1u64 }
+    /* certain-in count: selected experts whose lo exceeds max-unselected-hi */
+    PB_MOE_CERTAIN = 0u64
+    k = 0u64
+    while k < 8u64 {
+        let ee : u64 = PB_TOP8[k]
+        if pb_scmp(PB_RGLS[ee], PB_RGLM[ee], PB_RGLE[ee], xhs, xhm, xhe) > 0i64 { PB_MOE_CERTAIN = PB_MOE_CERTAIN + 1u64 }
+        k = k + 1u64
+    }
+    return 0u64
+}
+
+fn pb_moe_clear() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 7168u64 {
+        PB_MOELS[i] = 0i64
+        PB_MOELM[i] = 0u64
+        PB_MOELE[i] = 0i64
+        PB_MOEHS[i] = 0i64
+        PB_MOEHM[i] = 0u64
+        PB_MOEHE[i] = 0i64
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+/* PB_MOE += weight_interval * bank3 (the just-woven expert FFN) */
+fn pb_moe_add_weighted(wls: i64, wlm: u64, wle: i64, whs: i64, whm: u64, whe: i64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < 7168u64 {
+        pb_odf(3u64, i, 0u64, 0u64)
+        let bls : i64 = PB_ODS
+        let blm : u64 = PB_ODM
+        let ble : i64 = PB_ODE
+        pb_odf(3u64, i, 1u64, 1u64)
+        let bhs : i64 = PB_ODS
+        let bhm : u64 = PB_ODM
+        let bhe : i64 = PB_ODE
+        pb_hull(wls, wlm, wle, whs, whm, whe, bls, blm, ble, bhs, bhm, bhe)
+        pb_sadd(PB_MOELS[i], PB_MOELM[i], PB_MOELE[i], PB_HULLS, PB_HULLM, PB_HULLE, 0u64)
+        PB_MOELS[i] = PB_SDS
+        PB_MOELM[i] = PB_SDM
+        PB_MOELE[i] = PB_SDE
+        pb_sadd(PB_MOEHS[i], PB_MOEHM[i], PB_MOEHE[i], PB_HUHS, PB_HUHM, PB_HUHE, 1u64)
+        PB_MOEHS[i] = PB_SDS
+        PB_MOEHM[i] = PB_SDM
+        PB_MOEHE[i] = PB_SDE
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+/* weave a SwiGLU into bank 3: deposit h, gate->b1, up->b2, silu->deposit,
+ * down->b3.  is_shared=1 uses the 2D shared tensors (roles 3,4,5). */
+fn pb_swiglu(e: u64, is_shared: u64) -> u64 {
+    pb_deposit_h()
+    if is_shared == 1u64 {
+        if mb_pb_run_shexp(3u64, 7168u64, 2048u64, 1u64, 3u64) != 0u64 { return 1u64 }
+        if mb_pb_run_shexp(4u64, 7168u64, 2048u64, 2u64, 3u64) != 0u64 { return 1u64 }
+    }
+    if is_shared == 0u64 {
+        if mb_pb_run_exp(0u64, e, 7168u64, 2048u64, 1u64, 3u64) != 0u64 { return 1u64 }
+        if mb_pb_run_exp(1u64, e, 7168u64, 2048u64, 2u64, 3u64) != 0u64 { return 1u64 }
+    }
+    let mut j : u64 = 0u64
+    while j < 2048u64 {
+        if pb_sigh_one(j) != 0u64 { return 1u64 }
+        j = j + 1u64
+    }
+    mb_pb_mark(2048u64, 2048u64, 2048u64)
+    if is_shared == 1u64 {
+        if mb_pb_run_shexp(5u64, 2048u64, 7168u64, 3u64, 3u64) != 0u64 { return 1u64 }
+    }
+    if is_shared == 0u64 {
+        if mb_pb_run_exp(2u64, e, 2048u64, 7168u64, 3u64, 3u64) != 0u64 { return 1u64 }
+    }
+    return 0u64
+}
+
+/* the routed combine: sigmoid gate the 8, normalize, scale 2.5, weave */
+fn pb_routed_combine() -> u64 {
+    /* sigmoids + the normalizing sum (interval) */
+    let mut suml : u64 = 0u64
+    let mut sule : i64 = 0i64
+    let mut sumh : u64 = 0u64
+    let mut suhe : i64 = 0i64
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        let ee : u64 = PB_TOP8[k]
+        pb_sigma(PB_RGLS[ee], PB_RGLM[ee], PB_RGLE[ee], 0u64)
+        PB_SIGLS[k] = PB_SGS
+        PB_SIGLM[k] = PB_SGM
+        PB_SIGLE[k] = PB_SGE
+        pb_sigma(PB_RGHS[ee], PB_RGHM[ee], PB_RGHE[ee], 1u64)
+        PB_SIGHS[k] = PB_SGS
+        PB_SIGHM[k] = PB_SGM
+        PB_SIGHE[k] = PB_SGE
+        pr_x_dfadd(suml, sule, PB_SIGLM[k], PB_SIGLE[k], 0u64)
+        suml = pr_x_dfm()
+        sule = pr_x_dfe()
+        pr_x_dfadd(sumh, suhe, PB_SIGHM[k], PB_SIGHE[k], 1u64)
+        sumh = pr_x_dfm()
+        suhe = pr_x_dfe()
+        k = k + 1u64
+    }
+    if suml == 0u64 { return 1u64 }
+    pr_x_dfrecip(sumh, suhe, 0u64)
+    let rsl_m : u64 = pr_x_dfm()
+    let rsl_e : i64 = pr_x_dfe()
+    pr_x_dfrecip(suml, sule, 1u64)
+    let rsh_m : u64 = pr_x_dfm()
+    let rsh_e : i64 = pr_x_dfe()
+    /* scale = 2.5 (verified from the ledger bits) as an exact df */
+    pr_x_dfn2(0u64, 5u64, 0i64 - 1i64, 0u64)
+    let scm : u64 = pr_x_dfm()
+    let sce : i64 = pr_x_dfe()
+    k = 0u64
+    while k < 8u64 {
+        let ee : u64 = PB_TOP8[k]
+        /* weight_lo = 2.5 * sig_lo * rsum_lo ; weight_hi = 2.5 * sig_hi * rsum_hi */
+        pr_x_dfmul(scm, sce, PB_SIGLM[k], PB_SIGLE[k], 0u64)
+        pr_x_dfmul(pr_x_dfm(), pr_x_dfe(), rsl_m, rsl_e, 0u64)
+        let wlm : u64 = pr_x_dfm()
+        let wle : i64 = pr_x_dfe()
+        pr_x_dfmul(scm, sce, PB_SIGHM[k], PB_SIGHE[k], 1u64)
+        pr_x_dfmul(pr_x_dfm(), pr_x_dfe(), rsh_m, rsh_e, 1u64)
+        let whm : u64 = pr_x_dfm()
+        let whe : i64 = pr_x_dfe()
+        if pb_swiglu(ee, 0u64) != 0u64 { return 1u64 }
+        pb_moe_add_weighted(1i64, wlm, wle, 1i64, whm, whe)
+        k = k + 1u64
+    }
+    return 0u64
+}
+
+/* X'' = X' (saved) + PB_MOE */
+fn pb_wk_from_moe_plus_sv() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 7168u64 {
+        pb_sadd(PB_SVLS[i], PB_SVLM[i], PB_SVLE[i], PB_MOELS[i], PB_MOELM[i], PB_MOELE[i], 0u64)
+        PB_WKLS[i] = PB_SDS
+        PB_WKLM[i] = PB_SDM
+        PB_WKLE[i] = PB_SDE
+        pb_sadd(PB_SVHS[i], PB_SVHM[i], PB_SVHE[i], PB_MOEHS[i], PB_MOEHM[i], PB_MOEHE[i], 1u64)
+        PB_WKHS[i] = PB_SDS
+        PB_WKHM[i] = PB_SDM
+        PB_WKHE[i] = PB_SDE
+        i = i + 1u64
+    }
+    PB_WKN = 7168u64
+    return 0u64
+}
+
+fn pb_arm389() -> u64 {
+    PB_MOE_OK = 0u64
+    if PB_WALK_OK != 1u64 {
+        pb_rs("the synodos: fasting (no dense walk) -- the sparse stair stands" as u64)
+        pb_rb(10u8)
+        return 0u64
+    }
+    if mb_moe_present() != 1u64 {
+        pb_rs("the synodos: layer 3 MoE absent from the feast (named, lawful)" as u64)
+        pb_rb(10u8)
+        return 0u64
+    }
+    /* the ledger's shapes for the experts + shared FFN */
+    if mb_me_ne0(0u64) != 7168u64 { return 0u64 }
+    if mb_me_ne(0u64) / 7168u64 / 256u64 != 2048u64 { return 0u64 }
+    if mb_me_ne0(2u64) != 2048u64 { return 0u64 }
+    if mb_me_ne(2u64) / 2048u64 / 256u64 != 7168u64 { return 0u64 }
+    if mb_me_ne0(3u64) != 7168u64 { return 0u64 }
+    if mb_me_ne(3u64) / 7168u64 != 2048u64 { return 0u64 }
+    if mb_me_ne0(5u64) != 2048u64 { return 0u64 }
+    if mb_me_ne(5u64) / 2048u64 != 7168u64 { return 0u64 }
+    if mb_moe_scale_bits() != 1075838976u64 { return 0u64 }
+    if mb_moe_used() != 8u64 { return 0u64 }
+    /* PB_WK holds layer 2's X''; run layer 3 attention onto it */
+    let ra : u64 = pb_layer_attn(3u64)
+    if ra == 2u64 {
+        pb_rs("the synodos: layer 3 attention geometry foreign (named, lawful)" as u64)
+        pb_rb(10u8)
+        return 0u64
+    }
+    if ra != 0u64 { return 389u64 }
+    pb_save_wk(7168u64)
+    if pb_rms_wk(7168u64, 44u64) != 0u64 { return 389u64 }
+    pb_save_h()
+    /* the router election (interval logits over 256 experts) */
+    let mut e : u64 = 0u64
+    while e < 256u64 {
+        if pb_router_dot(e) != 0u64 { return 389u64 }
+        e = e + 1u64
+    }
+    pb_top8()
+    /* the shared expert (always on), then the elected 8 */
+    pb_moe_clear()
+    if pb_swiglu(0u64, 1u64) != 0u64 { return 389u64 }
+    let one_m : u64 = 1u64 << 63u64
+    let one_e : i64 = 0i64 - 63i64
+    pb_moe_add_weighted(1i64, one_m, one_e, 1i64, one_m, one_e)
+    PB_MOE_CONT = pb_cont(3u64, 7168u64)
+    if PB_MOE_DECIDED == 1u64 {
+        if pb_routed_combine() != 0u64 { return 389u64 }
+    }
+    pb_wk_from_moe_plus_sv()
+    pb_wk_census()
+    PB_MOE_OK = 1u64
+    pb_rs("the synodos: layer 3 MoE -- router elected top-" as u64)
+    pb_ru(mb_moe_used())
+    pb_rs(" of 256 (interval logits) decided=" as u64)
+    pb_ru(PB_MOE_DECIDED)
+    pb_rs(" certain-in=" as u64)
+    pb_ru(PB_MOE_CERTAIN)
+    pb_rs("/8 shared-expert-FFN contained=" as u64)
+    pb_ru(PB_MOE_CONT)
+    pb_rs("/7168 gate=sigmoid-normalized scale=2.5 X''=X'+MoE sign-straddle=" as u64)
+    pb_ru(PB_WSTRAD)
+    pb_rs("/7168 shadow(max-width-exp2)=" as u64)
+    pb_ri(PB_WWMAX)
+    pb_rs(" -- the sparse layer of R1 woven in certified intervals" as u64)
+    pb_rb(10u8)
+    return 0u64
+}
+
 /* ==================== the organ's spine ==================== */
 
 fn pb_selfprove() -> u64 @export {
@@ -1398,6 +2423,8 @@ fn pb_selfprove() -> u64 @export {
     PB_SCROLL2 = 0u64
     PB_NOST_OK = 0u64
     PB_THREP_OK = 0u64
+    PB_WALK_OK = 0u64
+    PB_MOE_OK = 0u64
     let r0 : u64 = pb_arm382()
     if r0 != 0u64 { return r0 }
     let r1 : u64 = pb_arm383()
@@ -1406,6 +2433,10 @@ fn pb_selfprove() -> u64 @export {
     if r2 != 0u64 { return r2 }
     let r3 : u64 = pb_arm385()
     if r3 != 0u64 { return r3 }
+    let r4 : u64 = pb_arm388()
+    if r4 != 0u64 { return r4 }
+    let r5 : u64 = pb_arm389()
+    if r5 != 0u64 { return r5 }
     return 0u64
 }
 

@@ -156,6 +156,32 @@ var MB_ARCH    : [u8; 32]
 var MB_ARCHN   : u64 = 0u64
 var MB_EMBED   : u64 = 0u64
 var MB_LAYERS  : u64 = 0u64
+/* the deepseek2 ledger: MoE, MLA and yarn config (raw bits for floats) */
+var MB_EXPCNT   : u64 = 0u64          /* expert_count */
+var MB_EXPUSED  : u64 = 0u64          /* expert_used_count */
+var MB_EXPSHARE : u64 = 0u64          /* expert_shared_count */
+var MB_EXPFFN   : u64 = 0u64          /* expert_feed_forward_length */
+var MB_EXPSCALE : u64 = 0u64          /* expert_weights_scale, f32 bits */
+var MB_EXPSCF   : u8 = 0u8
+var MB_DENSE    : u64 = 0u64          /* leading_dense_block_count */
+var MB_DENSEF   : u8 = 0u8
+var MB_KVLORA   : u64 = 0u64          /* attention.kv_lora_rank */
+var MB_QLORA    : u64 = 0u64          /* attention.q_lora_rank */
+var MB_KEYLEN   : u64 = 0u64          /* attention.key_length */
+var MB_VALLEN   : u64 = 0u64          /* attention.value_length */
+var MB_FREQBASE : u64 = 0u64          /* rope.freq_base, f32 bits */
+var MB_FREQBF   : u8 = 0u8
+var MB_ROPEFAC  : u64 = 0u64          /* rope.scaling.factor, f32 bits */
+var MB_ROPEFACF : u8 = 0u8
+var MB_ROPEORIG : u64 = 0u64          /* rope.scaling.original_context_length */
+var MB_YARNMULT : u64 = 0u64          /* rope.scaling.yarn_log_multiplier, f32 bits */
+var MB_YARNMF   : u8 = 0u8
+var MB_ROPETYP  : [u8; 16]            /* rope.scaling.type string */
+var MB_ROPETN   : u64 = 0u64
+var MB_EXPNORM  : u64 = 0u64          /* expert_weights_norm (bool) */
+var MB_EXPNORMF : u8 = 0u8
+var MB_EXPGATE  : u64 = 0u64          /* expert_gating_func */
+var MB_EXPGATEF : u8 = 0u8
 
 /* split coherence across shards */
 var MB_SPNOS  : [u64; 16]
@@ -194,14 +220,28 @@ var MB_C3_F    : u8 = 0u8
 var MB_C3_HERE : u8 = 0u8             /* found during the CURRENT shard walk */
 /* the gaze's seven organs of blk.0 attention (slot order: attn_norm, q_a,
  * q_a_norm, q_b, kv_a_mqa, kv_a_norm, kv_b) */
-var MB_G_TYPE : [u64; 12]
-var MB_G_OFF  : [u64; 12]
-var MB_G_NE   : [u64; 12]
-var MB_G_NE0  : [u64; 12]
-var MB_G_DB   : [u64; 12]
-var MB_G_SH   : [u64; 12]
-var MB_G_F    : [u8; 12]
-var MB_G_HERE : [u8; 12]
+/* the per-layer tensor census: slot = layer*12 + role, layer 0..3,
+ * role 0..11 (attn_norm, q_a, q_a_norm, q_b, kv_a_mqa, kv_a_norm, kv_b,
+ * attn_output, ffn_norm, ffn_gate, ffn_up, ffn_down).  Layer 0 keeps
+ * slots 0..11 exactly -- the proven gaze/choir/threpsis path is untouched. */
+var MB_G_TYPE : [u64; 48]
+var MB_G_OFF  : [u64; 48]
+var MB_G_NE   : [u64; 48]
+var MB_G_NE0  : [u64; 48]
+var MB_G_DB   : [u64; 48]
+var MB_G_SH   : [u64; 48]
+var MB_G_F    : [u8; 48]
+var MB_G_HERE : [u8; 48]
+/* the MoE expert census for blk.3: role 0=gate_exps 1=up_exps 2=down_exps
+ * 3=gate_shexp 4=up_shexp 5=down_shexp (3D expert tensors + shared FFN) */
+var MB_ME_TYPE : [u64; 6]
+var MB_ME_OFF  : [u64; 6]
+var MB_ME_NE   : [u64; 6]
+var MB_ME_NE0  : [u64; 6]
+var MB_ME_DB   : [u64; 6]
+var MB_ME_SH   : [u64; 6]
+var MB_ME_F    : [u8; 6]
+var MB_ME_HERE : [u8; 6]
 var MB_NHEAD  : u64 = 0u64
 var MB_NROPE  : u64 = 0u64
 var MB_EPSB   : u64 = 0u64            /* rms epsilon, raw f32 bits */
@@ -238,7 +278,7 @@ var MB_Y : [u64; 3]
 var MB_Z : [u64; 3]
 
 /* the report the driver prints, and the sealed scroll */
-var MB_REP  : [u8; 4096]
+var MB_REP  : [u8; 8192]
 var MB_REPN : u64 = 0u64
 var MB_SCROLL : u64 = 0u64
 
@@ -255,7 +295,7 @@ fn mb_slen(s: u64) -> u64 {
 }
 
 fn mb_rb(b: u8) -> i32 {
-    if MB_REPN >= 4095u64 { return 0i32 }
+    if MB_REPN >= 8191u64 { return 0i32 }
     MB_REP[MB_REPN] = b
     MB_REPN = MB_REPN + 1u64
     return 0i32
@@ -741,6 +781,18 @@ fn mb_kv_one(shard: u64) -> u64 {
     if vt == 8u64 {
         /* string */
         let slen : u64 = mb_u64()
+        if mb_keyis("deepseek2.rope.scaling.type" as u64, klen) == 1u64 {
+            let mut cap : u64 = slen
+            if cap > 15u64 { cap = 15u64 }
+            let mut rt : u64 = 0u64
+            while rt < cap {
+                MB_ROPETYP[rt] = mb_u8() as u8
+                rt = rt + 1u64
+            }
+            MB_ROPETN = cap
+            mb_skip(slen - cap)
+            return 0u64
+        }
         if mb_keyis("general.architecture" as u64, klen) == 1u64 {
             let mut cap : u64 = slen
             if cap > 31u64 { cap = 31u64 }
@@ -823,12 +875,142 @@ fn mb_kv_one(shard: u64) -> u64 {
         MB_EPSF = 1u8
         return 0u64
     }
+    if mb_keyis("deepseek2.expert_count" as u64, klen) == 1u64 {
+        MB_EXPCNT = mb_scalar_read(vt)
+        return 0u64
+    }
+    if mb_keyis("deepseek2.expert_used_count" as u64, klen) == 1u64 {
+        MB_EXPUSED = mb_scalar_read(vt)
+        return 0u64
+    }
+    if mb_keyis("deepseek2.expert_shared_count" as u64, klen) == 1u64 {
+        MB_EXPSHARE = mb_scalar_read(vt)
+        return 0u64
+    }
+    if mb_keyis("deepseek2.expert_feed_forward_length" as u64, klen) == 1u64 {
+        MB_EXPFFN = mb_scalar_read(vt)
+        return 0u64
+    }
+    if mb_keyis("deepseek2.expert_weights_scale" as u64, klen) == 1u64 {
+        MB_EXPSCALE = mb_scalar_read(vt)
+        MB_EXPSCF = 1u8
+        return 0u64
+    }
+    if mb_keyis("deepseek2.leading_dense_block_count" as u64, klen) == 1u64 {
+        MB_DENSE = mb_scalar_read(vt)
+        MB_DENSEF = 1u8
+        return 0u64
+    }
+    if mb_keyis("deepseek2.attention.kv_lora_rank" as u64, klen) == 1u64 {
+        MB_KVLORA = mb_scalar_read(vt)
+        return 0u64
+    }
+    if mb_keyis("deepseek2.attention.q_lora_rank" as u64, klen) == 1u64 {
+        MB_QLORA = mb_scalar_read(vt)
+        return 0u64
+    }
+    if mb_keyis("deepseek2.attention.key_length" as u64, klen) == 1u64 {
+        MB_KEYLEN = mb_scalar_read(vt)
+        return 0u64
+    }
+    if mb_keyis("deepseek2.attention.value_length" as u64, klen) == 1u64 {
+        MB_VALLEN = mb_scalar_read(vt)
+        return 0u64
+    }
+    if mb_keyis("deepseek2.rope.freq_base" as u64, klen) == 1u64 {
+        MB_FREQBASE = mb_scalar_read(vt)
+        MB_FREQBF = 1u8
+        return 0u64
+    }
+    if mb_keyis("deepseek2.rope.scaling.factor" as u64, klen) == 1u64 {
+        MB_ROPEFAC = mb_scalar_read(vt)
+        MB_ROPEFACF = 1u8
+        return 0u64
+    }
+    if mb_keyis("deepseek2.rope.scaling.original_context_length" as u64, klen) == 1u64 {
+        MB_ROPEORIG = mb_scalar_read(vt)
+        return 0u64
+    }
+    if mb_keyis("deepseek2.rope.scaling.yarn_log_multiplier" as u64, klen) == 1u64 {
+        MB_YARNMULT = mb_scalar_read(vt)
+        MB_YARNMF = 1u8
+        return 0u64
+    }
+    if mb_keyis("deepseek2.expert_weights_norm" as u64, klen) == 1u64 {
+        MB_EXPNORM = mb_scalar_read(vt)
+        MB_EXPNORMF = 1u8
+        return 0u64
+    }
+    if mb_keyis("deepseek2.expert_gating_func" as u64, klen) == 1u64 {
+        MB_EXPGATE = mb_scalar_read(vt)
+        MB_EXPGATEF = 1u8
+        return 0u64
+    }
     mb_skip(ssz)
     return 0u64
 }
 
 fn mb_align_up(x: u64, a: u64) -> u64 {
     return (x + a - 1u64) & (0u64 - a)
+}
+
+/* exact match of MB_KEY[off..nlen] against a NUL-terminated literal */
+fn mb_tail_is(off: u64, lit: u64, nlen: u64) -> u64 {
+    let p : *u8 = lit as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 {
+        if off + i >= nlen { return 0u64 }
+        if MB_KEY[off + i] != p[i] { return 0u64 }
+        i = i + 1u64
+    }
+    if off + i != nlen { return 0u64 }
+    return 1u64
+}
+
+/* parse "blk.<L>.<role>" into slot L*12+role for L in 0..3; 48 = no match */
+fn mb_blk_slot(nlen: u64) -> u64 {
+    if nlen < 6u64 { return 48u64 }
+    if MB_KEY[0] != 98u8 { return 48u64 }
+    if MB_KEY[1] != 108u8 { return 48u64 }
+    if MB_KEY[2] != 107u8 { return 48u64 }
+    if MB_KEY[3] != 46u8 { return 48u64 }
+    let mut i : u64 = 4u64
+    let mut lay : u64 = 0u64
+    let mut hasd : u64 = 0u64
+    let mut done : u64 = 0u64
+    while done == 0u64 {
+        if i >= nlen { done = 1u64 }
+        if done == 0u64 {
+            let c : u64 = MB_KEY[i] as u64
+            if c < 48u64 { done = 1u64 }
+            if c > 57u64 { done = 1u64 }
+            if done == 0u64 {
+                lay = lay * 10u64 + (c - 48u64)
+                hasd = 1u64
+                i = i + 1u64
+            }
+        }
+    }
+    if hasd == 0u64 { return 48u64 }
+    if lay >= 4u64 { return 48u64 }
+    if i >= nlen { return 48u64 }
+    if MB_KEY[i] != 46u8 { return 48u64 }
+    let off : u64 = i + 1u64
+    let mut role : u64 = 12u64
+    if mb_tail_is(off, "attn_norm.weight" as u64, nlen) == 1u64 { role = 0u64 }
+    if mb_tail_is(off, "attn_q_a.weight" as u64, nlen) == 1u64 { role = 1u64 }
+    if mb_tail_is(off, "attn_q_a_norm.weight" as u64, nlen) == 1u64 { role = 2u64 }
+    if mb_tail_is(off, "attn_q_b.weight" as u64, nlen) == 1u64 { role = 3u64 }
+    if mb_tail_is(off, "attn_kv_a_mqa.weight" as u64, nlen) == 1u64 { role = 4u64 }
+    if mb_tail_is(off, "attn_kv_a_norm.weight" as u64, nlen) == 1u64 { role = 5u64 }
+    if mb_tail_is(off, "attn_kv_b.weight" as u64, nlen) == 1u64 { role = 6u64 }
+    if mb_tail_is(off, "attn_output.weight" as u64, nlen) == 1u64 { role = 7u64 }
+    if mb_tail_is(off, "ffn_norm.weight" as u64, nlen) == 1u64 { role = 8u64 }
+    if mb_tail_is(off, "ffn_gate.weight" as u64, nlen) == 1u64 { role = 9u64 }
+    if mb_tail_is(off, "ffn_up.weight" as u64, nlen) == 1u64 { role = 10u64 }
+    if mb_tail_is(off, "ffn_down.weight" as u64, nlen) == 1u64 { role = 11u64 }
+    if role == 12u64 { return 48u64 }
+    return lay * 12u64 + role
 }
 
 /* walk one tensor info; index t < MB_MAXT.  returns 0 ok, 1 refuse */
@@ -893,21 +1075,9 @@ fn mb_tensor_one(shard: u64, t: u64) -> u64 {
             }
         }
     }
-    /* the gaze's captures: blk.0 attention + the dense FFN, exact names */
-    let mut gsl : u64 = 12u64
-    if mb_keyis("blk.0.attn_norm.weight" as u64, nlen) == 1u64 { gsl = 0u64 }
-    if mb_keyis("blk.0.attn_q_a.weight" as u64, nlen) == 1u64 { gsl = 1u64 }
-    if mb_keyis("blk.0.attn_q_a_norm.weight" as u64, nlen) == 1u64 { gsl = 2u64 }
-    if mb_keyis("blk.0.attn_q_b.weight" as u64, nlen) == 1u64 { gsl = 3u64 }
-    if mb_keyis("blk.0.attn_kv_a_mqa.weight" as u64, nlen) == 1u64 { gsl = 4u64 }
-    if mb_keyis("blk.0.attn_kv_a_norm.weight" as u64, nlen) == 1u64 { gsl = 5u64 }
-    if mb_keyis("blk.0.attn_kv_b.weight" as u64, nlen) == 1u64 { gsl = 6u64 }
-    if mb_keyis("blk.0.attn_output.weight" as u64, nlen) == 1u64 { gsl = 7u64 }
-    if mb_keyis("blk.0.ffn_norm.weight" as u64, nlen) == 1u64 { gsl = 8u64 }
-    if mb_keyis("blk.0.ffn_gate.weight" as u64, nlen) == 1u64 { gsl = 9u64 }
-    if mb_keyis("blk.0.ffn_up.weight" as u64, nlen) == 1u64 { gsl = 10u64 }
-    if mb_keyis("blk.0.ffn_down.weight" as u64, nlen) == 1u64 { gsl = 11u64 }
-    if gsl < 12u64 {
+    /* the per-layer capture: blk.<L>.<role> for L in 0..3 -> slot L*12+role */
+    let gsl : u64 = mb_blk_slot(nlen)
+    if gsl < 48u64 {
         if MB_G_F[gsl] == 0u8 {
             MB_G_TYPE[gsl] = ty
             MB_G_OFF[gsl] = off
@@ -916,6 +1086,25 @@ fn mb_tensor_one(shard: u64, t: u64) -> u64 {
             MB_G_SH[gsl] = shard
             MB_G_F[gsl] = 1u8
             MB_G_HERE[gsl] = 1u8
+        }
+    }
+    /* the MoE expert capture for blk.3 (3D expert tensors + shared FFN) */
+    let mut mesl : u64 = 6u64
+    if mb_keyis("blk.3.ffn_gate_exps.weight" as u64, nlen) == 1u64 { mesl = 0u64 }
+    if mb_keyis("blk.3.ffn_up_exps.weight" as u64, nlen) == 1u64 { mesl = 1u64 }
+    if mb_keyis("blk.3.ffn_down_exps.weight" as u64, nlen) == 1u64 { mesl = 2u64 }
+    if mb_keyis("blk.3.ffn_gate_shexp.weight" as u64, nlen) == 1u64 { mesl = 3u64 }
+    if mb_keyis("blk.3.ffn_up_shexp.weight" as u64, nlen) == 1u64 { mesl = 4u64 }
+    if mb_keyis("blk.3.ffn_down_shexp.weight" as u64, nlen) == 1u64 { mesl = 5u64 }
+    if mesl < 6u64 {
+        if MB_ME_F[mesl] == 0u8 {
+            MB_ME_TYPE[mesl] = ty
+            MB_ME_OFF[mesl] = off
+            MB_ME_NE[mesl] = ne
+            MB_ME_NE0[mesl] = ne0
+            MB_ME_SH[mesl] = shard
+            MB_ME_F[mesl] = 1u8
+            MB_ME_HERE[mesl] = 1u8
         }
     }
     let bv : u64 = mb_tbv(ty)
@@ -1039,12 +1228,20 @@ fn mb_shard(i: u64) -> u64 {
         MB_C3_HERE = 0u8
     }
     let mut gdb : u64 = 0u64
-    while gdb < 12u64 {
+    while gdb < 48u64 {
         if MB_G_HERE[gdb] == 1u8 {
             MB_G_DB[gdb] = data_base
             MB_G_HERE[gdb] = 0u8
         }
         gdb = gdb + 1u64
+    }
+    let mut edb : u64 = 0u64
+    while edb < 6u64 {
+        if MB_ME_HERE[edb] == 1u8 {
+            MB_ME_DB[edb] = data_base
+            MB_ME_HERE[edb] = 0u8
+        }
+        edb = edb + 1u64
     }
     if i == 1u64 {
         MB_DBASE1 = data_base
@@ -1214,6 +1411,45 @@ fn mb_arm362() -> u64 {
         mb_ru(MB_LAYERS)
         mb_rs(" align=" as u64)
         mb_ru(MB_ALIGN)
+        mb_rb(10u8)
+        mb_rs("the ledger: dense=" as u64)
+        mb_ru(MB_DENSE)
+        mb_rs(" experts=" as u64)
+        mb_ru(MB_EXPCNT)
+        mb_rs(" used=" as u64)
+        mb_ru(MB_EXPUSED)
+        mb_rs(" shared=" as u64)
+        mb_ru(MB_EXPSHARE)
+        mb_rs(" expffn=" as u64)
+        mb_ru(MB_EXPFFN)
+        mb_rs(" kvlora=" as u64)
+        mb_ru(MB_KVLORA)
+        mb_rs(" qlora=" as u64)
+        mb_ru(MB_QLORA)
+        mb_rs(" keylen=" as u64)
+        mb_ru(MB_KEYLEN)
+        mb_rs(" vallen=" as u64)
+        mb_ru(MB_VALLEN)
+        mb_rs(" rope=" as u64)
+        let mut rti : u64 = 0u64
+        while rti < MB_ROPETN {
+            mb_rb(MB_ROPETYP[rti])
+            rti = rti + 1u64
+        }
+        mb_rs(" orig=" as u64)
+        mb_ru(MB_ROPEORIG)
+        mb_rs(" freqbase=" as u64)
+        mb_ru(MB_FREQBASE)
+        mb_rs(" ropefac=" as u64)
+        mb_ru(MB_ROPEFAC)
+        mb_rs(" expscale=" as u64)
+        mb_ru(MB_EXPSCALE)
+        mb_rs(" yarnmult=" as u64)
+        mb_ru(MB_YARNMULT)
+        mb_rs(" gate=" as u64)
+        mb_ru(MB_EXPGATE)
+        mb_rs(" wnorm=" as u64)
+        mb_ru(MB_EXPNORM)
         mb_rb(10u8)
     }
     return 0u64
@@ -4420,12 +4656,141 @@ fn mb_gz_loadf32(g: u64, which: u64, n: u64) -> u64 {
             MB_FNM[c] = m
             MB_FNE[c] = MB_F32E
         }
+        if which == 4u64 {
+            MB_NW_M[c] = m
+            MB_NW_E[c] = MB_F32E
+        }
         c = c + 1u64
     }
     let mut rr : u64 = 0u64
     if MB_IOERR != 0u8 { rr = 1u64 }
     fclose(f)
     return rr
+}
+
+/* the general per-layer norm-weight loader: any f32 norm tensor (slot)
+ * of width n into the standing MB_NW, served exact-dyadic to probole */
+var MB_NW_M : [i64; 7168]
+var MB_NW_E : [i64; 7168]
+fn mb_ld_normw(slot: u64, n: u64) -> u64 @export {
+    if slot >= 48u64 { return 1u64 }
+    if MB_G_F[slot] == 0u8 { return 1u64 }
+    if n > 7168u64 { return 1u64 }
+    return mb_gz_loadf32(slot, 4u64, n)
+}
+fn mb_nw_m(i: u64) -> i64 @export {
+    if i >= 7168u64 { return 0i64 }
+    return MB_NW_M[i]
+}
+fn mb_nw_e(i: u64) -> i64 @export {
+    if i >= 7168u64 { return 0i64 }
+    return MB_NW_E[i]
+}
+/* per-layer tensor geometry, served to probole (slot = layer*12 + role) */
+fn mb_g_ne(slot: u64) -> u64 @export {
+    if slot >= 48u64 { return 0u64 }
+    return MB_G_NE[slot]
+}
+fn mb_g_ne0(slot: u64) -> u64 @export {
+    if slot >= 48u64 { return 0u64 }
+    return MB_G_NE0[slot]
+}
+fn mb_g_present(slot: u64) -> u64 @export {
+    if slot >= 48u64 { return 0u64 }
+    return MB_G_F[slot] as u64
+}
+
+/* ============ the MoE surface (blk.3): router rows + expert geometry ======= */
+var MB_RW_M : [i64; 7168]
+var MB_RW_E : [i64; 7168]
+/* load router expert e's 7168 f32 weights (ffn_gate_inp captured as C3) */
+fn mb_moe_router_row(e: u64) -> u64 @export {
+    if MB_C3_F == 0u8 { return 1u64 }
+    if MB_C3_NE0 != 7168u64 { return 1u64 }
+    if e >= 256u64 { return 1u64 }
+    mb_mkpath(MB_C3_SHARD)
+    let f : u64 = fopen((&MB_PATH) as u64, "rb" as u64)
+    if f == 0u64 { return 1u64 }
+    MB_F = f
+    MB_IOERR = 0u8
+    MB_WBASE = 0u64
+    MB_WLEN = 0u64
+    MB_WPOS = 0u64
+    mb_seek_abs(MB_C3_DBASE + MB_C3_OFF + e * 7168u64 * 4u64)
+    let mut i : u64 = 0u64
+    while i < 7168u64 {
+        let bits : u64 = mb_u32()
+        let m : i64 = mb_f32m(bits)
+        if m == 4611686018427387904i64 {
+            fclose(f)
+            return 1u64
+        }
+        MB_RW_M[i] = m
+        MB_RW_E[i] = MB_F32E
+        i = i + 1u64
+    }
+    let mut rr : u64 = 0u64
+    if MB_IOERR != 0u8 { rr = 1u64 }
+    fclose(f)
+    return rr
+}
+fn mb_rw_m(i: u64) -> i64 @export {
+    if i >= 7168u64 { return 0i64 }
+    return MB_RW_M[i]
+}
+fn mb_rw_e(i: u64) -> i64 @export {
+    if i >= 7168u64 { return 0i64 }
+    return MB_RW_E[i]
+}
+/* the MoE presence + geometry (blk.3 router + 6 expert/shared tensors) */
+fn mb_moe_present() -> u64 @export {
+    if MB_C3_F == 0u8 { return 0u64 }
+    let mut r : u64 = 0u64
+    while r < 6u64 {
+        if MB_ME_F[r] == 0u8 { return 0u64 }
+        r = r + 1u64
+    }
+    return 1u64
+}
+fn mb_me_ne(role: u64) -> u64 @export {
+    if role >= 6u64 { return 0u64 }
+    return MB_ME_NE[role]
+}
+fn mb_me_ne0(role: u64) -> u64 @export {
+    if role >= 6u64 { return 0u64 }
+    return MB_ME_NE0[role]
+}
+fn mb_moe_scale_bits() -> u64 @export { return MB_EXPSCALE }
+fn mb_moe_used() -> u64 @export { return MB_EXPUSED }
+
+/* a 2D shared-expert projection (roles 3,4,5: no expert dim, no offset) */
+fn mb_pb_run_shexp(role: u64, n: u64, rows: u64, bank: u64, passes: u64) -> u64 @export {
+    if role < 3u64 { return 2u64 }
+    if role >= 6u64 { return 2u64 }
+    if passes != 3u64 { return 2u64 }
+    if MB_ME_F[role] == 0u8 { return 3u64 }
+    if MB_TSETL != n { return 1u64 }
+    if MB_TSETH != n { return 1u64 }
+    if MB_TSETX != n { return 1u64 }
+    if n > 18432u64 { return 2u64 }
+    if MB_ME_NE0[role] != n { return 2u64 }
+    if MB_ME_NE[role] / n != rows { return 2u64 }
+    if rows % 4u64 != 0u64 { return 2u64 }
+    let mut bcap : u64 = 7168u64
+    if bank == 1u64 { bcap = 18432u64 }
+    if bank == 2u64 { bcap = 18432u64 }
+    if bank == 4u64 { bcap = 32768u64 }
+    if rows > bcap { return 2u64 }
+    let bv : u64 = mb_tbv(MB_ME_TYPE[role])
+    if bv != 256u64 { return 2u64 }
+    MB_PBSLOT = role
+    MB_PBN = n
+    MB_PBROWS = rows
+    MB_PBBANK = bank
+    MB_PBPASS = passes
+    MB_PBSRC = 1u64
+    MB_PBEXP = 0u64
+    return mb_pb_launch(MB_ME_SH[role])
 }
 
 fn mb_arm375() -> u64 {
@@ -5417,10 +5782,16 @@ fn mb_selfprove() -> u64 @export {
     MB_C3_F = 0u8
     MB_C3_HERE = 0u8
     let mut gz0 : u64 = 0u64
-    while gz0 < 12u64 {
+    while gz0 < 48u64 {
         MB_G_F[gz0] = 0u8
         MB_G_HERE[gz0] = 0u8
         gz0 = gz0 + 1u64
+    }
+    let mut me0 : u64 = 0u64
+    while me0 < 6u64 {
+        MB_ME_F[me0] = 0u8
+        MB_ME_HERE[me0] = 0u8
+        me0 = me0 + 1u64
     }
     MB_NHEAD = 0u64
     MB_NROPE = 0u64
@@ -6250,17 +6621,27 @@ var MB_PPDE : [i64; 4]
 
 /* worker row decode of census slot g into the private row buffer */
 fn mb_pb_wrow(w: u64, g: u64, row: u64) -> u64 {
-    let ty : u64 = MB_G_TYPE[g]
+    let mut ty : u64 = MB_G_TYPE[g]
+    let mut ne0 : u64 = MB_G_NE0[g]
+    let mut tdb : u64 = MB_G_DB[g]
+    let mut toff : u64 = MB_G_OFF[g]
+    let mut prow : u64 = row
+    if MB_PBSRC == 1u64 {
+        ty = MB_ME_TYPE[g]
+        ne0 = MB_ME_NE0[g]
+        tdb = MB_ME_DB[g]
+        toff = MB_ME_OFF[g]
+        prow = row + MB_PBEXP * MB_PBROWS
+    }
     let bb : u64 = mb_tbb(ty)
     let bv : u64 = mb_tbv(ty)
     if bv != 256u64 { return 1u64 }
-    let ne0 : u64 = MB_G_NE0[g]
     let bpr : u64 = ne0 / 256u64
     let base : u64 = w * 18432u64
     let vbase : u64 = w * 256u64
     let mut b : u64 = 0u64
     while b < bpr {
-        let abs : u64 = MB_G_DB[g] + MB_G_OFF[g] + (row * bpr + b) * bb
+        let abs : u64 = tdb + toff + (prow * bpr + b) * bb
         if mb_wread(w, abs, bb) != 0u64 { return 1u64 }
         if mb_wdec(w, ty, 0u64) != 0u64 { return 1u64 }
         let mut e : u64 = 0u64
@@ -6613,6 +6994,16 @@ var MB_BDHE : [i64; 7168]
 var MB_BDXS : [i64; 7168]
 var MB_BDXL : [u64; 57344]
 var MB_BDXE : [i64; 7168]
+/* bank 4 = the MLA kv_b vessel (512 -> 32768 = 128 heads x [k128|v128]) */
+var MB_B4LS : [i64; 32768]
+var MB_B4LL : [u64; 262144]
+var MB_B4LE : [i64; 32768]
+var MB_B4HS : [i64; 32768]
+var MB_B4HL : [u64; 262144]
+var MB_B4HE : [i64; 32768]
+var MB_B4XS : [i64; 32768]
+var MB_B4XL : [u64; 262144]
+var MB_B4XE : [i64; 32768]
 
 /* store worker w's standing acc into bank (r, which) */
 fn mb_pb_bstore(bank: u64, r: u64, which: u64, w: u64) -> i32 {
@@ -6674,6 +7065,20 @@ fn mb_pb_bstore(bank: u64, r: u64, which: u64, w: u64) -> i32 {
             MB_BDXE[r] = ee
         }
     }
+    if bank == 4u64 {
+        if which == 0u64 {
+            MB_B4LS[r] = ss
+            MB_B4LE[r] = ee
+        }
+        if which == 1u64 {
+            MB_B4HS[r] = ss
+            MB_B4HE[r] = ee
+        }
+        if which == 2u64 {
+            MB_B4XS[r] = ss
+            MB_B4XE[r] = ee
+        }
+    }
     let mut k : u64 = 0u64
     while k < 8u64 {
         let v : u64 = MB_PA8[w * 8u64 + k]
@@ -6698,6 +7103,11 @@ fn mb_pb_bstore(bank: u64, r: u64, which: u64, w: u64) -> i32 {
             if which == 1u64 { MB_BDHL[ix] = v }
             if which == 2u64 { MB_BDXL[ix] = v }
         }
+        if bank == 4u64 {
+            if which == 0u64 { MB_B4LL[ix] = v }
+            if which == 1u64 { MB_B4HL[ix] = v }
+            if which == 2u64 { MB_B4XL[ix] = v }
+        }
         k = k + 1u64
     }
     return 0i32
@@ -6710,6 +7120,10 @@ var MB_PBN : u64 = 0u64
 var MB_PBROWS : u64 = 0u64
 var MB_PBBANK : u64 = 0u64
 var MB_PBPASS : u64 = 0u64
+/* source select: 0 = the layer census (MB_G), 1 = a MoE expert (MB_ME
+ * at role MB_PBSLOT, physical rows offset by expert*rows) */
+var MB_PBSRC : u64 = 0u64
+var MB_PBEXP : u64 = 0u64
 
 /* the weaver: a static slice of the run's output rows */
 fn mb_pb_worker(arg: u64) -> u32 {
@@ -6744,8 +7158,8 @@ fn mb_pb_worker(arg: u64) -> u32 {
 /* the parallel run: one law for every projection of the layer.
  * returns 0 ok / 1 red / 2 guard-or-geometry (named) / 3 absent (named) */
 fn mb_pb_run_par(slot: u64, n: u64, rows: u64, bank: u64, passes: u64) -> u64 @export {
-    if slot >= 12u64 { return 2u64 }
-    if bank >= 4u64 { return 2u64 }
+    if slot >= 48u64 { return 2u64 }
+    if bank >= 5u64 { return 2u64 }
     if passes != 3u64 { return 2u64 }
     if MB_G_F[slot] == 0u8 { return 3u64 }
     if MB_TSETL != n { return 1u64 }
@@ -6758,6 +7172,7 @@ fn mb_pb_run_par(slot: u64, n: u64, rows: u64, bank: u64, passes: u64) -> u64 @e
     let mut bcap : u64 = 7168u64
     if bank == 1u64 { bcap = 18432u64 }
     if bank == 2u64 { bcap = 18432u64 }
+    if bank == 4u64 { bcap = 32768u64 }
     if rows > bcap { return 2u64 }
     let bv : u64 = mb_tbv(MB_G_TYPE[slot])
     if bv != 256u64 { return 2u64 }
@@ -6766,7 +7181,15 @@ fn mb_pb_run_par(slot: u64, n: u64, rows: u64, bank: u64, passes: u64) -> u64 @e
     MB_PBROWS = rows
     MB_PBBANK = bank
     MB_PBPASS = passes
-    mb_mkpath(MB_G_SH[slot])
+    MB_PBSRC = 0u64
+    return mb_pb_launch(MB_G_SH[slot])
+}
+
+/* the shared four-weaver launch (config already in the MB_PB* premises,
+ * source-select in MB_PBSRC): open private handles, spin, join, verdict.
+ * 0 ok / 1 red / 2 guard */
+fn mb_pb_launch(shard: u64) -> u64 {
+    mb_mkpath(shard)
     let mut w : u64 = 0u64
     while w < 4u64 {
         MB_LFILE[w] = fopen((&MB_PATH) as u64, "rb" as u64)
@@ -6821,6 +7244,38 @@ fn mb_pb_run_par(slot: u64, n: u64, rows: u64, bank: u64, passes: u64) -> u64 @e
         w = w + 1u64
     }
     return 0u64
+}
+
+/* a MoE expert projection: role (MB_ME) + expert index, rows per expert.
+ * The physical rows are offset by expert*rows inside the 3D expert tensor. */
+fn mb_pb_run_exp(role: u64, expert: u64, n: u64, rows: u64, bank: u64, passes: u64) -> u64 @export {
+    if role >= 6u64 { return 2u64 }
+    if bank >= 5u64 { return 2u64 }
+    if passes != 3u64 { return 2u64 }
+    if MB_ME_F[role] == 0u8 { return 3u64 }
+    if MB_TSETL != n { return 1u64 }
+    if MB_TSETH != n { return 1u64 }
+    if MB_TSETX != n { return 1u64 }
+    if n > 18432u64 { return 2u64 }
+    if MB_ME_NE0[role] != n { return 2u64 }
+    if MB_ME_NE[role] / n / 256u64 != rows { return 2u64 }
+    if rows % 4u64 != 0u64 { return 2u64 }
+    if expert >= 256u64 { return 2u64 }
+    let mut bcap : u64 = 7168u64
+    if bank == 1u64 { bcap = 18432u64 }
+    if bank == 2u64 { bcap = 18432u64 }
+    if bank == 4u64 { bcap = 32768u64 }
+    if rows > bcap { return 2u64 }
+    let bv : u64 = mb_tbv(MB_ME_TYPE[role])
+    if bv != 256u64 { return 2u64 }
+    MB_PBSLOT = role
+    MB_PBN = n
+    MB_PBROWS = rows
+    MB_PBBANK = bank
+    MB_PBPASS = passes
+    MB_PBSRC = 1u64
+    MB_PBEXP = expert
+    return mb_pb_launch(MB_ME_SH[role])
 }
 
 /* the attention projection, as always: the same law through the vessel */
@@ -6896,6 +7351,12 @@ fn mb_pb_b_s(bank: u64, r: u64, which: u64) -> i64 @export {
         if which == 1u64 { return MB_BDHS[r] }
         return MB_BDXS[r]
     }
+    if bank == 4u64 {
+        if r >= 32768u64 { return 0i64 }
+        if which == 0u64 { return MB_B4LS[r] }
+        if which == 1u64 { return MB_B4HS[r] }
+        return MB_B4XS[r]
+    }
     return 0i64
 }
 fn mb_pb_b_l(bank: u64, r: u64, which: u64, k: u64) -> u64 @export {
@@ -6919,6 +7380,12 @@ fn mb_pb_b_l(bank: u64, r: u64, which: u64, k: u64) -> u64 @export {
         if which == 1u64 { return MB_BDHL[ix] }
         return MB_BDXL[ix]
     }
+    if bank == 4u64 {
+        if r >= 32768u64 { return 0u64 }
+        if which == 0u64 { return MB_B4LL[ix] }
+        if which == 1u64 { return MB_B4HL[ix] }
+        return MB_B4XL[ix]
+    }
     return 0u64
 }
 fn mb_pb_b_e(bank: u64, r: u64, which: u64) -> i64 @export {
@@ -6939,6 +7406,12 @@ fn mb_pb_b_e(bank: u64, r: u64, which: u64) -> i64 @export {
         if which == 0u64 { return MB_BDLE[r] }
         if which == 1u64 { return MB_BDHE[r] }
         return MB_BDXE[r]
+    }
+    if bank == 4u64 {
+        if r >= 32768u64 { return 0i64 }
+        if which == 0u64 { return MB_B4LE[r] }
+        if which == 1u64 { return MB_B4HE[r] }
+        return MB_B4XE[r]
     }
     return 0i64
 }

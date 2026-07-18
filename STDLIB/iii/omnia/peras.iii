@@ -1912,6 +1912,694 @@ fn pr_arm378() -> u64 {
     pr_rb(10u8)
     return 0u64
 }
+
+/* ============ THE PI LADDER (Machin) ============
+ * pi = 16 arctan(1/5) - 4 arctan(1/239).  arctan(1/inv) is the atanh
+ * series with ALTERNATING signs: sum_k (-1)^k (1/inv)^(2k+1)/(2k+1).  The
+ * terms strictly decrease, so an even number of terms is a rigorous lower
+ * bound and adding the first omitted term is a rigorous upper bound (the
+ * alternating-series bracket).  Two power chains (floor p_l, ceil p_h) at
+ * 2^-88 feed a directed accumulation: to keep the lower bound low, ADDED
+ * terms round down and SUBTRACTED terms round up; the upper bound flips
+ * both.  Then pi is assembled by integer shifts (16x = <<4, 4x = <<2) and
+ * a directed subtraction.  THE PROOF is cross-engine: sin(pi/4)^2 must
+ * contain 1/2 exactly (the sin ladder is independent of the arctan
+ * ladder), and the sin and cos intervals at pi/4 must overlap. */
+var PR_ATL0 : u64 = 0u64
+var PR_ATL1 : u64 = 0u64
+var PR_ATH0 : u64 = 0u64
+var PR_ATH1 : u64 = 0u64
+var PR_PIL0 : u64 = 0u64
+var PR_PIL1 : u64 = 0u64
+var PR_PIH0 : u64 = 0u64
+var PR_PIH1 : u64 = 0u64
+var PR_PIOK : u64 = 0u64
+
+/* arctan(1/inv) as a certified interval at 2^-88 (28 even terms + tail) */
+fn pr_arctan_ser(inv: u64) -> i32 {
+    pr_div_small(1u64 << 24u64, 0u64, inv)
+    let mut pl0 : u64 = PR_MLO
+    let mut pl1 : u64 = PR_MHI
+    let mut ph0 : u64 = PR_MLO
+    let mut ph1 : u64 = PR_MHI
+    if PR_STK != 0u64 {
+        ph0 = ph0 + 1u64
+        if ph0 == 0u64 { ph1 = ph1 + 1u64 }
+    }
+    let sq : u64 = inv * inv
+    let mut lo0 : u64 = 0u64
+    let mut lo1 : u64 = 0u64
+    let mut hi0 : u64 = 0u64
+    let mut hi1 : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < 28u64 {
+        let denom : u64 = 2u64 * k + 1u64
+        pr_div_small(pl1, pl0, denom)
+        let ft0 : u64 = PR_MLO
+        let ft1 : u64 = PR_MHI
+        pr_div_small(ph1, ph0, denom)
+        let mut ct0 : u64 = PR_MLO
+        let mut ct1 : u64 = PR_MHI
+        if PR_STK != 0u64 {
+            ct0 = ct0 + 1u64
+            if ct0 == 0u64 { ct1 = ct1 + 1u64 }
+        }
+        if (k & 1u64) == 0u64 {
+            /* add: lo += floor, hi += ceil */
+            let a : u64 = lo0 + ft0
+            if a < ft0 { lo1 = lo1 + 1u64 }
+            lo0 = a
+            lo1 = lo1 + ft1
+            let b : u64 = hi0 + ct0
+            if b < ct0 { hi1 = hi1 + 1u64 }
+            hi0 = b
+            hi1 = hi1 + ct1
+        }
+        if (k & 1u64) == 1u64 {
+            /* subtract: lo -= ceil, hi -= floor */
+            let mut bw : u64 = 0u64
+            let d0 : u64 = lo0 - ct0
+            if lo0 < ct0 { bw = 1u64 }
+            lo0 = d0
+            lo1 = lo1 - ct1 - bw
+            bw = 0u64
+            let e0 : u64 = hi0 - ft0
+            if hi0 < ft0 { bw = 1u64 }
+            hi0 = e0
+            hi1 = hi1 - ft1 - bw
+        }
+        pr_div_small(pl1, pl0, sq)
+        pl0 = PR_MLO
+        pl1 = PR_MHI
+        pr_div_small(ph1, ph0, sq)
+        ph0 = PR_MLO
+        ph1 = PR_MHI
+        if PR_STK != 0u64 {
+            ph0 = ph0 + 1u64
+            if ph0 == 0u64 { ph1 = ph1 + 1u64 }
+        }
+        k = k + 1u64
+    }
+    /* the alternating tail: arctan < S_28 + t_28, so hi += ceil(t_28) */
+    pr_div_small(ph1, ph0, 57u64)
+    let mut tt0 : u64 = PR_MLO
+    let mut tt1 : u64 = PR_MHI
+    if PR_STK != 0u64 {
+        tt0 = tt0 + 1u64
+        if tt0 == 0u64 { tt1 = tt1 + 1u64 }
+    }
+    let c : u64 = hi0 + tt0
+    if c < tt0 { hi1 = hi1 + 1u64 }
+    hi0 = c
+    hi1 = hi1 + tt1
+    PR_ATL0 = lo0
+    PR_ATL1 = lo1
+    PR_ATH0 = hi0
+    PR_ATH1 = hi1
+    return 0i32
+}
+
+fn pr_pi() -> u64 {
+    pr_arctan_ser(5u64)
+    let a5l0 : u64 = PR_ATL0
+    let a5l1 : u64 = PR_ATL1
+    let a5h0 : u64 = PR_ATH0
+    let a5h1 : u64 = PR_ATH1
+    pr_arctan_ser(239u64)
+    let a2l0 : u64 = PR_ATL0
+    let a2l1 : u64 = PR_ATL1
+    let a2h0 : u64 = PR_ATH0
+    let a2h1 : u64 = PR_ATH1
+    /* 16*A5 = A5 << 4 ; 4*A239 = A239 << 2 */
+    let s5l0 : u64 = a5l0 << 4u64
+    let s5l1 : u64 = (a5l1 << 4u64) | (a5l0 >> 60u64)
+    let s5h0 : u64 = a5h0 << 4u64
+    let s5h1 : u64 = (a5h1 << 4u64) | (a5h0 >> 60u64)
+    let q2l0 : u64 = a2l0 << 2u64
+    let q2l1 : u64 = (a2l1 << 2u64) | (a2l0 >> 62u64)
+    let q2h0 : u64 = a2h0 << 2u64
+    let q2h1 : u64 = (a2h1 << 2u64) | (a2h0 >> 62u64)
+    /* pi_lo = 16A5_lo - 4A239_hi ; pi_hi = 16A5_hi - 4A239_lo */
+    let mut bw : u64 = 0u64
+    let l0 : u64 = s5l0 - q2h0
+    if s5l0 < q2h0 { bw = 1u64 }
+    PR_PIL0 = l0
+    PR_PIL1 = s5l1 - q2h1 - bw
+    bw = 0u64
+    let h0 : u64 = s5h0 - q2l0
+    if s5h0 < q2l0 { bw = 1u64 }
+    PR_PIH0 = h0
+    PR_PIH1 = s5h1 - q2l1 - bw
+    return 0u64
+}
+
+/* 256-bit unsigned compare (most significant limb first) */
+fn pr_cmp256(a3: u64, a2: u64, a1: u64, a0: u64, b3: u64, b2: u64, b1: u64, b0: u64) -> i64 {
+    if a3 > b3 { return 1i64 }
+    if a3 < b3 { return 0i64 - 1i64 }
+    if a2 > b2 { return 1i64 }
+    if a2 < b2 { return 0i64 - 1i64 }
+    if a1 > b1 { return 1i64 }
+    if a1 < b1 { return 0i64 - 1i64 }
+    if a0 > b0 { return 1i64 }
+    if a0 < b0 { return 0i64 - 1i64 }
+    return 0i64
+}
+
+/* the cross-engine proof: sin(pi/4)^2 contains 1/2, sin=cos overlap */
+fn pr_pi_check() -> u64 {
+    /* pi/4 at 2^-88: floor lo, ceil hi */
+    let p4l0 : u64 = (PR_PIL0 >> 2u64) | (PR_PIL1 << 62u64)
+    let p4l1 : u64 = PR_PIL1 >> 2u64
+    let mut p4h0 : u64 = (PR_PIH0 >> 2u64) | (PR_PIH1 << 62u64)
+    let mut p4h1 : u64 = PR_PIH1 >> 2u64
+    if (PR_PIH0 & 3u64) != 0u64 {
+        let t : u64 = p4h0 + 1u64
+        if t == 0u64 { p4h1 = p4h1 + 1u64 }
+        p4h0 = t
+    }
+    /* down to a 2^-48 dyadic angle: floor a_lo, ceil a_hi */
+    let a_lo : u64 = (p4l0 >> 40u64) | (p4l1 << 24u64)
+    let mut a_hi : u64 = (p4h0 >> 40u64) | (p4h1 << 24u64)
+    if (p4h0 & ((1u64 << 40u64) - 1u64)) != 0u64 { a_hi = a_hi + 1u64 }
+    /* sincos at the low angle: sin lower bound, cos upper bound */
+    pr_sincos(a_lo, 48u64)
+    let sinl0 : u64 = PR_SN0
+    let sinl1 : u64 = PR_SN1
+    let cosh0 : u64 = PR_CX0
+    let cosh1 : u64 = PR_CX1
+    /* sincos at the high angle: sin upper bound, cos lower bound */
+    pr_sincos(a_hi, 48u64)
+    let sinh0 : u64 = PR_SX0
+    let sinh1 : u64 = PR_SX1
+    let cosl0 : u64 = PR_CN0
+    let cosl1 : u64 = PR_CN1
+    /* sin=cos at pi/4: the two intervals must overlap */
+    if pr_cmp128(sinl1, sinl0, cosh1, cosh0) > 0i64 { return 1u64 }
+    if pr_cmp128(cosl1, cosl0, sinh1, sinh0) > 0i64 { return 1u64 }
+    /* sin(pi/4)^2 contains 1/2 = 2^175 at scale 2^-176 (the ANCHOR) */
+    let half2 : u64 = 1u64 << 47u64
+    pr_mul128(sinl1, sinl0, sinl1, sinl0)
+    if pr_cmp256(PR_W[3], PR_W[2], PR_W[1], PR_W[0], 0u64, half2, 0u64, 0u64) > 0i64 { return 1u64 }
+    pr_mul128(sinh1, sinh0, sinh1, sinh0)
+    if pr_cmp256(PR_W[3], PR_W[2], PR_W[1], PR_W[0], 0u64, half2, 0u64, 0u64) < 0i64 { return 1u64 }
+    return 0u64
+}
+
+fn pr_arm_pi() -> u64 {
+    PR_PIOK = 0u64
+    if pr_pi() != 0u64 { return 386u64 }
+    if pr_pi_check() != 0u64 { return 386u64 }
+    PR_PIOK = 1u64
+    pr_rs("the pi: machin 16 atan(1/5) - 4 atan(1/239) certified; sin(pi/4)^2 contains 1/2 =ok sin=cos overlap=ok -- the circle's constant laddered from pure integers" as u64)
+    pr_rb(10u8)
+    return 0u64
+}
+
+/* ============ THE YARN (the attention rescaling of the long rope) ============
+ * DeepSeek-R1 extends its 4096 context to 163840 by YaRN (factor s=40).
+ * The attention logits are rescaled by mscale^2, where the ledger's
+ * yarn_log_multiplier m=0.1 gives mscale = 1 + m*ln(s) = 1 + ln(40)/10.
+ * ln(40) = 5 ln2 + ln(5/4) = 5*(2 atanh(1/3)) + (2 atanh(1/9)) -- the very
+ * ladders that built ln10000 for omega.  The certified mscale interval is
+ * cross-checked against the rational bracket [13688/10000, 13689/10000].
+ * (The per-lane frequency ramp bites only at nonzero positions; it rides
+ * with the distinct-token stair.  At position 0 every rotation is the
+ * identity, so mscale is the whole of yarn the single-token walk sees.) */
+var PR_MSL0 : u64 = 0u64
+var PR_MSL1 : u64 = 0u64
+var PR_MSH0 : u64 = 0u64
+var PR_MSH1 : u64 = 0u64
+var PR_YARNOK : u64 = 0u64
+
+/* ln(40) as a certified interval at 2^-88 into (lo0/lo1, hi0/hi1) */
+fn pr_ln40(dst_lo0: u64, dst_lo1: u64) -> u64 {
+    pr_atanh_ser(3u64)
+    /* 5 * (2 atanh(1/3)) */
+    let mut ll0 : u64 = 0u64
+    let mut ll1 : u64 = 0u64
+    let mut lh0 : u64 = 0u64
+    let mut lh1 : u64 = 0u64
+    let mut rep : u64 = 0u64
+    while rep < 5u64 {
+        let a : u64 = ll0 + PR_LNL0
+        if a < PR_LNL0 { ll1 = ll1 + 1u64 }
+        ll0 = a
+        ll1 = ll1 + PR_LNL1
+        let b : u64 = lh0 + PR_LNH0
+        if b < PR_LNH0 { lh1 = lh1 + 1u64 }
+        lh0 = b
+        lh1 = lh1 + PR_LNH1
+        rep = rep + 1u64
+    }
+    pr_atanh_ser(9u64)
+    let a2 : u64 = ll0 + PR_LNL0
+    if a2 < PR_LNL0 { ll1 = ll1 + 1u64 }
+    ll0 = a2
+    ll1 = ll1 + PR_LNL1
+    let b2 : u64 = lh0 + PR_LNH0
+    if b2 < PR_LNH0 { lh1 = lh1 + 1u64 }
+    lh0 = b2
+    lh1 = lh1 + PR_LNH1
+    PR_MSL0 = ll0
+    PR_MSL1 = ll1
+    PR_MSH0 = lh0
+    PR_MSH1 = lh1
+    return 0u64
+}
+
+fn pr_yarn() -> u64 {
+    pr_ln40(0u64, 0u64)
+    /* mscale = 1 + ln40/10 : divide the ln40 interval by 10 (dir), add 1 */
+    pr_div_small(PR_MSL1, PR_MSL0, 10u64)
+    let ml0 : u64 = PR_MLO
+    let ml1 : u64 = PR_MHI
+    pr_div_small(PR_MSH1, PR_MSH0, 10u64)
+    let mut mh0 : u64 = PR_MLO
+    let mut mh1 : u64 = PR_MHI
+    if PR_STK != 0u64 {
+        mh0 = mh0 + 1u64
+        if mh0 == 0u64 { mh1 = mh1 + 1u64 }
+    }
+    /* + 1 at 2^-88 = + (1 << 88) = + (1<<24) into the high limb */
+    let one88 : u64 = 1u64 << 24u64
+    PR_MSL0 = ml0
+    PR_MSL1 = ml1 + one88
+    PR_MSH0 = mh0
+    PR_MSH1 = mh1 + one88
+    /* cross-check against [13688/10000, 13689/10000] (external anchor):
+     * mscale_lo * 10000 >= 13688 * 2^88 ; mscale_hi * 10000 <= 13689 * 2^88 */
+    pr_mul128by64(PR_MSL1, PR_MSL0, 10000u64)
+    let lo0 : u64 = PR_Z[0]
+    let lo1 : u64 = PR_Z[1]
+    let lo2 : u64 = PR_Z[2]
+    pr_mul128by64(one88, 0u64, 13688u64)
+    let b0 : u64 = PR_Z[0]
+    let b1 : u64 = PR_Z[1]
+    let b2 : u64 = PR_Z[2]
+    if pr_cmp256(0u64, lo2, lo1, lo0, 0u64, b2, b1, b0) < 0i64 { return 1u64 }
+    pr_mul128by64(PR_MSH1, PR_MSH0, 10000u64)
+    let hi0 : u64 = PR_Z[0]
+    let hi1 : u64 = PR_Z[1]
+    let hi2 : u64 = PR_Z[2]
+    pr_mul128by64(one88, 0u64, 13689u64)
+    let c0 : u64 = PR_Z[0]
+    let c1 : u64 = PR_Z[1]
+    let c2 : u64 = PR_Z[2]
+    if pr_cmp256(0u64, hi2, hi1, hi0, 0u64, c2, c1, c0) > 0i64 { return 1u64 }
+    return 0u64
+}
+
+fn pr_arm_yarn() -> u64 {
+    PR_YARNOK = 0u64
+    if pr_yarn() != 0u64 { return 387u64 }
+    PR_YARNOK = 1u64
+    pr_rs("the yarn: factor=40 mscale = 1 + ln(40)/10 certified in [13688/10000, 13689/10000] (the softmax rescaling of the extended rope) -- ln40 = 5 ln2 + ln(5/4) off the standing atanh ladders" as u64)
+    pr_rb(10u8)
+    return 0u64
+}
+
+/* ============ THE YARN FREQUENCIES (yarn-active RoPE) ============
+ * The mscale rescales the logits; the FREQUENCY RAMP rescales the rope
+ * lanes themselves.  A lane whose wavelength exceeds the original 4096
+ * context is INTERPOLATED (freq / factor); a short-wavelength lane is
+ * EXTRAPOLATED (freq unchanged); between the two correction dimensions it
+ * ramps.  The correction dims need the WAVELENGTH -- and so ln(pi): the
+ * one transcendental the ratio-atanh ladders could not reach.  So this
+ * stair first mints a GENERAL natural log (2 atanh of an arbitrary small
+ * interval argument, ln pi = 2 ln2 - 2 atanh((1-pi/4)/(1+pi/4))), verified
+ * against the rational bracket, then the correction dims low/high, then
+ * the clamped ramp t_i for every lane -- certified: t at lane 0 pinned to
+ * 0 (full interpolation), t at lane 31 pinned to 1 (full extrapolation),
+ * monotone through the transition.  This is the whole of yarn the rope
+ * sees at a NONZERO position; the distinct-token forward rides the
+ * harmonia's certified cross-position delta-ladder on these lanes. */
+var PR_AGL0 : u64 = 0u64
+var PR_AGL1 : u64 = 0u64
+var PR_AGH0 : u64 = 0u64
+var PR_AGH1 : u64 = 0u64
+var PR_LPL0 : u64 = 0u64
+var PR_LPL1 : u64 = 0u64
+var PR_LPH0 : u64 = 0u64
+var PR_LPH1 : u64 = 0u64
+var PR_YFREQOK : u64 = 0u64
+var PR_YT0 : u64 = 0u64
+var PR_YT31 : u64 = 0u64
+var PR_YMONO : u64 = 0u64
+
+/* add a 128-bit (b1:b0) into (a1:a0) accumulators via module scratch */
+var PR_ADD0 : u64 = 0u64
+var PR_ADD1 : u64 = 0u64
+fn pr_add128(a0: u64, a1: u64, b0: u64, b1: u64) -> i32 {
+    let s : u64 = a0 + b0
+    let mut c : u64 = 0u64
+    if s < b0 { c = 1u64 }
+    PR_ADD0 = s
+    PR_ADD1 = a1 + b1 + c
+    return 0i32
+}
+
+/* 2 atanh(|a|) as an interval at 2^-88 for a small positive df |a|
+ * (ae + 88 in [0,64)); result in PR_AGL / PR_AGH */
+fn pr_atanh_gen(am: u64, ae: i64) -> i32 {
+    let s : u64 = (ae + 88i64) as u64
+    let al0 : u64 = am << s
+    let mut al1 : u64 = 0u64
+    if s != 0u64 { al1 = am >> (64u64 - s) }
+    pr_mul128(al1, al0, al1, al0)
+    pr_wshr88()
+    let a2l0 : u64 = PR_MLO
+    let a2l1 : u64 = PR_MHI
+    let mut a2h0 : u64 = PR_MLO
+    let mut a2h1 : u64 = PR_MHI
+    if PR_STK != 0u64 {
+        a2h0 = a2h0 + 1u64
+        if a2h0 == 0u64 { a2h1 = a2h1 + 1u64 }
+    }
+    let mut pl0 : u64 = al0
+    let mut pl1 : u64 = al1
+    let mut ph0 : u64 = al0
+    let mut ph1 : u64 = al1
+    let mut lo0 : u64 = 0u64
+    let mut lo1 : u64 = 0u64
+    let mut hi0 : u64 = 0u64
+    let mut hi1 : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < 40u64 {
+        let denom : u64 = 2u64 * k + 1u64
+        pr_div_small(pl1, pl0, denom)
+        pr_add128(lo0, lo1, PR_MLO, PR_MHI)
+        lo0 = PR_ADD0
+        lo1 = PR_ADD1
+        pr_div_small(ph1, ph0, denom)
+        let mut ct0 : u64 = PR_MLO
+        let mut ct1 : u64 = PR_MHI
+        if PR_STK != 0u64 {
+            ct0 = ct0 + 1u64
+            if ct0 == 0u64 { ct1 = ct1 + 1u64 }
+        }
+        pr_add128(hi0, hi1, ct0, ct1)
+        hi0 = PR_ADD0
+        hi1 = PR_ADD1
+        pr_mul128(pl1, pl0, a2l1, a2l0)
+        pr_wshr88()
+        pl0 = PR_MLO
+        pl1 = PR_MHI
+        pr_mul128(ph1, ph0, a2h1, a2h0)
+        pr_wshr88()
+        ph0 = PR_MLO
+        ph1 = PR_MHI
+        if PR_STK != 0u64 {
+            ph0 = ph0 + 1u64
+            if ph0 == 0u64 { ph1 = ph1 + 1u64 }
+        }
+        k = k + 1u64
+    }
+    /* the geometric tail (loose over-cover of the remainder onto hi) */
+    pr_div_small(ph1, ph0, 81u64)
+    let mut tt0 : u64 = PR_MLO
+    let mut tt1 : u64 = PR_MHI
+    if PR_STK != 0u64 {
+        tt0 = tt0 + 1u64
+        if tt0 == 0u64 { tt1 = tt1 + 1u64 }
+    }
+    pr_add128(hi0, hi1, tt0, tt1)
+    hi0 = PR_ADD0
+    hi1 = PR_ADD1
+    PR_AGL1 = (lo1 << 1u64) | (lo0 >> 63u64)
+    PR_AGL0 = lo0 << 1u64
+    PR_AGH1 = (hi1 << 1u64) | (hi0 >> 63u64)
+    PR_AGH0 = hi0 << 1u64
+    return 0i32
+}
+
+/* ln(pi) as a certified interval at 2^-88 into PR_LP* */
+fn pr_lnpi() -> u64 {
+    /* pi/4 at 2^-88: floor lo, ceil hi */
+    let p4l0 : u64 = (PR_PIL0 >> 2u64) | (PR_PIL1 << 62u64)
+    let p4l1 : u64 = PR_PIL1 >> 2u64
+    let mut p4h0 : u64 = (PR_PIH0 >> 2u64) | (PR_PIH1 << 62u64)
+    let mut p4h1 : u64 = PR_PIH1 >> 2u64
+    if (PR_PIH0 & 3u64) != 0u64 {
+        let t : u64 = p4h0 + 1u64
+        if t == 0u64 { p4h1 = p4h1 + 1u64 }
+        p4h0 = t
+    }
+    pr_dfn2(p4l1, p4l0, 0i64 - 88i64, 0u64)
+    let pi4lm : u64 = PR_DFM
+    let pi4le : i64 = PR_DFE
+    pr_dfn2(p4h1, p4h0, 0i64 - 88i64, 1u64)
+    let pi4hm : u64 = PR_DFM
+    let pi4he : i64 = PR_DFE
+    let onem : u64 = 1u64 << 63u64
+    let onee : i64 = 0i64 - 63i64
+    /* |a| = (1 - pi/4)/(1 + pi/4) : num = 1 - pi/4, den = 1 + pi/4 */
+    pr_dfsub128(onem, onee, pi4hm, pi4he, 0u64)
+    let numlm : u64 = PR_DFM
+    let numle : i64 = PR_DFE
+    pr_dfsub128(onem, onee, pi4lm, pi4le, 1u64)
+    let numhm : u64 = PR_DFM
+    let numhe : i64 = PR_DFE
+    pr_dfadd(onem, onee, pi4lm, pi4le, 0u64)
+    let denlm : u64 = PR_DFM
+    let denle : i64 = PR_DFE
+    pr_dfadd(onem, onee, pi4hm, pi4he, 1u64)
+    let denhm : u64 = PR_DFM
+    let denhe : i64 = PR_DFE
+    pr_dfrecip(denhm, denhe, 0u64)
+    pr_dfmul(numlm, numle, PR_DFM, PR_DFE, 0u64)
+    let alm : u64 = PR_DFM
+    let ale : i64 = PR_DFE
+    pr_dfrecip(denlm, denle, 1u64)
+    pr_dfmul(numhm, numhe, PR_DFM, PR_DFE, 1u64)
+    let ahm : u64 = PR_DFM
+    let ahe : i64 = PR_DFE
+    /* 2 atanh(|a|): lo from |a|_lo, hi from |a|_hi (atanh increasing) */
+    pr_atanh_gen(alm, ale)
+    let at_lo0 : u64 = PR_AGL0
+    let at_lo1 : u64 = PR_AGL1
+    pr_atanh_gen(ahm, ahe)
+    let at_hi0 : u64 = PR_AGH0
+    let at_hi1 : u64 = PR_AGH1
+    /* 2 ln2 = 2 * (2 atanh(1/3)) at 2^-88 */
+    pr_atanh_ser(3u64)
+    let l20 : u64 = PR_LNL0 << 1u64
+    let l21 : u64 = (PR_LNL1 << 1u64) | (PR_LNL0 >> 63u64)
+    let h20 : u64 = PR_LNH0 << 1u64
+    let h21 : u64 = (PR_LNH1 << 1u64) | (PR_LNH0 >> 63u64)
+    /* lnpi = 2ln2 - 2atanh(|a|): lo = 2ln2_lo - at_hi, hi = 2ln2_hi - at_lo */
+    let mut bw : u64 = 0u64
+    let d0 : u64 = l20 - at_hi0
+    if l20 < at_hi0 { bw = 1u64 }
+    PR_LPL0 = d0
+    PR_LPL1 = l21 - at_hi1 - bw
+    bw = 0u64
+    let e0 : u64 = h20 - at_lo0
+    if h20 < at_lo0 { bw = 1u64 }
+    PR_LPH0 = e0
+    PR_LPH1 = h21 - at_lo1 - bw
+    /* the external anchor: lnpi in [11447/10000, 11448/10000] */
+    pr_mul128by64(PR_LPL1, PR_LPL0, 10000u64)
+    let cl0 : u64 = PR_Z[0]
+    let cl1 : u64 = PR_Z[1]
+    let cl2 : u64 = PR_Z[2]
+    let one88 : u64 = 1u64 << 24u64
+    pr_mul128by64(one88, 0u64, 11447u64)
+    if pr_cmp256(0u64, cl2, cl1, cl0, 0u64, PR_Z[2], PR_Z[1], PR_Z[0]) < 0i64 { return 1u64 }
+    pr_mul128by64(PR_LPH1, PR_LPH0, 10000u64)
+    let ch0 : u64 = PR_Z[0]
+    let ch1 : u64 = PR_Z[1]
+    let ch2 : u64 = PR_Z[2]
+    pr_mul128by64(one88, 0u64, 11448u64)
+    if pr_cmp256(0u64, ch2, ch1, ch0, 0u64, PR_Z[2], PR_Z[1], PR_Z[0]) > 0i64 { return 1u64 }
+    return 0u64
+}
+
+/* |a - b| for two positive dfs, a >= b, rounded per up (128-bit safe) */
+fn pr_dfsub128(ma: u64, ea: i64, mb: u64, eb: i64, up: u64) -> i32 {
+    if mb == 0u64 {
+        PR_DFM = ma
+        PR_DFE = ea
+        return 0i32
+    }
+    let d : i64 = ea - eb
+    if d >= 64i64 {
+        PR_DFM = ma
+        PR_DFE = ea
+        if up == 0u64 {
+            PR_DFM = PR_DFM - 1u64
+            if PR_DFM < (1u64 << 63u64) {
+                PR_DFM = (PR_DFM << 1u64) | 1u64
+                PR_DFE = PR_DFE - 1i64
+            }
+        }
+        return 0i32
+    }
+    let du : u64 = d as u64
+    let mut hi : u64 = 0u64
+    let mut lo : u64 = 0u64
+    if du == 0u64 {
+        lo = ma - mb
+        hi = 0u64
+    }
+    if du != 0u64 {
+        hi = ma >> (64u64 - du)
+        lo = ma << du
+        let mut bw : u64 = 0u64
+        if lo < mb { bw = 1u64 }
+        lo = lo - mb
+        hi = hi - bw
+    }
+    pr_dfn2(hi, lo, eb, up)
+    return 0i32
+}
+
+/* the correction dims + the clamped ramp t_i for every lane */
+fn pr_yarn_freq() -> u64 {
+    if pr_lnpi() != 0u64 { return 1u64 }
+    /* ln(base) = ln(10000) = 12 ln2 + 4 ln(5/4) at 2^-88 (lo/hi) */
+    pr_atanh_ser(3u64)
+    let mut lbl0 : u64 = 0u64
+    let mut lbl1 : u64 = 0u64
+    let mut lbh0 : u64 = 0u64
+    let mut lbh1 : u64 = 0u64
+    let mut rep : u64 = 0u64
+    while rep < 12u64 {
+        pr_add128(lbl0, lbl1, PR_LNL0, PR_LNL1)
+        lbl0 = PR_ADD0
+        lbl1 = PR_ADD1
+        pr_add128(lbh0, lbh1, PR_LNH0, PR_LNH1)
+        lbh0 = PR_ADD0
+        lbh1 = PR_ADD1
+        rep = rep + 1u64
+    }
+    pr_atanh_ser(9u64)
+    rep = 0u64
+    while rep < 4u64 {
+        pr_add128(lbl0, lbl1, PR_LNL0, PR_LNL1)
+        lbl0 = PR_ADD0
+        lbl1 = PR_ADD1
+        pr_add128(lbh0, lbh1, PR_LNH0, PR_LNH1)
+        lbh0 = PR_ADD0
+        lbh1 = PR_ADD1
+        rep = rep + 1u64
+    }
+    /* low_arg = 6 ln2 - lnpi ; high_arg = 11 ln2 - lnpi (at 2^-88).
+     * 6 ln2 = 6 * (2 atanh(1/3)) ; here ln2 = PR from atanh_ser(3). */
+    pr_atanh_ser(3u64)
+    let mut l6l0 : u64 = 0u64
+    let mut l6l1 : u64 = 0u64
+    let mut l6h0 : u64 = 0u64
+    let mut l6h1 : u64 = 0u64
+    let mut l11l0 : u64 = 0u64
+    let mut l11l1 : u64 = 0u64
+    let mut l11h0 : u64 = 0u64
+    let mut l11h1 : u64 = 0u64
+    rep = 0u64
+    while rep < 11u64 {
+        if rep < 6u64 {
+            pr_add128(l6l0, l6l1, PR_LNL0, PR_LNL1)
+            l6l0 = PR_ADD0
+            l6l1 = PR_ADD1
+            pr_add128(l6h0, l6h1, PR_LNH0, PR_LNH1)
+            l6h0 = PR_ADD0
+            l6h1 = PR_ADD1
+        }
+        pr_add128(l11l0, l11l1, PR_LNL0, PR_LNL1)
+        l11l0 = PR_ADD0
+        l11l1 = PR_ADD1
+        pr_add128(l11h0, l11h1, PR_LNH0, PR_LNH1)
+        l11h0 = PR_ADD0
+        l11h1 = PR_ADD1
+        rep = rep + 1u64
+    }
+    /* low_arg = 6ln2 - lnpi : lo = 6ln2_lo - lnpi_hi, hi = 6ln2_hi - lnpi_lo */
+    let mut bw : u64 = 0u64
+    let la0 : u64 = l6l0 - PR_LPH0
+    if l6l0 < PR_LPH0 { bw = 1u64 }
+    let lalo0 : u64 = la0
+    let lalo1 : u64 = l6l1 - PR_LPH1 - bw
+    bw = 0u64
+    let lb0 : u64 = l6h0 - PR_LPL0
+    if l6h0 < PR_LPL0 { bw = 1u64 }
+    let lahi0 : u64 = lb0
+    let lahi1 : u64 = l6h1 - PR_LPL1 - bw
+    bw = 0u64
+    let ha0 : u64 = l11l0 - PR_LPH0
+    if l11l0 < PR_LPH0 { bw = 1u64 }
+    let halo0 : u64 = ha0
+    let halo1 : u64 = l11l1 - PR_LPH1 - bw
+    bw = 0u64
+    let hb0 : u64 = l11h0 - PR_LPL0
+    if l11h0 < PR_LPL0 { bw = 1u64 }
+    let hahi0 : u64 = hb0
+    let hahi1 : u64 = l11h1 - PR_LPL1 - bw
+    /* low = 64 * low_arg / (2 lnbase) ; high = 64 * high_arg / (2 lnbase).
+     * As dfs: multiply the arg by 32 (=64/2), reciprocal of lnbase.  Work
+     * through the df toolkit at reduced width (correction dims need only
+     * modest precision; the ramp clamps). */
+    pr_dfn2(lalo1, lalo0, 0i64 - 88i64, 0u64)
+    let lowamlo : u64 = PR_DFM
+    let lowamle : i64 = PR_DFE
+    pr_dfn2(lahi1, lahi0, 0i64 - 88i64, 1u64)
+    let lowamhi : u64 = PR_DFM
+    let lowamhe : i64 = PR_DFE
+    pr_dfn2(halo1, halo0, 0i64 - 88i64, 0u64)
+    let hiamlo : u64 = PR_DFM
+    let hiamle : i64 = PR_DFE
+    pr_dfn2(hahi1, hahi0, 0i64 - 88i64, 1u64)
+    let hiamhi : u64 = PR_DFM
+    let hiamhe : i64 = PR_DFE
+    pr_dfn2(lbl1, lbl0, 0i64 - 88i64, 0u64)
+    let lbm_lo : u64 = PR_DFM
+    let lbe_lo : i64 = PR_DFE
+    pr_dfn2(lbh1, lbh0, 0i64 - 88i64, 1u64)
+    let lbm_hi : u64 = PR_DFM
+    let lbe_hi : i64 = PR_DFE
+    /* low = 32 * low_arg / lnbase (32 = 64/2); scale exp by +5 for *32 */
+    pr_dfrecip(lbm_hi, lbe_hi, 0u64)
+    pr_dfmul(lowamlo, lowamle + 5i64, PR_DFM, PR_DFE, 0u64)
+    let low_m_lo : u64 = PR_DFM
+    let low_e_lo : i64 = PR_DFE
+    pr_dfrecip(lbm_lo, lbe_lo, 1u64)
+    pr_dfmul(lowamhi, lowamhe + 5i64, PR_DFM, PR_DFE, 1u64)
+    let low_m_hi : u64 = PR_DFM
+    let low_e_hi : i64 = PR_DFE
+    pr_dfrecip(lbm_hi, lbe_hi, 0u64)
+    pr_dfmul(hiamlo, hiamle + 5i64, PR_DFM, PR_DFE, 0u64)
+    let high_m_lo : u64 = PR_DFM
+    let high_e_lo : i64 = PR_DFE
+    pr_dfrecip(lbm_lo, lbe_lo, 1u64)
+    pr_dfmul(hiamhi, hiamhe + 5i64, PR_DFM, PR_DFE, 1u64)
+    let high_m_hi : u64 = PR_DFM
+    let high_e_hi : i64 = PR_DFE
+    /* the ramp t_i = clamp((i - low)/(high - low), 0, 1) for lanes 0..31.
+     * Verify: t_0 pinned to 0 (0 < low), t_31 pinned to 1 (31 > high),
+     * and t monotone non-decreasing across the transition. */
+    PR_YT0 = 0u64
+    PR_YT31 = 0u64
+    PR_YMONO = 1u64
+    /* t_0: 0 <= low (with the low interval > 0) => clamp low = 0 */
+    if pr_df_cmp(low_m_lo, low_e_lo, 0u64, 0i64) > 0i64 { PR_YT0 = 1u64 }
+    /* t_31: 31 >= high (high < 31) => clamp high = 1.  31 as df: */
+    pr_dfn2(0u64, 31u64, 0i64, 0u64)
+    if pr_df_cmp(high_m_hi, high_e_hi, PR_DFM, PR_DFE) < 0i64 { PR_YT31 = 1u64 }
+    /* the window must be ordered: high > low */
+    if pr_df_cmp(high_m_lo, high_e_lo, low_m_hi, low_e_hi) <= 0i64 { PR_YMONO = 0u64 }
+    if PR_YT0 != 1u64 { return 1u64 }
+    if PR_YT31 != 1u64 { return 1u64 }
+    if PR_YMONO != 1u64 { return 1u64 }
+    return 0u64
+}
+
+fn pr_arm_yarnfreq() -> u64 {
+    PR_YFREQOK = 0u64
+    if pr_yarn_freq() != 0u64 { return 390u64 }
+    PR_YFREQOK = 1u64
+    pr_rs("the yarn frequencies: ln(pi) minted (general atanh ladder) in [11447/10000, 11448/10000]; correction dims low/high certified 0<low<high<31; ramp t pinned: lane0=interp(t=0) lane31=extrap(t=1) window-ordered=ok -- yarn-active RoPE stands; the distinct-token forward rides the harmonia delta-ladder on these lanes" as u64)
+    pr_rb(10u8)
+    return 0u64
+}
 /* ============ arm 379: THE HARMONIA (the assembled gaze) ============ */
 
 /* All 32 omega lanes of RoPE, the general delta-angle ladder, and the
@@ -4625,6 +5313,18 @@ fn pr_x_dfsqrt(m: u64, e: i64, up: u64) -> i32 @export {
 fn pr_x_exp_s(m: u64, e: i64, sg: i64, up: u64) -> u64 @export {
     return pr_cho_exp(m, e, sg, up)
 }
+/* pi as a certified interval at 2^-88 (2 limbs each bound), and its flag */
+fn pr_x_pi_ok() -> u64 @export { return PR_PIOK }
+fn pr_x_pi_l0() -> u64 @export { return PR_PIL0 }
+fn pr_x_pi_l1() -> u64 @export { return PR_PIL1 }
+fn pr_x_pi_h0() -> u64 @export { return PR_PIH0 }
+fn pr_x_pi_h1() -> u64 @export { return PR_PIH1 }
+/* yarn mscale as a certified interval at 2^-88 (2 limbs each bound) */
+fn pr_x_yarn_ok() -> u64 @export { return PR_YARNOK }
+fn pr_x_ms_l0() -> u64 @export { return PR_MSL0 }
+fn pr_x_ms_l1() -> u64 @export { return PR_MSL1 }
+fn pr_x_ms_h0() -> u64 @export { return PR_MSH0 }
+fn pr_x_ms_h1() -> u64 @export { return PR_MSH1 }
 
 /* ==================== the organ's spine ==================== */
 
@@ -4647,6 +5347,12 @@ fn pr_selfprove() -> u64 @export {
     if r6 != 0u64 { return r6 }
     let r7 : u64 = pr_arm381()
     if r7 != 0u64 { return r7 }
+    let r8 : u64 = pr_arm_pi()
+    if r8 != 0u64 { return r8 }
+    let r9 : u64 = pr_arm_yarn()
+    if r9 != 0u64 { return r9 }
+    let r10 : u64 = pr_arm_yarnfreq()
+    if r10 != 0u64 { return r10 }
     if mb_feast() == 0u64 {
         pr_rs("the discharge: fasting (no feast) -- the bound stands ready" as u64)
         pr_rb(10u8)

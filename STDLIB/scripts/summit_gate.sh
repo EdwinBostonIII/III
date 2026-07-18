@@ -237,9 +237,27 @@ else
     grep -q "^the threpsis: ffn woven by 4 weavers rows(gate/up/down)=18432/18432/7168 witness-rows=30/30 limb-exact containment(interval holds exact)=44032/44032 sigma-monotone=18432/18432" "$T/run1.txt" || { echo "[summit_gate] THE NOURISHMENT UNPROVEN"; exit 6; }
     grep -q "^the pepsis: X'' = X' + FFN(X') dims=7168 tight-route-inside-fat=7168/7168" "$T/run1.txt" || { echo "[summit_gate] NO DIGESTION"; exit 6; }
     grep -q "^scroll threpsis = [1-9]" "$T/run1.txt" || { echo "[summit_gate] NO THREPSIS SCROLL"; exit 6; }
+    # THE ANABASIS + THE SYNODOS: the multi-layer walk.  Layers 1 and 2 are
+    # dense twins recomputed as certified-interval forwards (single token:
+    # softmax=1 exact, rope@0=identity), and layer 3 opens the MoE -- the
+    # router elects the top-8 of 256 experts over interval logits (the
+    # decidability reported honestly), the shared + elected experts woven
+    # by the same four weavers through the 3D expert tensors, gated by the
+    # certified sigmoid weight.  Three real layers of R1 composed exactly.
+    grep -q "^the anabasis: layer 2 DENSE X'' recomputed sign-straddle=" "$T/run1.txt" || { echo "[summit_gate] THE ASCENT STALLED"; exit 6; }
+    grep -q "^the synodos: layer 3 MoE -- router elected top-8 of 256 (interval logits)" "$T/run1.txt" || { echo "[summit_gate] THE SYNOD DID NOT CONVENE"; exit 6; }
 fi
 grep -q "^the tropos: .*two-form-overlap=ok pythagoras=contained.*contains 2 =ok" "$T/run1.txt" || { echo "[summit_gate] THE TURN FAILED"; exit 6; }
 grep -q "^the omega: .*power-round-trip: omega\^32 x 10000 contains 1 =ok.*BRIDGED" "$T/run1.txt" || { echo "[summit_gate] THE BRIDGE FELL"; exit 6; }
+# THE PI + THE YARN: the circle's constant laddered from pure integers
+# (Machin, cross-checked by sin(pi/4)^2 contains 1/2), the yarn softmax
+# rescaling mscale = 1 + ln(40)/10, and the yarn-active rope frequencies
+# (ln(pi) minted by the general atanh ladder, the correction-dim ramp
+# pinned at both ends).  All machine-independent -- they stand on every
+# machine, feast or fast.
+grep -q "^the pi: machin 16 atan(1/5) - 4 atan(1/239) certified; sin(pi/4)\^2 contains 1/2 =ok" "$T/run1.txt" || { echo "[summit_gate] THE CIRCLE UNCLOSED"; exit 6; }
+grep -q "^the yarn: factor=40 mscale = 1 + ln(40)/10 certified in \[13688/10000, 13689/10000\]" "$T/run1.txt" || { echo "[summit_gate] THE YARN UNSPUN"; exit 6; }
+grep -q "^the yarn frequencies: ln(pi) minted .*ramp t pinned: lane0=interp(t=0) lane31=extrap(t=1)" "$T/run1.txt" || { echo "[summit_gate] THE YARN FREQUENCIES ADRIFT"; exit 6; }
 # THE HARMONIA: all 32 omega lanes off the one certified omega_1 (five power
 # round trips, three rational islands, strict monotone separation) -- the
 # lane bank stands on every machine; the fleshed assembly (exact P/X, the

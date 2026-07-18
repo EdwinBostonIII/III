@@ -204,9 +204,22 @@ else
     grep -q "^the walk: " "$T/run1.txt" || { echo "[summit_gate] NO EXPERT WALK"; exit 6; }
     grep -q "^the gaze: .*rope-at-0=identity.*prefix-law=ok double-stream=ok norm-scalars=shared" "$T/run1.txt" || { echo "[summit_gate] THE GAZE AVERTED"; exit 6; }
     grep -q "^the telos: .*win-permutation=ok.*frontier CLOSED" "$T/run1.txt" || { echo "[summit_gate] THE FRONTIER OPEN"; exit 6; }
+    grep -q "^the harmonia: .*pairing=neox(d,d+32) anchor: R(0)==N2 limb-exact pyth=224/224 .*matrix=8x8-toeplitz .*order=\[d" "$T/run1.txt" || { echo "[summit_gate] THE ASSEMBLY UNANCHORED"; exit 6; }
+    grep -q "^the harmonia flesh: d0=" "$T/run1.txt" || { echo "[summit_gate] NO HARMONIA FLESH"; exit 6; }
+    # THE PLEROMA: the pass assembled -- the certified logit scale, the
+    # certified softmax over the causal row (partition of unity CONTAINED),
+    # and the one-voice value mix through the real v rows.
+    grep -q "^the pleroma: scale C=\[.*sum-w=\[.*\]ppb contains 1 =ok mix: one-voice value RETURNED v-contained=128/128" "$T/run1.txt" || { echo "[summit_gate] THE PASS UNASSEMBLED"; exit 6; }
+    grep -q "^the pleroma weights(ppb): d0=\[" "$T/run1.txt" || { echo "[summit_gate] NO CERTIFIED WEIGHTS"; exit 6; }
 fi
 grep -q "^the tropos: .*two-form-overlap=ok pythagoras=contained.*contains 2 =ok" "$T/run1.txt" || { echo "[summit_gate] THE TURN FAILED"; exit 6; }
 grep -q "^the omega: .*power-round-trip: omega\^32 x 10000 contains 1 =ok.*BRIDGED" "$T/run1.txt" || { echo "[summit_gate] THE BRIDGE FELL"; exit 6; }
+# THE HARMONIA: all 32 omega lanes off the one certified omega_1 (five power
+# round trips, three rational islands, strict monotone separation) -- the
+# lane bank stands on every machine; the fleshed assembly (exact P/X, the
+# signed delta-ladder, the N2 anchor, the 8x8 matrix and the cross-position
+# verdict) stands whenever the Feast is on the table.
+grep -q "^the harmonia: lanes=32 chain=omega1-powers round-trips(1,2,4,8,16)=contain-1 islands(8,16,24)=(1/10,1/100,1/1000)-contained monotone=separated" "$T/run1.txt" || { echo "[summit_gate] THE HARMONY BROKEN"; exit 6; }
 if grep -q "^the feast: absent" "$T/run1.txt"; then
     : # already checked above
 else

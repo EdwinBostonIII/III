@@ -55,6 +55,36 @@ extern @abi(c-msvc-x64) fn mb_val_a(i: u64) -> i64 from "metabole.iii"
 extern @abi(c-msvc-x64) fn mb_val_b(i: u64) -> i64 from "metabole.iii"
 extern @abi(c-msvc-x64) fn mb_feast() -> u64 from "metabole.iii"
 
+/* the crowned head's standing gaze state (arm 375's double stream) */
+extern @abi(c-msvc-x64) fn mb_gz_ok() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_head() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_nrope() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_cr_s(r: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_cr_l(r: u64, k: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_cr_e(r: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_dr_s(r: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_dr_l(r: u64, k: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_dr_e(r: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_n2_s(h: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_n2_l(h: u64, k: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_n2_e(h: u64) -> i64 from "metabole.iii"
+
+/* the pleroma's serves */
+extern @abi(c-msvc-x64) fn mb_gz_voice() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_nembd() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_xv(c: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_qark() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_bv_s(r: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_bv_l(r: u64, k: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_bv_e(r: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_eps_m() -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_eps_e() -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_hw() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_vserve() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_v_s(d: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_v_l(d: u64, k: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_gz_v_e(d: u64) -> i64 from "metabole.iii"
+
 extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
@@ -110,7 +140,7 @@ var PR_SA_S : i64 = 0i64
 var PR_SA : [u64; 3]
 
 /* the report and the scroll */
-var PR_REP : [u8; 2048]
+var PR_REP : [u8; 4096]
 var PR_REPN : u64 = 0u64
 var PR_SCROLL : u64 = 0u64
 
@@ -124,7 +154,7 @@ fn pr_slen(s: u64) -> u64 {
 }
 
 fn pr_rb(b: u8) -> i32 {
-    if PR_REPN >= 2047u64 { return 0i32 }
+    if PR_REPN >= 4095u64 { return 0i32 }
     PR_REP[PR_REPN] = b
     PR_REPN = PR_REPN + 1u64
     return 0i32
@@ -1866,6 +1896,2100 @@ fn pr_arm378() -> u64 {
     pr_rb(10u8)
     return 0u64
 }
+/* ============ arm 379: THE HARMONIA (the assembled gaze) ============ */
+
+/* All 32 omega lanes of RoPE, the general delta-angle ladder, and the
+ * first exact cross-position QK matrix of the real R1.
+ *
+ * THE LANES: omega_j = 10000^(-j/32) = omega_1^j -- the whole bank is a
+ * directed product chain off arm 378's certified omega_1.  Teeth: the
+ * FIVE POWER ROUND TRIPS ([omega_j]^(32/j) x 10000 must contain exactly
+ * 1, for j in {1,2,4,8,16}), the THREE RATIONAL ISLANDS (lanes 8/16/24
+ * are 10^-1/10^-2/10^-3 EXACTLY -- each interval must contain its
+ * rational), and strict monotone separation of all 32 lanes.
+ *
+ * THE LADDER: sin/cos at theta = delta * omega_j for ANY delta.  Halve
+ * the interval angle into the first quadrant, ride the monotone Taylor
+ * endpoints at 2^-48 outward, then SIGNED double-angle rungs (the
+ * rotation leaves the first quadrant, so intervals carry signs; both
+ * cos forms 1-2s^2 and 2c^2-1 must OVERLAP at every rung -- two engines
+ * in one identity -- and Pythagoras must contain 1 at the top).
+ *
+ * THE ASSEMBLY: per lane the EXACT integers P_j = qa*ka + qb*kb and
+ * X_j = qa*kb - qb*ka (neox pairing (d, d+32) -- the premise NAMED);
+ * R(delta) = sum_j [ P_j cos(delta w_j) + X_j sin(delta w_j) ] built as
+ * sign-magnitude 14-limb integers.  Integer x dyadic-endpoint products
+ * are EXACT, so the only width in R is the width of the circle itself.
+ * ANCHOR: R(0) must equal arm 375's standing rope total N2 LIMB-EXACT
+ * (two organs, two routes, one integer).  Then the 8x8 causal QK(t,s)
+ * matrix (Toeplitz in t-s: the standing numerators speak at every seat,
+ * positions differ only by the turn) and THE CROSS-POSITION VERDICT:
+ * the certified order of the eight deltas, straddles refused by name.
+ * Premise NAMED: base frequency theta=10000 (yarn ramp = next stair). */
+
+/* the 32 omega lanes at 2^-88 (lo/hi endpoints, 2 limbs each) */
+var PR_WJL0 : [u64; 32]
+var PR_WJL1 : [u64; 32]
+var PR_WJH0 : [u64; 32]
+var PR_WJH1 : [u64; 32]
+
+/* exact P/X integers per lane: sign + 9 limbs aligned at 2^PR_EALN */
+var PR_PJS : [i64; 32]
+var PR_PJL : [u64; 288]
+var PR_XJS : [i64; 32]
+var PR_XJL : [u64; 288]
+var PR_EALN : i64 = 0i64
+
+/* 6-limb product + 9-limb shifted term + 9-limb signed accumulator */
+var PR_P6 : [u64; 6]
+var PR_T9 : [u64; 9]
+var PR_A9S : i64 = 0i64
+var PR_A9L : [u64; 9]
+
+/* 14-limb term + signed score accumulators (lo and hi bounds) */
+var PR_T14 : [u64; 14]
+var PR_U14 : [u64; 14]
+var PR_USS : i64 = 0i64
+var PR_ALS : i64 = 0i64
+var PR_AL : [u64; 14]
+var PR_AHS : i64 = 0i64
+var PR_AH : [u64; 14]
+
+/* stored score intervals per delta 0..7: sign + 14 limbs, both bounds */
+var PR_RDLS : [i64; 8]
+var PR_RDLL : [u64; 112]
+var PR_RDHS : [i64; 8]
+var PR_RDHL : [u64; 112]
+
+/* the certified ladder output: signed sin/cos endpoint intervals */
+var PR_HSLS : i64 = 0i64
+var PR_HSL1 : u64 = 0u64
+var PR_HSL0 : u64 = 0u64
+var PR_HSHS : i64 = 0i64
+var PR_HSH1 : u64 = 0u64
+var PR_HSH0 : u64 = 0u64
+var PR_HCLS : i64 = 0i64
+var PR_HCL1 : u64 = 0u64
+var PR_HCL0 : u64 = 0u64
+var PR_HCHS : i64 = 0i64
+var PR_HCH1 : u64 = 0u64
+var PR_HCH0 : u64 = 0u64
+
+/* signed-interval multiply operands and result */
+var PR_QAS : i64 = 0i64
+var PR_QA1 : u64 = 0u64
+var PR_QA0 : u64 = 0u64
+var PR_QBS : i64 = 0i64
+var PR_QB1 : u64 = 0u64
+var PR_QB0 : u64 = 0u64
+var PR_RAS : i64 = 0i64
+var PR_RA1 : u64 = 0u64
+var PR_RA0 : u64 = 0u64
+var PR_RBS : i64 = 0i64
+var PR_RB1 : u64 = 0u64
+var PR_RB0 : u64 = 0u64
+var PR_IRLS : i64 = 0i64
+var PR_IRL1 : u64 = 0u64
+var PR_IRL0 : u64 = 0u64
+var PR_IRHS : i64 = 0i64
+var PR_IRH1 : u64 = 0u64
+var PR_IRH0 : u64 = 0u64
+
+/* signed-interval square result (nonnegative bounds) */
+var PR_SQL1 : u64 = 0u64
+var PR_SQL0 : u64 = 0u64
+var PR_SQH1 : u64 = 0u64
+var PR_SQH0 : u64 = 0u64
+
+/* teeth counters + verdict order */
+var PR_PYC : u64 = 0u64
+var PR_TFC : u64 = 0u64
+var PR_HSEP : u64 = 0u64
+var PR_HSTR : u64 = 0u64
+var PR_ORD : [u64; 8]
+var PR_HFLESH : u64 = 0u64
+
+/* compare PR_Z (3 limbs) against (b2,b1,b0) */
+fn pr_cmp3z(b2: u64, b1: u64, b0: u64) -> i64 {
+    let a2 : u64 = PR_Z[2]
+    let a1 : u64 = PR_Z[1]
+    let a0 : u64 = PR_Z[0]
+    if a2 > b2 { return 1i64 }
+    if a2 < b2 { return 0i64 - 1i64 }
+    if a1 > b1 { return 1i64 }
+    if a1 < b1 { return 0i64 - 1i64 }
+    if a0 > b0 { return 1i64 }
+    if a0 < b0 { return 0i64 - 1i64 }
+    return 0i64
+}
+
+/* the lane bank + five round trips + three rational islands */
+fn pr_har_lanes() -> u64 {
+    if (PR_OMH1 | PR_OMH0) == 0u64 { return 1u64 }
+    PR_WJL1[0] = 1u64 << 24u64
+    PR_WJL0[0] = 0u64
+    PR_WJH1[0] = 1u64 << 24u64
+    PR_WJH0[0] = 0u64
+    let mut j : u64 = 1u64
+    while j < 32u64 {
+        pr_mul128(PR_WJL1[j - 1u64], PR_WJL0[j - 1u64], PR_OML1, PR_OML0)
+        if pr_wshr88() != 0i32 { return 1u64 }
+        PR_WJL1[j] = PR_MHI
+        PR_WJL0[j] = PR_MLO
+        pr_mul128(PR_WJH1[j - 1u64], PR_WJH0[j - 1u64], PR_OMH1, PR_OMH0)
+        if pr_wshr88() != 0i32 { return 1u64 }
+        if PR_STK != 0u64 { pr_inc128() }
+        PR_WJH1[j] = PR_MHI
+        PR_WJH0[j] = PR_MLO
+        /* strict monotone separation: hi_j < lo_{j-1} */
+        let a1 : u64 = PR_WJH1[j]
+        let a0 : u64 = PR_WJH0[j]
+        let b1 : u64 = PR_WJL1[j - 1u64]
+        let b0 : u64 = PR_WJL0[j - 1u64]
+        if pr_cmp128(a1, a0, b1, b0) >= 0i64 { return 1u64 }
+        j = j + 1u64
+    }
+    /* the five power round trips */
+    let mut t : u64 = 0u64
+    while t < 5u64 {
+        let mut lane : u64 = 1u64
+        if t == 1u64 { lane = 2u64 }
+        if t == 2u64 { lane = 4u64 }
+        if t == 3u64 { lane = 8u64 }
+        if t == 4u64 { lane = 16u64 }
+        let nsq : u64 = 5u64 - t
+        let mut wl1 : u64 = PR_WJL1[lane]
+        let mut wl0 : u64 = PR_WJL0[lane]
+        let mut wh1 : u64 = PR_WJH1[lane]
+        let mut wh0 : u64 = PR_WJH0[lane]
+        let mut s : u64 = 0u64
+        while s < nsq {
+            pr_mul128(wl1, wl0, wl1, wl0)
+            if pr_wshr88() != 0i32 { return 1u64 }
+            wl1 = PR_MHI
+            wl0 = PR_MLO
+            pr_mul128(wh1, wh0, wh1, wh0)
+            if pr_wshr88() != 0i32 { return 1u64 }
+            if PR_STK != 0u64 { pr_inc128() }
+            wh1 = PR_MHI
+            wh0 = PR_MLO
+            s = s + 1u64
+        }
+        pr_mul128by64(wl1, wl0, 10000u64)
+        if pr_cmp3z(0u64, 1u64 << 24u64, 0u64) > 0i64 { return 1u64 }
+        pr_mul128by64(wh1, wh0, 10000u64)
+        if pr_cmp3z(0u64, 1u64 << 24u64, 0u64) < 0i64 { return 1u64 }
+        t = t + 1u64
+    }
+    /* the rational islands: lanes 8/16/24 contain 1/10, 1/100, 1/1000 */
+    let mut t2 : u64 = 0u64
+    while t2 < 3u64 {
+        let mut lane2 : u64 = 8u64
+        let mut mul : u64 = 10u64
+        if t2 == 1u64 { lane2 = 16u64   mul = 100u64 }
+        if t2 == 2u64 { lane2 = 24u64   mul = 1000u64 }
+        pr_mul128by64(PR_WJL1[lane2], PR_WJL0[lane2], mul)
+        if pr_cmp3z(0u64, 1u64 << 24u64, 0u64) > 0i64 { return 1u64 }
+        pr_mul128by64(PR_WJH1[lane2], PR_WJH0[lane2], mul)
+        if pr_cmp3z(0u64, 1u64 << 24u64, 0u64) < 0i64 { return 1u64 }
+        t2 = t2 + 1u64
+    }
+    return 0u64
+}
+
+/* P6 += (hi:lo) at limb position pos, carry rippled */
+fn pr_p6_addat(pos: u64, lo: u64, hi: u64) -> i32 {
+    let s0 : u64 = PR_P6[pos] + lo
+    let mut c : u64 = 0u64
+    if s0 < lo { c = 1u64 }
+    PR_P6[pos] = s0
+    let a : u64 = PR_P6[pos + 1u64] + hi
+    let mut c2 : u64 = 0u64
+    if a < hi { c2 = 1u64 }
+    let b : u64 = a + c
+    if b < c { c2 = c2 + 1u64 }
+    PR_P6[pos + 1u64] = b
+    let mut k : u64 = pos + 2u64
+    let mut cr : u64 = c2
+    while cr != 0u64 {
+        if k >= 6u64 { cr = 0u64 }
+        if cr != 0u64 {
+            let d : u64 = PR_P6[k] + 1u64
+            PR_P6[k] = d
+            cr = 0u64
+            if d == 0u64 { cr = 1u64 }
+            k = k + 1u64
+        }
+    }
+    return 0i32
+}
+
+/* PR_P6 = (a2:a1:a0) * (b2:b1:b0), exact 384-bit */
+fn pr_m33(a0: u64, a1: u64, a2: u64, b0: u64, b1: u64, b2: u64) -> i32 {
+    let mut k : u64 = 0u64
+    while k < 6u64 {
+        PR_P6[k] = 0u64
+        k = k + 1u64
+    }
+    pr_mul64(a0, b0)
+    pr_p6_addat(0u64, PR_MLO, PR_MHI)
+    pr_mul64(a0, b1)
+    pr_p6_addat(1u64, PR_MLO, PR_MHI)
+    pr_mul64(a0, b2)
+    pr_p6_addat(2u64, PR_MLO, PR_MHI)
+    pr_mul64(a1, b0)
+    pr_p6_addat(1u64, PR_MLO, PR_MHI)
+    pr_mul64(a1, b1)
+    pr_p6_addat(2u64, PR_MLO, PR_MHI)
+    pr_mul64(a1, b2)
+    pr_p6_addat(3u64, PR_MLO, PR_MHI)
+    pr_mul64(a2, b0)
+    pr_p6_addat(2u64, PR_MLO, PR_MHI)
+    pr_mul64(a2, b1)
+    pr_p6_addat(3u64, PR_MLO, PR_MHI)
+    pr_mul64(a2, b2)
+    pr_p6_addat(4u64, PR_MLO, PR_MHI)
+    return 0i32
+}
+
+/* T9 = P6 << sh (sh <= 180) */
+fn pr_t9_load_shl(sh: u64) -> u64 {
+    let mut k : u64 = 0u64
+    while k < 9u64 {
+        PR_T9[k] = 0u64
+        k = k + 1u64
+    }
+    if sh > 180u64 { return 1u64 }
+    let w : u64 = sh / 64u64
+    let b : u64 = sh % 64u64
+    let mut k2 : u64 = 0u64
+    while k2 < 6u64 {
+        let v : u64 = PR_P6[k2]
+        PR_T9[k2 + w] = PR_T9[k2 + w] | (v << b)
+        if b != 0u64 {
+            PR_T9[k2 + w + 1u64] = PR_T9[k2 + w + 1u64] | (v >> (64u64 - b))
+        }
+        k2 = k2 + 1u64
+    }
+    return 0u64
+}
+
+/* (PR_A9S, PR_A9L) += ss * T9, sign-magnitude */
+fn pr_a9_add(ss: i64) -> i32 {
+    if ss == 0i64 { return 0i32 }
+    let mut nz : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < 9u64 {
+        nz = nz | PR_T9[k]
+        k = k + 1u64
+    }
+    if nz == 0u64 { return 0i32 }
+    if PR_A9S == 0i64 {
+        PR_A9S = ss
+        k = 0u64
+        while k < 9u64 {
+            PR_A9L[k] = PR_T9[k]
+            k = k + 1u64
+        }
+        return 0i32
+    }
+    if PR_A9S == ss {
+        let mut carry : u64 = 0u64
+        k = 0u64
+        while k < 9u64 {
+            let a : u64 = PR_A9L[k] + PR_T9[k]
+            let mut c2 : u64 = 0u64
+            if a < PR_T9[k] { c2 = 1u64 }
+            let b : u64 = a + carry
+            if b < carry { c2 = c2 + 1u64 }
+            PR_A9L[k] = b
+            carry = c2
+            k = k + 1u64
+        }
+        if carry != 0u64 { return 1i32 }
+        return 0i32
+    }
+    let mut cmp : i64 = 0i64
+    k = 9u64
+    while k != 0u64 {
+        k = k - 1u64
+        if cmp == 0i64 {
+            let x : u64 = PR_A9L[k]
+            let y : u64 = PR_T9[k]
+            if x > y { cmp = 1i64 }
+            if x < y { cmp = 0i64 - 1i64 }
+        }
+    }
+    if cmp == 0i64 {
+        PR_A9S = 0i64
+        k = 0u64
+        while k < 9u64 {
+            PR_A9L[k] = 0u64
+            k = k + 1u64
+        }
+        return 0i32
+    }
+    if cmp > 0i64 {
+        let mut borrow : u64 = 0u64
+        k = 0u64
+        while k < 9u64 {
+            let d : u64 = PR_A9L[k] - PR_T9[k]
+            let mut b2 : u64 = 0u64
+            if PR_A9L[k] < PR_T9[k] { b2 = 1u64 }
+            let e : u64 = d - borrow
+            if d < borrow { b2 = b2 + 1u64 }
+            PR_A9L[k] = e
+            borrow = b2
+            k = k + 1u64
+        }
+        return 0i32
+    }
+    let mut borrow2 : u64 = 0u64
+    k = 0u64
+    while k < 9u64 {
+        let d3 : u64 = PR_T9[k] - PR_A9L[k]
+        let mut b3 : u64 = 0u64
+        if PR_T9[k] < PR_A9L[k] { b3 = 1u64 }
+        let e3 : u64 = d3 - borrow2
+        if d3 < borrow2 { b3 = b3 + 1u64 }
+        PR_A9L[k] = e3
+        borrow2 = b3
+        k = k + 1u64
+    }
+    PR_A9S = ss
+    return 0i32
+}
+
+/* one exact product q-rope-row * k-rope-row into the 9-limb accumulator */
+fn pr_har_term(qr: u64, kr: u64, sgnm: i64) -> u64 {
+    let qs : i64 = mb_gz_cr_s(qr)
+    let ks : i64 = mb_gz_dr_s(kr)
+    if qs == 0i64 { return 0u64 }
+    if ks == 0i64 { return 0u64 }
+    let e : i64 = mb_gz_cr_e(qr) + mb_gz_dr_e(kr)
+    let sh : i64 = e - PR_EALN
+    if sh < 0i64 { return 1u64 }
+    if sh > 180i64 { return 1u64 }
+    pr_m33(mb_gz_cr_l(qr, 0u64), mb_gz_cr_l(qr, 1u64), mb_gz_cr_l(qr, 2u64), mb_gz_dr_l(kr, 0u64), mb_gz_dr_l(kr, 1u64), mb_gz_dr_l(kr, 2u64))
+    if pr_t9_load_shl(sh as u64) != 0u64 { return 1u64 }
+    let mut sg : i64 = qs
+    if ks < 0i64 { sg = 0i64 - sg }
+    if sgnm < 0i64 { sg = 0i64 - sg }
+    if pr_a9_add(sg) != 0i32 { return 1u64 }
+    return 0u64
+}
+
+/* the exact P/X integers, globally aligned.  0 ok / 1 red / 2 guard */
+fn pr_har_px() -> u64 {
+    let mut emin : i64 = 1000000i64
+    let mut emax : i64 = 0i64 - 1000000i64
+    let mut j : u64 = 0u64
+    while j < 32u64 {
+        let mut t : u64 = 0u64
+        while t < 4u64 {
+            let mut qr : u64 = j
+            if t >= 2u64 { qr = j + 32u64 }
+            let mut kr : u64 = j
+            if t == 1u64 { kr = j + 32u64 }
+            if t == 3u64 { kr = j + 32u64 }
+            let qs : i64 = mb_gz_cr_s(qr)
+            let ks : i64 = mb_gz_dr_s(kr)
+            if qs != 0i64 {
+                if ks != 0i64 {
+                    let e : i64 = mb_gz_cr_e(qr) + mb_gz_dr_e(kr)
+                    if e < emin { emin = e }
+                    if e > emax { emax = e }
+                }
+            }
+            t = t + 1u64
+        }
+        j = j + 1u64
+    }
+    if emin == 1000000i64 { return 1u64 }
+    let spread : i64 = emax - emin
+    if spread > 180i64 { return 2u64 }
+    PR_EALN = emin
+    j = 0u64
+    while j < 32u64 {
+        PR_A9S = 0i64
+        let mut k : u64 = 0u64
+        while k < 9u64 {
+            PR_A9L[k] = 0u64
+            k = k + 1u64
+        }
+        if pr_har_term(j, j, 1i64) != 0u64 { return 1u64 }
+        if pr_har_term(j + 32u64, j + 32u64, 1i64) != 0u64 { return 1u64 }
+        PR_PJS[j] = PR_A9S
+        k = 0u64
+        while k < 9u64 {
+            PR_PJL[j * 9u64 + k] = PR_A9L[k]
+            k = k + 1u64
+        }
+        PR_A9S = 0i64
+        k = 0u64
+        while k < 9u64 {
+            PR_A9L[k] = 0u64
+            k = k + 1u64
+        }
+        if pr_har_term(j, j + 32u64, 1i64) != 0u64 { return 1u64 }
+        if pr_har_term(j + 32u64, j, 0i64 - 1i64) != 0u64 { return 1u64 }
+        PR_XJS[j] = PR_A9S
+        k = 0u64
+        while k < 9u64 {
+            PR_XJL[j * 9u64 + k] = PR_A9L[k]
+            k = k + 1u64
+        }
+        j = j + 1u64
+    }
+    return 0u64
+}
+
+/* signed endpoint compare: (sa, a1:a0) vs (sb, b1:b0) */
+fn pr_se_cmp(sa: i64, a1: u64, a0: u64, sb: i64, b1: u64, b0: u64) -> i64 {
+    if sa > sb { return 1i64 }
+    if sa < sb { return 0i64 - 1i64 }
+    if sa == 0i64 { return 0i64 }
+    let c : i64 = pr_cmp128(a1, a0, b1, b0)
+    if sa < 0i64 { return 0i64 - c }
+    return c
+}
+
+/* directed signed endpoint product into PR_P_S/PR_P_H/PR_P_L.
+ * dir 0 = round toward -inf, 1 = toward +inf */
+fn pr_sedp(sa: i64, a1: u64, a0: u64, sb: i64, b1: u64, b0: u64, dir: u64) -> i32 {
+    if sa == 0i64 {
+        PR_P_S = 0i64
+        PR_P_H = 0u64
+        PR_P_L = 0u64
+        return 0i32
+    }
+    if sb == 0i64 {
+        PR_P_S = 0i64
+        PR_P_H = 0u64
+        PR_P_L = 0u64
+        return 0i32
+    }
+    let mut rs : i64 = 1i64
+    if sa != sb { rs = 0i64 - 1i64 }
+    pr_mul128(a1, a0, b1, b0)
+    if pr_wshr88() != 0i32 { return 1i32 }
+    let mut up : u64 = 0u64
+    if rs > 0i64 {
+        if dir == 1u64 { up = 1u64 }
+    }
+    if rs < 0i64 {
+        if dir == 0u64 { up = 1u64 }
+    }
+    if up == 1u64 {
+        if PR_STK != 0u64 { pr_inc128() }
+    }
+    PR_P_S = rs
+    PR_P_H = PR_MHI
+    PR_P_L = PR_MLO
+    if (PR_MHI | PR_MLO) == 0u64 { PR_P_S = 0i64 }
+    return 0i32
+}
+
+/* signed interval product [QA,QB] x [RA,RB] -> [IRL, IRH] */
+fn pr_siv_mul() -> i32 {
+    let mut p : u64 = 0u64
+    while p < 8u64 {
+        let cand : u64 = p % 4u64
+        let dir : u64 = p / 4u64
+        let mut xs : i64 = PR_QAS
+        let mut x1 : u64 = PR_QA1
+        let mut x0 : u64 = PR_QA0
+        if cand >= 2u64 {
+            xs = PR_QBS
+            x1 = PR_QB1
+            x0 = PR_QB0
+        }
+        let mut ys : i64 = PR_RAS
+        let mut y1 : u64 = PR_RA1
+        let mut y0 : u64 = PR_RA0
+        if (cand & 1u64) == 1u64 {
+            ys = PR_RBS
+            y1 = PR_RB1
+            y0 = PR_RB0
+        }
+        if pr_sedp(xs, x1, x0, ys, y1, y0, dir) != 0i32 { return 1i32 }
+        if dir == 0u64 {
+            if p == 0u64 {
+                PR_IRLS = PR_P_S
+                PR_IRL1 = PR_P_H
+                PR_IRL0 = PR_P_L
+            }
+            if p != 0u64 {
+                if pr_se_cmp(PR_P_S, PR_P_H, PR_P_L, PR_IRLS, PR_IRL1, PR_IRL0) < 0i64 {
+                    PR_IRLS = PR_P_S
+                    PR_IRL1 = PR_P_H
+                    PR_IRL0 = PR_P_L
+                }
+            }
+        }
+        if dir == 1u64 {
+            if p == 4u64 {
+                PR_IRHS = PR_P_S
+                PR_IRH1 = PR_P_H
+                PR_IRH0 = PR_P_L
+            }
+            if p != 4u64 {
+                if pr_se_cmp(PR_P_S, PR_P_H, PR_P_L, PR_IRHS, PR_IRH1, PR_IRH0) > 0i64 {
+                    PR_IRHS = PR_P_S
+                    PR_IRH1 = PR_P_H
+                    PR_IRH0 = PR_P_L
+                }
+            }
+        }
+        p = p + 1u64
+    }
+    return 0i32
+}
+
+/* signed interval square -> nonnegative [SQL, SQH] */
+fn pr_siv_sq(ls: i64, l1: u64, l0: u64, hs: i64, h1: u64, h0: u64) -> i32 {
+    if ls >= 0i64 {
+        pr_mul128(l1, l0, l1, l0)
+        if pr_wshr88() != 0i32 { return 1i32 }
+        PR_SQL1 = PR_MHI
+        PR_SQL0 = PR_MLO
+        pr_mul128(h1, h0, h1, h0)
+        if pr_wshr88() != 0i32 { return 1i32 }
+        if PR_STK != 0u64 { pr_inc128() }
+        PR_SQH1 = PR_MHI
+        PR_SQH0 = PR_MLO
+        return 0i32
+    }
+    if hs <= 0i64 {
+        pr_mul128(h1, h0, h1, h0)
+        if pr_wshr88() != 0i32 { return 1i32 }
+        PR_SQL1 = PR_MHI
+        PR_SQL0 = PR_MLO
+        pr_mul128(l1, l0, l1, l0)
+        if pr_wshr88() != 0i32 { return 1i32 }
+        if PR_STK != 0u64 { pr_inc128() }
+        PR_SQH1 = PR_MHI
+        PR_SQH0 = PR_MLO
+        return 0i32
+    }
+    let mut m1 : u64 = l1
+    let mut m0 : u64 = l0
+    if pr_cmp128(h1, h0, l1, l0) > 0i64 {
+        m1 = h1
+        m0 = h0
+    }
+    PR_SQL1 = 0u64
+    PR_SQL0 = 0u64
+    pr_mul128(m1, m0, m1, m0)
+    if pr_wshr88() != 0i32 { return 1i32 }
+    if PR_STK != 0u64 { pr_inc128() }
+    PR_SQH1 = PR_MHI
+    PR_SQH0 = PR_MLO
+    return 0i32
+}
+
+/* signed 2^88 - (m1:m0) into PR_P_* (exact) */
+fn pr_sfrom1(m1: u64, m0: u64) -> i32 {
+    let one1 : u64 = 1u64 << 24u64
+    let c : i64 = pr_cmp128(m1, m0, one1, 0u64)
+    if c == 0i64 {
+        PR_P_S = 0i64
+        PR_P_H = 0u64
+        PR_P_L = 0u64
+        return 0i32
+    }
+    if c < 0i64 {
+        let mut b : u64 = 0u64
+        let r0 : u64 = 0u64 - m0
+        if 0u64 < m0 { b = 1u64 }
+        PR_P_S = 1i64
+        PR_P_L = r0
+        PR_P_H = one1 - m1 - b
+        return 0i32
+    }
+    PR_P_S = 0i64 - 1i64
+    PR_P_L = m0
+    PR_P_H = m1 - one1
+    return 0i32
+}
+
+/* one signed doubling rung on ([sin],[cos]); both cos forms must overlap */
+fn pr_har_dbl() -> u64 {
+    PR_QAS = PR_HSLS
+    PR_QA1 = PR_HSL1
+    PR_QA0 = PR_HSL0
+    PR_QBS = PR_HSHS
+    PR_QB1 = PR_HSH1
+    PR_QB0 = PR_HSH0
+    PR_RAS = PR_HCLS
+    PR_RA1 = PR_HCL1
+    PR_RA0 = PR_HCL0
+    PR_RBS = PR_HCHS
+    PR_RB1 = PR_HCH1
+    PR_RB0 = PR_HCH0
+    if pr_siv_mul() != 0i32 { return 1u64 }
+    let s2ls : i64 = PR_IRLS
+    let s2l1 : u64 = (PR_IRL1 << 1u64) | (PR_IRL0 >> 63u64)
+    let s2l0 : u64 = PR_IRL0 << 1u64
+    let s2hs : i64 = PR_IRHS
+    let s2h1 : u64 = (PR_IRH1 << 1u64) | (PR_IRH0 >> 63u64)
+    let s2h0 : u64 = PR_IRH0 << 1u64
+    if pr_siv_sq(PR_HSLS, PR_HSL1, PR_HSL0, PR_HSHS, PR_HSH1, PR_HSH0) != 0i32 { return 1u64 }
+    let q1 : u64 = (PR_SQH1 << 1u64) | (PR_SQH0 >> 63u64)
+    let q0 : u64 = PR_SQH0 << 1u64
+    pr_sfrom1(q1, q0)
+    let als : i64 = PR_P_S
+    let al1 : u64 = PR_P_H
+    let al0 : u64 = PR_P_L
+    let r1x : u64 = (PR_SQL1 << 1u64) | (PR_SQL0 >> 63u64)
+    let r0x : u64 = PR_SQL0 << 1u64
+    pr_sfrom1(r1x, r0x)
+    let ahs : i64 = PR_P_S
+    let ah1 : u64 = PR_P_H
+    let ah0 : u64 = PR_P_L
+    if pr_siv_sq(PR_HCLS, PR_HCL1, PR_HCL0, PR_HCHS, PR_HCH1, PR_HCH0) != 0i32 { return 1u64 }
+    let u1 : u64 = (PR_SQL1 << 1u64) | (PR_SQL0 >> 63u64)
+    let u0 : u64 = PR_SQL0 << 1u64
+    pr_sfrom1(u1, u0)
+    let bls : i64 = 0i64 - PR_P_S
+    let bl1 : u64 = PR_P_H
+    let bl0 : u64 = PR_P_L
+    let v1 : u64 = (PR_SQH1 << 1u64) | (PR_SQH0 >> 63u64)
+    let v0 : u64 = PR_SQH0 << 1u64
+    pr_sfrom1(v1, v0)
+    let bhs : i64 = 0i64 - PR_P_S
+    let bh1 : u64 = PR_P_H
+    let bh0 : u64 = PR_P_L
+    if pr_se_cmp(als, al1, al0, bhs, bh1, bh0) > 0i64 { return 1u64 }
+    if pr_se_cmp(bls, bl1, bl0, ahs, ah1, ah0) > 0i64 { return 1u64 }
+    PR_TFC = PR_TFC + 1u64
+    let mut cls : i64 = als
+    let mut cl1 : u64 = al1
+    let mut cl0 : u64 = al0
+    if pr_se_cmp(bls, bl1, bl0, als, al1, al0) > 0i64 {
+        cls = bls
+        cl1 = bl1
+        cl0 = bl0
+    }
+    let mut chs : i64 = ahs
+    let mut ch1 : u64 = ah1
+    let mut ch0 : u64 = ah0
+    if pr_se_cmp(bhs, bh1, bh0, ahs, ah1, ah0) < 0i64 {
+        chs = bhs
+        ch1 = bh1
+        ch0 = bh0
+    }
+    PR_HSLS = s2ls
+    PR_HSL1 = s2l1
+    PR_HSL0 = s2l0
+    PR_HSHS = s2hs
+    PR_HSH1 = s2h1
+    PR_HSH0 = s2h0
+    PR_HCLS = cls
+    PR_HCL1 = cl1
+    PR_HCL0 = cl0
+    PR_HCHS = chs
+    PR_HCH1 = ch1
+    PR_HCH0 = ch0
+    return 0u64
+}
+
+/* the general delta-angle ladder: lane j, delta dd -> signed [sin],[cos] */
+fn pr_har_ladder(j: u64, dd: u64) -> u64 {
+    if dd == 0u64 {
+        PR_HSLS = 0i64
+        PR_HSL1 = 0u64
+        PR_HSL0 = 0u64
+        PR_HSHS = 0i64
+        PR_HSH1 = 0u64
+        PR_HSH0 = 0u64
+        PR_HCLS = 1i64
+        PR_HCL1 = 1u64 << 24u64
+        PR_HCL0 = 0u64
+        PR_HCHS = 1i64
+        PR_HCH1 = 1u64 << 24u64
+        PR_HCH0 = 0u64
+        return 0u64
+    }
+    pr_mul128by64(PR_WJL1[j], PR_WJL0[j], dd)
+    if PR_Z[2] != 0u64 { return 1u64 }
+    let tl1 : u64 = PR_Z[1]
+    let tl0 : u64 = PR_Z[0]
+    pr_mul128by64(PR_WJH1[j], PR_WJH0[j], dd)
+    if PR_Z[2] != 0u64 { return 1u64 }
+    let th1 : u64 = PR_Z[1]
+    let th0 : u64 = PR_Z[0]
+    /* choose the halving depth and the outward 2^-48 endpoints */
+    let mut hh : u64 = 0u64
+    let mut m48l : u64 = 0u64
+    let mut m48h : u64 = 0u64
+    let mut ok : u64 = 0u64
+    while ok == 0u64 {
+        if hh > 6u64 { return 1u64 }
+        let mut yl1 : u64 = tl1
+        let mut yl0 : u64 = tl0
+        let mut yh1 : u64 = th1
+        let mut yh0 : u64 = th0
+        let mut stk : u64 = 0u64
+        if hh != 0u64 {
+            yl0 = (tl0 >> hh) | (tl1 << (64u64 - hh))
+            yl1 = tl1 >> hh
+            stk = th0 & ((1u64 << hh) - 1u64)
+            yh0 = (th0 >> hh) | (th1 << (64u64 - hh))
+            yh1 = th1 >> hh
+        }
+        m48l = (yl1 << 24u64) | (yl0 >> 40u64)
+        m48h = (yh1 << 24u64) | (yh0 >> 40u64)
+        let dropped : u64 = (yh0 & 1099511627775u64) | stk
+        if dropped != 0u64 { m48h = m48h + 1u64 }
+        let lim : u64 = 1u64 << 47u64
+        if m48h <= lim { ok = 1u64 }
+        if ok == 0u64 { hh = hh + 1u64 }
+    }
+    /* base: monotone Taylor endpoints on the first quadrant */
+    if pr_sincos(m48l, 48u64) != 0i32 { return 1u64 }
+    let bsl1 : u64 = PR_SN1
+    let bsl0 : u64 = PR_SN0
+    let bch1 : u64 = PR_CX1
+    let bch0 : u64 = PR_CX0
+    if pr_sincos(m48h, 48u64) != 0i32 { return 1u64 }
+    let bsh1 : u64 = PR_SX1
+    let bsh0 : u64 = PR_SX0
+    let bcl1 : u64 = PR_CN1
+    let bcl0 : u64 = PR_CN0
+    PR_HSLS = 1i64
+    if (bsl1 | bsl0) == 0u64 { PR_HSLS = 0i64 }
+    PR_HSL1 = bsl1
+    PR_HSL0 = bsl0
+    PR_HSHS = 1i64
+    if (bsh1 | bsh0) == 0u64 { PR_HSHS = 0i64 }
+    PR_HSH1 = bsh1
+    PR_HSH0 = bsh0
+    PR_HCLS = 1i64
+    if (bcl1 | bcl0) == 0u64 { PR_HCLS = 0i64 }
+    PR_HCL1 = bcl1
+    PR_HCL0 = bcl0
+    PR_HCHS = 1i64
+    if (bch1 | bch0) == 0u64 { PR_HCHS = 0i64 }
+    PR_HCH1 = bch1
+    PR_HCH0 = bch0
+    /* the signed doublings back up to theta */
+    let mut q : u64 = 0u64
+    while q < hh {
+        if pr_har_dbl() != 0u64 { return 1u64 }
+        q = q + 1u64
+    }
+    /* pythagoras must contain 1 */
+    if pr_siv_sq(PR_HSLS, PR_HSL1, PR_HSL0, PR_HSHS, PR_HSH1, PR_HSH0) != 0i32 { return 1u64 }
+    let pa_l1 : u64 = PR_SQL1
+    let pa_l0 : u64 = PR_SQL0
+    let pa_h1 : u64 = PR_SQH1
+    let pa_h0 : u64 = PR_SQH0
+    if pr_siv_sq(PR_HCLS, PR_HCL1, PR_HCL0, PR_HCHS, PR_HCH1, PR_HCH0) != 0i32 { return 1u64 }
+    let mut sl0 : u64 = pa_l0 + PR_SQL0
+    let mut sl1 : u64 = pa_l1 + PR_SQL1
+    if sl0 < PR_SQL0 { sl1 = sl1 + 1u64 }
+    let mut sh0 : u64 = pa_h0 + PR_SQH0
+    let mut sh1 : u64 = pa_h1 + PR_SQH1
+    if sh0 < PR_SQH0 { sh1 = sh1 + 1u64 }
+    let one1 : u64 = 1u64 << 24u64
+    if pr_cmp128(sl1, sl0, one1, 0u64) > 0i64 { return 1u64 }
+    if pr_cmp128(sh1, sh0, one1, 0u64) < 0i64 { return 1u64 }
+    PR_PYC = PR_PYC + 1u64
+    return 0u64
+}
+
+/* T14 += (hi:lo) at position pos */
+fn pr_t14_addat(pos: u64, lo: u64, hi: u64) -> i32 {
+    let s0 : u64 = PR_T14[pos] + lo
+    let mut c : u64 = 0u64
+    if s0 < lo { c = 1u64 }
+    PR_T14[pos] = s0
+    let a : u64 = PR_T14[pos + 1u64] + hi
+    let mut c2 : u64 = 0u64
+    if a < hi { c2 = 1u64 }
+    let b : u64 = a + c
+    if b < c { c2 = c2 + 1u64 }
+    PR_T14[pos + 1u64] = b
+    let mut k : u64 = pos + 2u64
+    let mut cr : u64 = c2
+    while cr != 0u64 {
+        if k >= 14u64 { cr = 0u64 }
+        if cr != 0u64 {
+            let d : u64 = PR_T14[k] + 1u64
+            PR_T14[k] = d
+            cr = 0u64
+            if d == 0u64 { cr = 1u64 }
+            k = k + 1u64
+        }
+    }
+    return 0i32
+}
+
+/* T14 = |P or X row j| * (m1:m0), exact */
+fn pr_mul_9x2(which: u64, j: u64, m1: u64, m0: u64) -> i32 {
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_T14[k] = 0u64
+        k = k + 1u64
+    }
+    let mut i : u64 = 0u64
+    while i < 9u64 {
+        let mut v : u64 = PR_PJL[j * 9u64 + i]
+        if which == 1u64 { v = PR_XJL[j * 9u64 + i] }
+        if v != 0u64 {
+            pr_mul64(v, m0)
+            pr_t14_addat(i, PR_MLO, PR_MHI)
+            if m1 != 0u64 {
+                pr_mul64(v, m1)
+                pr_t14_addat(i + 1u64, PR_MLO, PR_MHI)
+            }
+        }
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* (acc dst 0=lo,1=hi) += ss * T14, sign-magnitude via the U14 mirror */
+fn pr_s14_add(dst: u64, ss: i64) -> i32 {
+    if ss == 0i64 { return 0i32 }
+    let mut nz : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        nz = nz | PR_T14[k]
+        k = k + 1u64
+    }
+    if nz == 0u64 { return 0i32 }
+    PR_USS = PR_ALS
+    if dst == 1u64 { PR_USS = PR_AHS }
+    k = 0u64
+    while k < 14u64 {
+        let mut v : u64 = PR_AL[k]
+        if dst == 1u64 { v = PR_AH[k] }
+        PR_U14[k] = v
+        k = k + 1u64
+    }
+    let mut done : u64 = 0u64
+    if PR_USS == 0i64 {
+        PR_USS = ss
+        k = 0u64
+        while k < 14u64 {
+            PR_U14[k] = PR_T14[k]
+            k = k + 1u64
+        }
+        done = 1u64
+    }
+    if done == 0u64 {
+        if PR_USS == ss {
+            let mut carry : u64 = 0u64
+            k = 0u64
+            while k < 14u64 {
+                let a : u64 = PR_U14[k] + PR_T14[k]
+                let mut c2 : u64 = 0u64
+                if a < PR_T14[k] { c2 = 1u64 }
+                let b : u64 = a + carry
+                if b < carry { c2 = c2 + 1u64 }
+                PR_U14[k] = b
+                carry = c2
+                k = k + 1u64
+            }
+            if carry != 0u64 { return 1i32 }
+        }
+        if PR_USS != ss {
+            let mut cmp : i64 = 0i64
+            k = 14u64
+            while k != 0u64 {
+                k = k - 1u64
+                if cmp == 0i64 {
+                    let x : u64 = PR_U14[k]
+                    let y : u64 = PR_T14[k]
+                    if x > y { cmp = 1i64 }
+                    if x < y { cmp = 0i64 - 1i64 }
+                }
+            }
+            if cmp == 0i64 {
+                PR_USS = 0i64
+                k = 0u64
+                while k < 14u64 {
+                    PR_U14[k] = 0u64
+                    k = k + 1u64
+                }
+            }
+            if cmp > 0i64 {
+                let mut borrow : u64 = 0u64
+                k = 0u64
+                while k < 14u64 {
+                    let d : u64 = PR_U14[k] - PR_T14[k]
+                    let mut b2 : u64 = 0u64
+                    if PR_U14[k] < PR_T14[k] { b2 = 1u64 }
+                    let e : u64 = d - borrow
+                    if d < borrow { b2 = b2 + 1u64 }
+                    PR_U14[k] = e
+                    borrow = b2
+                    k = k + 1u64
+                }
+            }
+            if cmp < 0i64 {
+                let mut borrow2 : u64 = 0u64
+                k = 0u64
+                while k < 14u64 {
+                    let d3 : u64 = PR_T14[k] - PR_U14[k]
+                    let mut b3 : u64 = 0u64
+                    if PR_T14[k] < PR_U14[k] { b3 = 1u64 }
+                    let e3 : u64 = d3 - borrow2
+                    if d3 < borrow2 { b3 = b3 + 1u64 }
+                    PR_U14[k] = e3
+                    borrow2 = b3
+                    k = k + 1u64
+                }
+                PR_USS = ss
+            }
+        }
+    }
+    if dst == 0u64 {
+        PR_ALS = PR_USS
+        k = 0u64
+        while k < 14u64 {
+            PR_AL[k] = PR_U14[k]
+            k = k + 1u64
+        }
+    }
+    if dst == 1u64 {
+        PR_AHS = PR_USS
+        k = 0u64
+        while k < 14u64 {
+            PR_AH[k] = PR_U14[k]
+            k = k + 1u64
+        }
+    }
+    return 0i32
+}
+
+/* assemble R(dd): both bounds, exact integer x endpoint products */
+fn pr_har_asm(dd: u64) -> u64 {
+    PR_ALS = 0i64
+    PR_AHS = 0i64
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_AL[k] = 0u64
+        PR_AH[k] = 0u64
+        k = k + 1u64
+    }
+    let mut j : u64 = 0u64
+    while j < 32u64 {
+        if pr_har_ladder(j, dd) != 0u64 { return 1u64 }
+        let ps : i64 = PR_PJS[j]
+        if ps != 0i64 {
+            let mut es : i64 = PR_HCLS
+            let mut e1 : u64 = PR_HCL1
+            let mut e0 : u64 = PR_HCL0
+            if ps < 0i64 {
+                es = PR_HCHS
+                e1 = PR_HCH1
+                e0 = PR_HCH0
+            }
+            if es != 0i64 {
+                pr_mul_9x2(0u64, j, e1, e0)
+                let mut sg : i64 = ps
+                if es < 0i64 { sg = 0i64 - sg }
+                if pr_s14_add(0u64, sg) != 0i32 { return 1u64 }
+            }
+            let mut fs : i64 = PR_HCHS
+            let mut f1 : u64 = PR_HCH1
+            let mut f0 : u64 = PR_HCH0
+            if ps < 0i64 {
+                fs = PR_HCLS
+                f1 = PR_HCL1
+                f0 = PR_HCL0
+            }
+            if fs != 0i64 {
+                pr_mul_9x2(0u64, j, f1, f0)
+                let mut sg2 : i64 = ps
+                if fs < 0i64 { sg2 = 0i64 - sg2 }
+                if pr_s14_add(1u64, sg2) != 0i32 { return 1u64 }
+            }
+        }
+        let xs : i64 = PR_XJS[j]
+        if xs != 0i64 {
+            let mut gs : i64 = PR_HSLS
+            let mut g1 : u64 = PR_HSL1
+            let mut g0 : u64 = PR_HSL0
+            if xs < 0i64 {
+                gs = PR_HSHS
+                g1 = PR_HSH1
+                g0 = PR_HSH0
+            }
+            if gs != 0i64 {
+                pr_mul_9x2(1u64, j, g1, g0)
+                let mut sg3 : i64 = xs
+                if gs < 0i64 { sg3 = 0i64 - sg3 }
+                if pr_s14_add(0u64, sg3) != 0i32 { return 1u64 }
+            }
+            let mut hs : i64 = PR_HSHS
+            let mut h1 : u64 = PR_HSH1
+            let mut h0 : u64 = PR_HSH0
+            if xs < 0i64 {
+                hs = PR_HSLS
+                h1 = PR_HSL1
+                h0 = PR_HSL0
+            }
+            if hs != 0i64 {
+                pr_mul_9x2(1u64, j, h1, h0)
+                let mut sg4 : i64 = xs
+                if hs < 0i64 { sg4 = 0i64 - sg4 }
+                if pr_s14_add(1u64, sg4) != 0i32 { return 1u64 }
+            }
+        }
+        j = j + 1u64
+    }
+    /* the bounds must be ordered */
+    let mut cmp : i64 = 0i64
+    if PR_ALS > PR_AHS { cmp = 1i64 }
+    if PR_ALS == PR_AHS {
+        if PR_ALS != 0i64 {
+            let mut c2 : i64 = 0i64
+            k = 14u64
+            while k != 0u64 {
+                k = k - 1u64
+                if c2 == 0i64 {
+                    let x : u64 = PR_AL[k]
+                    let y : u64 = PR_AH[k]
+                    if x > y { c2 = 1i64 }
+                    if x < y { c2 = 0i64 - 1i64 }
+                }
+            }
+            if PR_ALS < 0i64 { c2 = 0i64 - c2 }
+            cmp = c2
+        }
+    }
+    if cmp > 0i64 { return 1u64 }
+    PR_RDLS[dd] = PR_ALS
+    PR_RDHS[dd] = PR_AHS
+    k = 0u64
+    while k < 14u64 {
+        PR_RDLL[dd * 14u64 + k] = PR_AL[k]
+        PR_RDHL[dd * 14u64 + k] = PR_AH[k]
+        k = k + 1u64
+    }
+    return 0u64
+}
+
+/* the anchor: R(0) must equal the standing N2 of the crowned head,
+ * sign, exponent and limb for limb */
+fn pr_har_anchor() -> u64 {
+    let hd : u64 = mb_gz_head()
+    let n2s : i64 = mb_gz_n2_s(hd)
+    let n2e : i64 = mb_gz_n2_e(hd)
+    /* R sits on the 2^(EALN-88) grid (cos=1 is the integer 2^88), so the
+     * standing N2 at 2^n2e must rise by the 88 as well */
+    let shd : i64 = (n2e - PR_EALN) + 88i64
+    if shd < 0i64 { return 5u64 }
+    if shd > 448i64 { return 6u64 }
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_T14[k] = 0u64
+        k = k + 1u64
+    }
+    let w : u64 = (shd as u64) / 64u64
+    let b : u64 = (shd as u64) % 64u64
+    if w + 7u64 > 14u64 { return 1u64 }
+    k = 0u64
+    while k < 6u64 {
+        let v : u64 = mb_gz_n2_l(hd, k)
+        PR_T14[k + w] = PR_T14[k + w] | (v << b)
+        if b != 0u64 {
+            PR_T14[k + w + 1u64] = PR_T14[k + w + 1u64] | (v >> (64u64 - b))
+        }
+        k = k + 1u64
+    }
+    let mut nz : u64 = 0u64
+    k = 0u64
+    while k < 14u64 {
+        nz = nz | PR_T14[k]
+        k = k + 1u64
+    }
+    let mut n2sig : i64 = n2s
+    if nz == 0u64 { n2sig = 0i64 }
+    let rdl0 : i64 = PR_RDLS[0]
+    let rdh0 : i64 = PR_RDHS[0]
+    if rdl0 != n2sig { return 2u64 }
+    if rdh0 != n2sig { return 3u64 }
+    k = 0u64
+    while k < 14u64 {
+        let a : u64 = PR_RDLL[k]
+        let b2 : u64 = PR_RDHL[k]
+        let c : u64 = PR_T14[k]
+        if a != c { return 100u64 + k }
+        if b2 != c { return 200u64 + k }
+        k = k + 1u64
+    }
+    return 0u64
+}
+
+/* signed compare of stored bounds: f 0 = lo, 1 = hi */
+fn pr_rd_cmp(fa: u64, a: u64, fb: u64, b: u64) -> i64 {
+    let mut sa : i64 = PR_RDLS[a]
+    if fa == 1u64 { sa = PR_RDHS[a] }
+    let mut sb : i64 = PR_RDLS[b]
+    if fb == 1u64 { sb = PR_RDHS[b] }
+    if sa > sb { return 1i64 }
+    if sa < sb { return 0i64 - 1i64 }
+    if sa == 0i64 { return 0i64 }
+    let mut cmp : i64 = 0i64
+    let mut k : u64 = 14u64
+    while k != 0u64 {
+        k = k - 1u64
+        if cmp == 0i64 {
+            let mut va : u64 = PR_RDLL[a * 14u64 + k]
+            if fa == 1u64 { va = PR_RDHL[a * 14u64 + k] }
+            let mut vb : u64 = PR_RDLL[b * 14u64 + k]
+            if fb == 1u64 { vb = PR_RDHL[b * 14u64 + k] }
+            if va > vb { cmp = 1i64 }
+            if va < vb { cmp = 0i64 - 1i64 }
+        }
+    }
+    if sa < 0i64 { return 0i64 - cmp }
+    return cmp
+}
+
+/* the cross-position verdict: sort the deltas, census the separations */
+fn pr_har_verdict() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        PR_ORD[i] = i
+        i = i + 1u64
+    }
+    i = 1u64
+    while i < 8u64 {
+        let key : u64 = PR_ORD[i]
+        let mut p : u64 = i
+        let mut go : u8 = 1u8
+        while go == 1u8 {
+            go = 0u8
+            if p > 0u64 {
+                let prev : u64 = PR_ORD[p - 1u64]
+                if pr_rd_cmp(0u64, key, 0u64, prev) > 0i64 {
+                    PR_ORD[p] = prev
+                    p = p - 1u64
+                    go = 1u8
+                }
+            }
+        }
+        PR_ORD[p] = key
+        i = i + 1u64
+    }
+    let mut sep : u64 = 0u64
+    let mut strad : u64 = 0u64
+    i = 0u64
+    while i < 8u64 {
+        let mut j2 : u64 = i + 1u64
+        while j2 < 8u64 {
+            let up : i64 = pr_rd_cmp(0u64, i, 1u64, j2)
+            let dn : i64 = pr_rd_cmp(1u64, i, 0u64, j2)
+            let mut s : u64 = 0u64
+            if up > 0i64 { s = 1u64 }
+            if dn < 0i64 { s = 1u64 }
+            if s == 1u64 { sep = sep + 1u64 }
+            if s == 0u64 { strad = strad + 1u64 }
+            j2 = j2 + 1u64
+        }
+        i = i + 1u64
+    }
+    PR_HSEP = sep
+    PR_HSTR = strad
+    return 0u64
+}
+
+fn pr_arm379() -> u64 {
+    PR_PYC = 0u64
+    PR_TFC = 0u64
+    if pr_har_lanes() != 0u64 { return 379u64 }
+    let gz : u64 = mb_gz_ok()
+    let nr : u64 = mb_gz_nrope()
+    let mut fleshed : u64 = 0u64
+    let mut guard : u64 = 0u64
+    if gz == 1u64 {
+        if nr == 64u64 {
+            let px : u64 = pr_har_px()
+            if px == 1u64 { return 379u64 }
+            if px == 2u64 { guard = 1u64 }
+            if px == 0u64 {
+                let mut dd : u64 = 0u64
+                while dd < 8u64 {
+                    if pr_har_asm(dd) != 0u64 { return 379u64 }
+                    dd = dd + 1u64
+                }
+                if pr_har_anchor() != 0u64 { return 379u64 }
+                pr_har_verdict()
+                fleshed = 1u64
+                PR_HFLESH = 1u64
+            }
+        }
+    }
+    pr_rs("the harmonia: lanes=32 chain=omega1-powers round-trips(1,2,4,8,16)=contain-1 islands(8,16,24)=(1/10,1/100,1/1000)-contained monotone=separated" as u64)
+    if fleshed == 1u64 {
+        pr_rs(" pairing=neox(d,d+32) anchor: R(0)==N2 limb-exact pyth=" as u64)
+        pr_ru(PR_PYC)
+        pr_rs("/224 two-form=" as u64)
+        pr_ru(PR_TFC)
+        pr_rs(" matrix=8x8-toeplitz ealn=" as u64)
+        pr_ri(PR_EALN)
+        pr_rs(" order=[" as u64)
+        let mut i2 : u64 = 0u64
+        while i2 < 8u64 {
+            pr_rs("d" as u64)
+            pr_ru(PR_ORD[i2])
+            if i2 < 7u64 {
+                let oa : u64 = PR_ORD[i2]
+                let ob : u64 = PR_ORD[i2 + 1u64]
+                let c : i64 = pr_rd_cmp(0u64, oa, 1u64, ob)
+                if c > 0i64 { pr_rs(">" as u64) }
+                if c <= 0i64 { pr_rs("~" as u64) }
+            }
+            i2 = i2 + 1u64
+        }
+        pr_rs("] pairs-sep=" as u64)
+        pr_ru(PR_HSEP)
+        pr_rs("/28 premise: theta-base=10000 yarn-ramp=named" as u64)
+        pr_rb(10u8)
+        pr_rs("the harmonia flesh:" as u64)
+        let mut d3 : u64 = 0u64
+        while d3 < 8u64 {
+            pr_rs(" d" as u64)
+            pr_ru(d3)
+            pr_rs("=" as u64)
+            let sgn : i64 = PR_RDLS[d3]
+            if sgn == 0i64 { pr_rs("0" as u64) }
+            if sgn > 0i64 { pr_rs("+" as u64) }
+            if sgn < 0i64 { pr_rs("-" as u64) }
+            if sgn != 0i64 {
+                let mut top : u64 = 14u64
+                let mut kk : u64 = 14u64
+                while kk != 0u64 {
+                    kk = kk - 1u64
+                    if top == 14u64 {
+                        let v : u64 = PR_RDLL[d3 * 14u64 + kk]
+                        if v != 0u64 { top = kk }
+                    }
+                }
+                pr_ru(PR_RDLL[d3 * 14u64 + top])
+                pr_rs("@" as u64)
+                pr_ru(top)
+            }
+            d3 = d3 + 1u64
+        }
+        pr_rb(10u8)
+    }
+    if fleshed == 0u64 {
+        if guard == 1u64 {
+            pr_rs(" flesh=refused (alignment guard -- named)" as u64)
+        }
+        if guard == 0u64 {
+            pr_rs(" flesh=fasting" as u64)
+        }
+        pr_rb(10u8)
+    }
+    return 0u64
+}
+
+/* ============ arm 380: THE PLEROMA (the pass assembled) ============ */
+
+/* The attention mechanism of the real R1, END TO END, every step a
+ * certified interval: the true logit scale C = 1/(r1^2 * r2 * sqrt(hw))
+ * derived from the standing exact sums (r1^2 = mean(x^2)+eps is RATIONAL;
+ * r2^2 likewise through it; one square root, taken as an interval); the
+ * softmax over the causal row t=7 of the harmonia's QK matrix (the nope
+ * term and the kv norm r3 CANCEL in softmax differences -- a theorem of
+ * the shared-scalar chain, so the distribution needs only C and the rope
+ * deltas); certified exponentials through the standing exp ladder and the
+ * binary-division reciprocal; THE PARTITION TOOTH: sum of the certified
+ * weights must CONTAIN exactly 1; and THE ONE-VOICE MIX: the crowned
+ * head's REAL value rows (streamed once through the standing mouth) mixed
+ * by the certified weights -- for the standing single-voice sequence the
+ * attended value must CONTAIN the value itself, dim by dim, 128/128.
+ * Premises NAMED: theta-base=10000 (yarn ramp+mscale = next stair),
+ * o-proj = next stair.  The directed dyadic-float toolkit below rounds
+ * every step outward; nothing is trusted to average out. */
+
+/* directed dyadic float: value = m * 2^e, m in [2^63, 2^64) or m = 0 */
+var PR_DFM : u64 = 0u64
+var PR_DFE : i64 = 0i64
+
+/* C, r1^2, r2^2 intervals; softmax state */
+var PR_C_MD : u64 = 0u64
+var PR_C_ED : i64 = 0i64
+var PR_C_MU : u64 = 0u64
+var PR_C_EU : i64 = 0i64
+var PR_R1MD : u64 = 0u64
+var PR_R1ED : i64 = 0i64
+var PR_R1MU : u64 = 0u64
+var PR_R1EU : i64 = 0i64
+var PR_R2MD : u64 = 0u64
+var PR_R2ED : i64 = 0i64
+var PR_R2MU : u64 = 0u64
+var PR_R2EU : i64 = 0i64
+var PR_EPM : u64 = 0u64
+var PR_EPE : i64 = 0i64
+var PR_EMD : [u64; 8]
+var PR_EED : [i64; 8]
+var PR_EMU : [u64; 8]
+var PR_EEU : [i64; 8]
+var PR_WMD : [u64; 8]
+var PR_WED : [i64; 8]
+var PR_WMU : [u64; 8]
+var PR_WEU : [i64; 8]
+var PR_SWMD : u64 = 0u64
+var PR_SWED : i64 = 0i64
+var PR_SWMU : u64 = 0u64
+var PR_SWEU : i64 = 0i64
+var PR_VCONT : u64 = 0u64
+var PR_VANISH : u64 = 0u64
+
+/* normalize (hi:lo) * 2^eb into the df, rounding per dir */
+fn pr_dfn2(hi: u64, lo: u64, eb: i64, up: u64) -> i32 {
+    if (hi | lo) == 0u64 {
+        PR_DFM = 0u64
+        PR_DFE = 0i64
+        return 0i32
+    }
+    let mut hv : u64 = hi
+    let mut lv : u64 = lo
+    let mut e : i64 = eb + 64i64
+    if hv == 0u64 {
+        hv = lv
+        lv = 0u64
+        e = e - 64i64
+    }
+    let mut sh : u64 = 0u64
+    let mut hh : u64 = hv
+    while (hh >> 63u64) == 0u64 {
+        hh = hh << 1u64
+        sh = sh + 1u64
+    }
+    let mut m : u64 = hv << sh
+    if sh != 0u64 { m = m | (lv >> (64u64 - sh)) }
+    let mut dropped : u64 = lv
+    if sh != 0u64 { dropped = lv << sh }
+    e = e - (sh as i64)
+    if up == 1u64 {
+        if dropped != 0u64 {
+            m = m + 1u64
+            if m == 0u64 {
+                m = 1u64 << 63u64
+                e = e + 1i64
+            }
+        }
+    }
+    PR_DFM = m
+    PR_DFE = e
+    return 0i32
+}
+
+fn pr_dfmul(ma: u64, ea: i64, mb: u64, eb: i64, up: u64) -> i32 {
+    if ma == 0u64 {
+        PR_DFM = 0u64
+        PR_DFE = 0i64
+        return 0i32
+    }
+    if mb == 0u64 {
+        PR_DFM = 0u64
+        PR_DFE = 0i64
+        return 0i32
+    }
+    pr_mul64(ma, mb)
+    pr_dfn2(PR_MHI, PR_MLO, ea + eb, up)
+    return 0i32
+}
+
+/* 1/(m*2^e) via the standing 177-step binary division */
+fn pr_dfrecip(m: u64, e: i64, up: u64) -> i32 {
+    if m == 0u64 { return 1i32 }
+    pr_recip176(m >> 40u64, m << 24u64)
+    let mut q0 : u64 = PR_RQ0
+    let mut q1 : u64 = PR_RQ1
+    if up == 1u64 {
+        q0 = q0 + 1u64
+        if q0 == 0u64 { q1 = q1 + 1u64 }
+    }
+    pr_dfn2(q1, q0, (0i64 - 152i64) - e, up)
+    return 0i32
+}
+
+/* positive add with outward rounding */
+fn pr_dfadd(ma: u64, ea: i64, mb: u64, eb: i64, up: u64) -> i32 {
+    if ma == 0u64 {
+        PR_DFM = mb
+        PR_DFE = eb
+        return 0i32
+    }
+    if mb == 0u64 {
+        PR_DFM = ma
+        PR_DFE = ea
+        return 0i32
+    }
+    let mut xa : u64 = ma
+    let mut xe : i64 = ea
+    let mut yb : u64 = mb
+    let mut ye : i64 = eb
+    if ea < eb {
+        xa = mb
+        xe = eb
+        yb = ma
+        ye = ea
+    }
+    let d : i64 = xe - ye
+    if d >= 64i64 {
+        PR_DFM = xa
+        PR_DFE = xe
+        if up == 1u64 {
+            PR_DFM = PR_DFM + 1u64
+            if PR_DFM == 0u64 {
+                PR_DFM = 1u64 << 63u64
+                PR_DFE = PR_DFE + 1i64
+            }
+        }
+        return 0i32
+    }
+    let du : u64 = d as u64
+    if du == 0u64 {
+        let lo0 : u64 = xa + yb
+        let mut hi0 : u64 = 0u64
+        if lo0 < yb { hi0 = 1u64 }
+        pr_dfn2(hi0, lo0, ye, up)
+        return 0i32
+    }
+    let mut hi : u64 = xa >> (64u64 - du)
+    let mut lo : u64 = xa << du
+    let s : u64 = lo + yb
+    if s < yb { hi = hi + 1u64 }
+    lo = s
+    pr_dfn2(hi, lo, ye, up)
+    return 0i32
+}
+
+/* largest r with r^2 <= (hi:lo) */
+fn pr_isqrt128(hi: u64, lo: u64) -> u64 {
+    let mut r : u64 = 0u64
+    let mut b : u64 = 64u64
+    while b != 0u64 {
+        b = b - 1u64
+        let t : u64 = r | (1u64 << b)
+        pr_mul64(t, t)
+        let mut le : u64 = 0u64
+        if PR_MHI < hi { le = 1u64 }
+        if PR_MHI == hi {
+            if PR_MLO <= lo { le = 1u64 }
+        }
+        if le == 1u64 { r = t }
+    }
+    return r
+}
+
+fn pr_dfsqrt(m: u64, e: i64, up: u64) -> i32 {
+    if m == 0u64 {
+        PR_DFM = 0u64
+        PR_DFE = 0i64
+        return 0i32
+    }
+    let mut s : u64 = 62u64
+    let par : i64 = e - 62i64
+    let odd : i64 = par - 2i64 * (par / 2i64)
+    if odd != 0i64 { s = 63u64 }
+    let hi : u64 = m >> (64u64 - s)
+    let lo : u64 = m << s
+    let ev : i64 = e - (s as i64)
+    let mut r : u64 = pr_isqrt128(hi, lo)
+    if up == 1u64 { r = r + 1u64 }
+    pr_dfn2(0u64, r, ev / 2i64, 0u64)
+    return 0i32
+}
+
+fn pr_df_cmp(ma: u64, ea: i64, mb: u64, eb: i64) -> i64 {
+    if ma == 0u64 {
+        if mb == 0u64 { return 0i64 }
+        return 0i64 - 1i64
+    }
+    if mb == 0u64 { return 1i64 }
+    if ea > eb { return 1i64 }
+    if ea < eb { return 0i64 - 1i64 }
+    if ma > mb { return 1i64 }
+    if ma < mb { return 0i64 - 1i64 }
+    return 0i64
+}
+
+/* df -> exp-ladder argument at 2^-48 (value must be small; dir outward) */
+fn pr_df_m48(m: u64, e: i64, up: u64) -> u64 {
+    if m == 0u64 { return 0u64 }
+    let sh : i64 = 0i64 - (e + 48i64)
+    if sh <= 0i64 { return 0u64 - 1u64 }
+    if sh >= 64i64 {
+        if up == 1u64 { return 1u64 }
+        return 0u64
+    }
+    let shu : u64 = sh as u64
+    let mut v : u64 = m >> shu
+    if up == 1u64 {
+        if (m << (64u64 - shu)) != 0u64 { v = v + 1u64 }
+    }
+    return v
+}
+
+/* df -> parts-per-billion (for the report) */
+fn pr_df_ppb(m: u64, e: i64, up: u64) -> u64 {
+    if m == 0u64 { return 0u64 }
+    pr_mul64(m, 1000000000u64)
+    let sh : i64 = 0i64 - e
+    if sh <= 0i64 { return 0u64 - 1u64 }
+    if sh >= 128i64 {
+        if up == 1u64 { return 1u64 }
+        return 0u64
+    }
+    let shu : u64 = sh as u64
+    let mut hi : u64 = PR_MHI
+    let mut lo : u64 = PR_MLO
+    let mut dropped : u64 = 0u64
+    if shu >= 64u64 {
+        dropped = lo
+        lo = hi
+        hi = 0u64
+        let s2 : u64 = shu - 64u64
+        if s2 != 0u64 {
+            dropped = dropped | (lo << (64u64 - s2))
+            lo = lo >> s2
+        }
+    }
+    if shu < 64u64 {
+        dropped = lo << (64u64 - shu)
+        lo = (lo >> shu) | (hi << (64u64 - shu))
+        hi = hi >> shu
+        if hi != 0u64 { return 0u64 - 1u64 }
+    }
+    if up == 1u64 {
+        if dropped != 0u64 { lo = lo + 1u64 }
+    }
+    return lo
+}
+
+/* T14 = P6 << sh (wide variant for the r2^2 sum; sh <= 512) */
+fn pr_t14_p6shl(sh: u64) -> u64 {
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_T14[k] = 0u64
+        k = k + 1u64
+    }
+    if sh > 512u64 { return 1u64 }
+    let w : u64 = sh / 64u64
+    let b : u64 = sh % 64u64
+    let mut k2 : u64 = 0u64
+    while k2 < 6u64 {
+        let v : u64 = PR_P6[k2]
+        if v != 0u64 {
+            let pos : u64 = k2 + w
+            if pos >= 14u64 { return 1u64 }
+            PR_T14[pos] = PR_T14[pos] | (v << b)
+            if b != 0u64 {
+                let spill : u64 = v >> (64u64 - b)
+                if spill != 0u64 {
+                    if pos + 1u64 >= 14u64 { return 1u64 }
+                    PR_T14[pos + 1u64] = PR_T14[pos + 1u64] | spill
+                }
+            }
+        }
+        k2 = k2 + 1u64
+    }
+    return 0u64
+}
+
+/* df from the T14 magnitude (dir outward) */
+fn pr_df_from14(up: u64) -> i32 {
+    let mut t : u64 = 14u64
+    let mut k : u64 = 14u64
+    while k != 0u64 {
+        k = k - 1u64
+        if t == 14u64 {
+            if PR_T14[k] != 0u64 { t = k }
+        }
+    }
+    if t == 14u64 {
+        PR_DFM = 0u64
+        PR_DFE = 0i64
+        return 0i32
+    }
+    let hv : u64 = PR_T14[t]
+    let mut lv : u64 = 0u64
+    if t != 0u64 { lv = PR_T14[t - 1u64] }
+    let mut st : u64 = 0u64
+    k = 0u64
+    while k + 1u64 < t {
+        st = st | PR_T14[k]
+        k = k + 1u64
+    }
+    let mut sh : u64 = 0u64
+    let mut hh : u64 = hv
+    while (hh >> 63u64) == 0u64 {
+        hh = hh << 1u64
+        sh = sh + 1u64
+    }
+    let mut m : u64 = hv << sh
+    if sh != 0u64 { m = m | (lv >> (64u64 - sh)) }
+    let mut dropped : u64 = st
+    if sh != 0u64 { dropped = dropped | (lv << sh) }
+    if sh == 0u64 { dropped = dropped | lv }
+    let mut e : i64 = (64u64 * t) as i64 - (sh as i64)
+    if up == 1u64 {
+        if dropped != 0u64 {
+            m = m + 1u64
+            if m == 0u64 {
+                m = 1u64 << 63u64
+                e = e + 1i64
+            }
+        }
+    }
+    PR_DFM = m
+    PR_DFE = e
+    return 0i32
+}
+
+/* r1^2 = mean(x^2) + eps as a df interval (all exact until the df) */
+fn pr_ple_r1() -> u64 {
+    let em : i64 = mb_gz_eps_m()
+    if em <= 0i64 { return 1u64 }
+    if em == 4611686018427387904i64 { return 1u64 }
+    let ee : i64 = mb_gz_eps_e()
+    pr_dfn2(0u64, em as u64, ee, 0u64)
+    PR_EPM = PR_DFM
+    PR_EPE = PR_DFE
+    let n : u64 = mb_gz_nembd()
+    if n == 0u64 { return 1u64 }
+    if n > 7168u64 { return 1u64 }
+    let mut a0 : u64 = 0u64
+    let mut a1 : u64 = 0u64
+    let mut a2 : u64 = 0u64
+    let mut c : u64 = 0u64
+    while c < n {
+        let v : i64 = mb_gz_xv(c)
+        if v != 0i64 {
+            let mut mg : u64 = v as u64
+            if v < 0i64 { mg = (0i64 - v) as u64 }
+            pr_mul64(mg, mg)
+            let s0 : u64 = a0 + PR_MLO
+            let mut cy : u64 = 0u64
+            if s0 < PR_MLO { cy = 1u64 }
+            a0 = s0
+            let s1 : u64 = a1 + PR_MHI
+            let mut cy2 : u64 = 0u64
+            if s1 < PR_MHI { cy2 = 1u64 }
+            let s1b : u64 = s1 + cy
+            if s1b < cy { cy2 = cy2 + 1u64 }
+            a1 = s1b
+            a2 = a2 + cy2
+        }
+        c = c + 1u64
+    }
+    if a2 != 0u64 { return 1u64 }
+    if (a1 | a0) == 0u64 { return 1u64 }
+    /* A * 2^-48 / n + eps, both directions */
+    let mut side : u64 = 0u64
+    while side < 2u64 {
+        pr_dfn2(a1, a0, 0i64 - 48i64, side)
+        let sxm : u64 = PR_DFM
+        let sxe : i64 = PR_DFE
+        pr_dfn2(0u64, n, 0i64, 0u64)
+        pr_dfrecip(PR_DFM, PR_DFE, side)
+        let rnm : u64 = PR_DFM
+        let rne : i64 = PR_DFE
+        pr_dfmul(sxm, sxe, rnm, rne, side)
+        pr_dfadd(PR_DFM, PR_DFE, PR_EPM, PR_EPE, side)
+        if side == 0u64 {
+            PR_R1MD = PR_DFM
+            PR_R1ED = PR_DFE
+        }
+        if side == 1u64 {
+            PR_R1MU = PR_DFM
+            PR_R1EU = PR_DFE
+        }
+        side = side + 1u64
+    }
+    return 0u64
+}
+
+/* r2^2 = sum(BV^2)*2^(2emin)/(rk * r1^2) + eps as a df interval */
+fn pr_ple_r2() -> u64 {
+    let rk : u64 = mb_gz_qark()
+    if rk == 0u64 { return 1u64 }
+    if rk > 1536u64 { return 1u64 }
+    let mut emin : i64 = 1000000i64
+    let mut emax : i64 = 0i64 - 1000000i64
+    let mut r : u64 = 0u64
+    while r < rk {
+        let s : i64 = mb_gz_bv_s(r)
+        if s != 0i64 {
+            let e2 : i64 = mb_gz_bv_e(r)
+            if e2 < emin { emin = e2 }
+            if e2 > emax { emax = e2 }
+        }
+        r = r + 1u64
+    }
+    if emin == 1000000i64 { return 1u64 }
+    if emax - emin > 256i64 { return 1u64 }
+    PR_ALS = 0i64
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_AL[k] = 0u64
+        k = k + 1u64
+    }
+    r = 0u64
+    while r < rk {
+        let s2 : i64 = mb_gz_bv_s(r)
+        if s2 != 0i64 {
+            let l0 : u64 = mb_gz_bv_l(r, 0u64)
+            let l1 : u64 = mb_gz_bv_l(r, 1u64)
+            let l2 : u64 = mb_gz_bv_l(r, 2u64)
+            pr_m33(l0, l1, l2, l0, l1, l2)
+            let sh2 : u64 = (2i64 * (mb_gz_bv_e(r) - emin)) as u64
+            if pr_t14_p6shl(sh2) != 0u64 { return 1u64 }
+            if pr_s14_add(0u64, 1i64) != 0i32 { return 1u64 }
+        }
+        r = r + 1u64
+    }
+    k = 0u64
+    while k < 14u64 {
+        PR_T14[k] = PR_AL[k]
+        k = k + 1u64
+    }
+    let e2m : i64 = 2i64 * emin
+    let mut side : u64 = 0u64
+    while side < 2u64 {
+        pr_df_from14(side)
+        if PR_DFM == 0u64 { return 1u64 }
+        let s2m : u64 = PR_DFM
+        let s2e : i64 = PR_DFE + e2m
+        /* denominator rk * r1^2, opposite direction */
+        let mut r1m : u64 = PR_R1MU
+        let mut r1e : i64 = PR_R1EU
+        if side == 1u64 {
+            r1m = PR_R1MD
+            r1e = PR_R1ED
+        }
+        pr_dfn2(0u64, rk, 0i64, 0u64)
+        let opp : u64 = 1u64 - side
+        pr_dfmul(PR_DFM, PR_DFE, r1m, r1e, opp)
+        pr_dfrecip(PR_DFM, PR_DFE, side)
+        pr_dfmul(s2m, s2e, PR_DFM, PR_DFE, side)
+        pr_dfadd(PR_DFM, PR_DFE, PR_EPM, PR_EPE, side)
+        if side == 0u64 {
+            PR_R2MD = PR_DFM
+            PR_R2ED = PR_DFE
+        }
+        if side == 1u64 {
+            PR_R2MU = PR_DFM
+            PR_R2EU = PR_DFE
+        }
+        side = side + 1u64
+    }
+    return 0u64
+}
+
+/* C = 1/(r1^2 * sqrt(hw * r2^2)) as a df interval */
+fn pr_ple_cfin() -> u64 {
+    let hw : u64 = mb_gz_hw()
+    if hw == 0u64 { return 1u64 }
+    let mut side : u64 = 0u64
+    while side < 2u64 {
+        let mut r2m : u64 = PR_R2MD
+        let mut r2e : i64 = PR_R2ED
+        let mut r1m : u64 = PR_R1MD
+        let mut r1e : i64 = PR_R1ED
+        if side == 1u64 {
+            r2m = PR_R2MU
+            r2e = PR_R2EU
+            r1m = PR_R1MU
+            r1e = PR_R1EU
+        }
+        pr_dfn2(0u64, hw, 0i64, 0u64)
+        pr_dfmul(PR_DFM, PR_DFE, r2m, r2e, side)
+        pr_dfsqrt(PR_DFM, PR_DFE, side)
+        pr_dfmul(r1m, r1e, PR_DFM, PR_DFE, side)
+        /* C side = recip of the OPPOSITE denominator side */
+        pr_dfrecip(PR_DFM, PR_DFE, 1u64 - side)
+        if side == 1u64 {
+            PR_C_MD = PR_DFM
+            PR_C_ED = PR_DFE
+        }
+        if side == 0u64 {
+            PR_C_MU = PR_DFM
+            PR_C_EU = PR_DFE
+        }
+        side = side + 1u64
+    }
+    return 0u64
+}
+
+/* certified e_delta for one non-top delta (dir-outward all the way) */
+fn pr_ple_edelta(dd: u64, top: u64) -> u64 {
+    /* D lo bound: lo_top - hi_dd  (positive by separation) */
+    PR_ALS = PR_RDLS[top]
+    let mut k : u64 = 0u64
+    while k < 14u64 {
+        PR_AL[k] = PR_RDLL[top * 14u64 + k]
+        PR_T14[k] = PR_RDHL[dd * 14u64 + k]
+        k = k + 1u64
+    }
+    if pr_s14_add(0u64, 0i64 - PR_RDHS[dd]) != 0i32 { return 1u64 }
+    if PR_ALS <= 0i64 { return 1u64 }
+    k = 0u64
+    while k < 14u64 {
+        PR_T14[k] = PR_AL[k]
+        k = k + 1u64
+    }
+    pr_df_from14(0u64)
+    let dlm : u64 = PR_DFM
+    let dle : i64 = PR_DFE + (PR_EALN - 88i64)
+    /* D hi bound: hi_top - lo_dd */
+    PR_AHS = PR_RDHS[top]
+    k = 0u64
+    while k < 14u64 {
+        PR_AH[k] = PR_RDHL[top * 14u64 + k]
+        PR_T14[k] = PR_RDLL[dd * 14u64 + k]
+        k = k + 1u64
+    }
+    if pr_s14_add(1u64, 0i64 - PR_RDLS[dd]) != 0i32 { return 1u64 }
+    if PR_AHS <= 0i64 { return 1u64 }
+    k = 0u64
+    while k < 14u64 {
+        PR_T14[k] = PR_AH[k]
+        k = k + 1u64
+    }
+    pr_df_from14(1u64)
+    let dhm : u64 = PR_DFM
+    let dhe : i64 = PR_DFE + (PR_EALN - 88i64)
+    /* D = Dnum * C */
+    pr_dfmul(dlm, dle, PR_C_MD, PR_C_ED, 0u64)
+    let xlm : u64 = PR_DFM
+    let xle : i64 = PR_DFE
+    pr_dfmul(dhm, dhe, PR_C_MU, PR_C_EU, 1u64)
+    let xhm : u64 = PR_DFM
+    let xhe : i64 = PR_DFE
+    /* the ladder cap: beyond 24 the weight VANISHES under a named bound */
+    let capm : u64 = 3u64 << 62u64
+    let cape : i64 = 0i64 - 59i64
+    if pr_df_cmp(xhm, xhe, capm, cape) >= 0i64 {
+        PR_EMD[dd] = 0u64
+        PR_EED[dd] = 0i64
+        PR_EMU[dd] = 1u64 << 63u64
+        PR_EEU[dd] = 0i64 - 97i64
+        PR_VANISH = PR_VANISH + 1u64
+        return 0u64
+    }
+    let m48h : u64 = pr_df_m48(xhm, xhe, 1u64)
+    if m48h == (0u64 - 1u64) { return 1u64 }
+    let m48l : u64 = pr_df_m48(xlm, xle, 0u64)
+    if m48l == (0u64 - 1u64) { return 1u64 }
+    /* e lower = recip(exp(D_hi) upper) floored */
+    if pr_exp(m48h, 48u64) != 0i32 { return 1u64 }
+    pr_dfn2(PR_EHI1, PR_EHI0, 0i64 - 88i64, 1u64)
+    pr_dfrecip(PR_DFM, PR_DFE, 0u64)
+    PR_EMD[dd] = PR_DFM
+    PR_EED[dd] = PR_DFE
+    /* e upper = recip(exp(D_lo) lower) ceiled */
+    if pr_exp(m48l, 48u64) != 0i32 { return 1u64 }
+    pr_dfn2(PR_ELO1, PR_ELO0, 0i64 - 88i64, 0u64)
+    pr_dfrecip(PR_DFM, PR_DFE, 1u64)
+    PR_EMU[dd] = PR_DFM
+    PR_EEU[dd] = PR_DFE
+    return 0u64
+}
+
+/* the certified softmax over the causal row: 0 ok / 1 red / 2 refused */
+fn pr_ple_soft() -> u64 {
+    PR_VANISH = 0u64
+    let top : u64 = PR_ORD[0]
+    let mut dd : u64 = 0u64
+    while dd < 8u64 {
+        if dd != top {
+            if pr_rd_cmp(0u64, top, 1u64, dd) <= 0i64 { return 2u64 }
+        }
+        dd = dd + 1u64
+    }
+    dd = 0u64
+    while dd < 8u64 {
+        if dd == top {
+            PR_EMD[dd] = 1u64 << 63u64
+            PR_EED[dd] = 0i64 - 63i64
+            PR_EMU[dd] = 1u64 << 63u64
+            PR_EEU[dd] = 0i64 - 63i64
+        }
+        if dd != top {
+            if pr_ple_edelta(dd, top) != 0u64 { return 1u64 }
+        }
+        dd = dd + 1u64
+    }
+    /* sum of exponentials, both directions */
+    let mut sdm : u64 = 0u64
+    let mut sde : i64 = 0i64
+    let mut sum : u64 = 0u64
+    let mut sue : i64 = 0i64
+    dd = 0u64
+    while dd < 8u64 {
+        pr_dfadd(sdm, sde, PR_EMD[dd], PR_EED[dd], 0u64)
+        sdm = PR_DFM
+        sde = PR_DFE
+        pr_dfadd(sum, sue, PR_EMU[dd], PR_EEU[dd], 1u64)
+        sum = PR_DFM
+        sue = PR_DFE
+        dd = dd + 1u64
+    }
+    if sdm == 0u64 { return 1u64 }
+    /* weights and their sum */
+    pr_dfrecip(sum, sue, 0u64)
+    let rlm : u64 = PR_DFM
+    let rle : i64 = PR_DFE
+    pr_dfrecip(sdm, sde, 1u64)
+    let rum : u64 = PR_DFM
+    let rue : i64 = PR_DFE
+    let mut wdm : u64 = 0u64
+    let mut wde : i64 = 0i64
+    let mut wum : u64 = 0u64
+    let mut wue : i64 = 0i64
+    dd = 0u64
+    while dd < 8u64 {
+        pr_dfmul(PR_EMD[dd], PR_EED[dd], rlm, rle, 0u64)
+        PR_WMD[dd] = PR_DFM
+        PR_WED[dd] = PR_DFE
+        pr_dfmul(PR_EMU[dd], PR_EEU[dd], rum, rue, 1u64)
+        PR_WMU[dd] = PR_DFM
+        PR_WEU[dd] = PR_DFE
+        pr_dfadd(wdm, wde, PR_WMD[dd], PR_WED[dd], 0u64)
+        wdm = PR_DFM
+        wde = PR_DFE
+        pr_dfadd(wum, wue, PR_WMU[dd], PR_WEU[dd], 1u64)
+        wum = PR_DFM
+        wue = PR_DFE
+        dd = dd + 1u64
+    }
+    PR_SWMD = wdm
+    PR_SWED = wde
+    PR_SWMU = wum
+    PR_SWEU = wue
+    /* THE PARTITION TOOTH: sum of weights must contain exactly 1 */
+    let onem : u64 = 1u64 << 63u64
+    let onee : i64 = 0i64 - 63i64
+    if pr_df_cmp(wdm, wde, onem, onee) > 0i64 { return 1u64 }
+    if pr_df_cmp(wum, wue, onem, onee) < 0i64 { return 1u64 }
+    return 0u64
+}
+
+/* the one-voice mix: certified weights over the REAL value rows */
+fn pr_ple_mix() -> u64 {
+    let vs : u64 = mb_gz_vserve()
+    if vs == 2u64 { return 2u64 }
+    if vs != 0u64 { return 1u64 }
+    let mut cont : u64 = 0u64
+    let mut d : u64 = 0u64
+    while d < 128u64 {
+        let s : i64 = mb_gz_v_s(d)
+        if s == 0i64 { cont = cont + 1u64 }
+        if s != 0i64 {
+            let l0 : u64 = mb_gz_v_l(d, 0u64)
+            let l1 : u64 = mb_gz_v_l(d, 1u64)
+            let l2 : u64 = mb_gz_v_l(d, 2u64)
+            let ve : i64 = mb_gz_v_e(d)
+            let mut k : u64 = 0u64
+            while k < 14u64 {
+                PR_T14[k] = 0u64
+                k = k + 1u64
+            }
+            PR_T14[0] = l0
+            PR_T14[1] = l1
+            PR_T14[2] = l2
+            pr_df_from14(0u64)
+            let vdm : u64 = PR_DFM
+            let vde : i64 = PR_DFE + ve
+            pr_df_from14(1u64)
+            let vum : u64 = PR_DFM
+            let vue : i64 = PR_DFE + ve
+            pr_dfmul(PR_SWMD, PR_SWED, vdm, vde, 0u64)
+            let olm : u64 = PR_DFM
+            let ole : i64 = PR_DFE
+            pr_dfmul(PR_SWMU, PR_SWEU, vum, vue, 1u64)
+            let ohm : u64 = PR_DFM
+            let ohe : i64 = PR_DFE
+            let c1 : i64 = pr_df_cmp(olm, ole, vdm, vde)
+            let c2 : i64 = pr_df_cmp(ohm, ohe, vum, vue)
+            if c1 <= 0i64 {
+                if c2 >= 0i64 { cont = cont + 1u64 }
+            }
+        }
+        d = d + 1u64
+    }
+    PR_VCONT = cont
+    if cont != 128u64 { return 1u64 }
+    return 0u64
+}
+
+fn pr_arm380() -> u64 {
+    if PR_HFLESH != 1u64 {
+        pr_rs("the pleroma: fasting (no fleshed harmonia) -- the assembly stands ready" as u64)
+        pr_rb(10u8)
+        return 0u64
+    }
+    if pr_ple_r1() != 0u64 { return 380u64 }
+    if pr_ple_r2() != 0u64 { return 380u64 }
+    if pr_ple_cfin() != 0u64 { return 380u64 }
+    let sf : u64 = pr_ple_soft()
+    if sf == 2u64 {
+        pr_rs("the pleroma: softmax refused (top delta not separated -- named)" as u64)
+        pr_rb(10u8)
+        return 0u64
+    }
+    if sf != 0u64 { return 380u64 }
+    let mx : u64 = pr_ple_mix()
+    if mx == 2u64 {
+        pr_rs("the pleroma: v-width foreign (named, lawful)" as u64)
+        pr_rb(10u8)
+        return 0u64
+    }
+    if mx != 0u64 { return 380u64 }
+    pr_rs("the pleroma: scale C=[" as u64)
+    pr_ru(PR_C_MD)
+    pr_rs("e" as u64)
+    pr_ri(PR_C_ED)
+    pr_rs("," as u64)
+    pr_ru(PR_C_MU)
+    pr_rs("e" as u64)
+    pr_ri(PR_C_EU)
+    pr_rs("] softmax=causal-row-t7 top=d" as u64)
+    pr_ru(PR_ORD[0])
+    pr_rs(" (attends s=" as u64)
+    pr_ru(7u64 - PR_ORD[0])
+    pr_rs(") vanish=" as u64)
+    pr_ru(PR_VANISH)
+    pr_rs(" sum-w=[" as u64)
+    pr_ru(pr_df_ppb(PR_SWMD, PR_SWED, 0u64))
+    pr_rs("," as u64)
+    pr_ru(pr_df_ppb(PR_SWMU, PR_SWEU, 1u64))
+    pr_rs("]ppb contains 1 =ok mix: one-voice value RETURNED v-contained=" as u64)
+    pr_ru(PR_VCONT)
+    pr_rs("/128 voice=row" as u64)
+    pr_ru(mb_gz_voice())
+    pr_rs(" premises: theta-base=10000 yarn=named o-proj=named" as u64)
+    pr_rb(10u8)
+    pr_rs("the pleroma weights(ppb):" as u64)
+    let mut dd : u64 = 0u64
+    while dd < 8u64 {
+        pr_rs(" d" as u64)
+        pr_ru(dd)
+        pr_rs("=[" as u64)
+        pr_ru(pr_df_ppb(PR_WMD[dd], PR_WED[dd], 0u64))
+        pr_rs("," as u64)
+        pr_ru(pr_df_ppb(PR_WMU[dd], PR_WEU[dd], 1u64))
+        pr_rs("]" as u64)
+        dd = dd + 1u64
+    }
+    pr_rb(10u8)
+    return 0u64
+}
+
 /* ==================== the organ's spine ==================== */
 
 fn pr_selfprove() -> u64 @export {
@@ -1881,6 +4005,10 @@ fn pr_selfprove() -> u64 @export {
     if r3 != 0u64 { return r3 }
     let r4 : u64 = pr_arm378()
     if r4 != 0u64 { return r4 }
+    let r5 : u64 = pr_arm379()
+    if r5 != 0u64 { return r5 }
+    let r6 : u64 = pr_arm380()
+    if r6 != 0u64 { return r6 }
     if mb_feast() == 0u64 {
         pr_rs("the discharge: fasting (no feast) -- the bound stands ready" as u64)
         pr_rb(10u8)

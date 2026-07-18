@@ -207,6 +207,7 @@ var MB_NROPE  : u64 = 0u64
 var MB_EPSB   : u64 = 0u64            /* rms epsilon, raw f32 bits */
 var MB_EPSF   : u8 = 0u8
 var MB_GAZE_OK : u64 = 0u64
+var MB_GZ_A1 : u64 = 0u64             /* the crowned head (nope argmax) */
 var MB_C2_NAME : [u8; 64]
 var MB_C2_NN   : u64 = 0u64
 var MB_C2_F    : u8 = 0u8
@@ -4588,6 +4589,7 @@ fn mb_arm375() -> u64 {
         if mb_gz_hcmp(1u64, i, a2) > 0i64 { a2 = i }
         i = i + 1u64
     }
+    MB_GZ_A1 = a1
     let mut sp : u64 = 0u64
     let mut sn : u64 = 0u64
     let mut sz : u64 = 0u64
@@ -5458,5 +5460,157 @@ fn mb_val_b(i: u64) -> i64 @export {
     return MB_VB[i]
 }
 fn mb_feast() -> u64 @export { return MB_FEAST as u64 }
+
+/* the crowned head's standing gaze state, served to the assembly:
+ * after arm 375's double stream, MB_CH holds head a1's full q numerators
+ * and MB_DV the shared kv_a outputs; N1/N2 hold every head's parts */
+fn mb_gz_ok() -> u64 @export { return MB_GAZE_OK }
+fn mb_gz_head() -> u64 @export { return MB_GZ_A1 }
+fn mb_gz_nrope() -> u64 @export { return MB_NROPE }
+fn mb_gz_cr_s(r: u64) -> i64 @export {
+    if r >= 64u64 { return 0i64 }
+    return MB_CHS[128u64 + r]
+}
+fn mb_gz_cr_l(r: u64, k: u64) -> u64 @export {
+    if r >= 64u64 { return 0u64 }
+    if k == 0u64 { return MB_CH0[128u64 + r] }
+    if k == 1u64 { return MB_CH1[128u64 + r] }
+    return MB_CH2[128u64 + r]
+}
+fn mb_gz_cr_e(r: u64) -> i64 @export {
+    if r >= 64u64 { return 0i64 }
+    return MB_CHE[128u64 + r]
+}
+fn mb_gz_dr_s(r: u64) -> i64 @export {
+    if r >= 64u64 { return 0i64 }
+    return MB_DVS[512u64 + r]
+}
+fn mb_gz_dr_l(r: u64, k: u64) -> u64 @export {
+    if r >= 64u64 { return 0u64 }
+    if k == 0u64 { return MB_DV0[512u64 + r] }
+    if k == 1u64 { return MB_DV1[512u64 + r] }
+    return MB_DV2[512u64 + r]
+}
+fn mb_gz_dr_e(r: u64) -> i64 @export {
+    if r >= 64u64 { return 0i64 }
+    return MB_DVE[512u64 + r]
+}
+fn mb_gz_n2_s(h: u64) -> i64 @export {
+    if h >= 128u64 { return 0i64 }
+    return MB_N2S[h]
+}
+fn mb_gz_n2_l(h: u64, k: u64) -> u64 @export {
+    if h >= 128u64 { return 0u64 }
+    if k >= 6u64 { return 0u64 }
+    return MB_N2L[h * 6u64 + k]
+}
+fn mb_gz_n2_e(h: u64) -> i64 @export {
+    if h >= 128u64 { return 0i64 }
+    return MB_N2E[h]
+}
+
+/* ============ the pleroma's serves (arm 380 consumes) ============
+ * Everything below reads STANDING state or streams once through the
+ * standing mouth -- no recompute of anything already proven. */
+
+/* the standing voice: the digested embedding row id */
+fn mb_gz_voice() -> u64 @export { return MB_SYN_RV }
+
+/* embd mantissas (value = m * 2^-24) for the r1^2 sum */
+fn mb_gz_nembd() -> u64 @export { return MB_G_NE[0] }
+fn mb_gz_xv(c: u64) -> i64 @export {
+    if c >= 7168u64 { return 0i64 }
+    return MB_XV[c]
+}
+
+/* q_a stage rows (canonical sign, 3 limbs, exp) for the r2^2 sum */
+fn mb_gz_qark() -> u64 @export { return MB_G_NE[2] }
+fn mb_gz_bv_s(r: u64) -> i64 @export {
+    if r >= 1536u64 { return 0i64 }
+    return MB_BVS[r]
+}
+fn mb_gz_bv_l(r: u64, k: u64) -> u64 @export {
+    if r >= 1536u64 { return 0u64 }
+    if k == 0u64 { return MB_BV0[r] }
+    if k == 1u64 { return MB_BV1[r] }
+    return MB_BV2[r]
+}
+fn mb_gz_bv_e(r: u64) -> i64 @export {
+    if r >= 1536u64 { return 0i64 }
+    return MB_BVE[r]
+}
+
+/* the rms epsilon as an exact dyadic (f32 is dyadic; sentinel guarded) */
+fn mb_gz_eps_m() -> i64 @export {
+    if MB_EPSF == 0u8 { return 0i64 }
+    return mb_f32m(MB_EPSB)
+}
+fn mb_gz_eps_e() -> i64 @export {
+    if MB_EPSF == 0u8 { return 0i64 }
+    mb_f32m(MB_EPSB)
+    return MB_F32E
+}
+
+/* per-head qk width (nope + rope) for the 1/sqrt(width) scale */
+fn mb_gz_hw() -> u64 @export {
+    if MB_NHEAD == 0u64 { return 0u64 }
+    return MB_G_NE[3] / MB_G_NE0[3] / MB_NHEAD
+}
+
+/* THE V SERVE: the crowned head's value rows, streamed ONCE through the
+ * standing mouth (kv_b v-block dotted through the normed latent, kind 2;
+ * layout premise NAMED at the gaze: kv_b head = [k nope | v]) */
+var MB_VHS : [i64; 128]
+var MB_VH0 : [u64; 128]
+var MB_VH1 : [u64; 128]
+var MB_VH2 : [u64; 128]
+var MB_VHE : [i64; 128]
+var MB_VOK : u64 = 0u64
+fn mb_gz_vserve() -> u64 @export {
+    if MB_VOK == 1u64 { return 0u64 }
+    if MB_GAZE_OK != 1u64 { return 1u64 }
+    let hw : u64 = MB_G_NE[3] / MB_G_NE0[3] / MB_NHEAD
+    let nope : u64 = hw - MB_NROPE
+    let kvw : u64 = MB_G_NE[6] / MB_G_NE0[6] / MB_NHEAD
+    let nv : u64 = kvw - nope
+    if nv != 128u64 { return 2u64 }
+    mb_mkpath(MB_G_SH[1])
+    MB_LFILE[0] = fopen((&MB_PATH) as u64, "rb" as u64)
+    if MB_LFILE[0] == 0u64 { return 1u64 }
+    let mut d : u64 = 0u64
+    while d < nv {
+        if mb_gz_wrow(6u64, MB_GZ_A1 * kvw + nope + d) != 0u64 {
+            fclose(MB_LFILE[0])
+            return 1u64
+        }
+        if mb_gz_dotrow(MB_G_NE0[6], 2u64) != 0u64 {
+            fclose(MB_LFILE[0])
+            return 1u64
+        }
+        MB_VHS[d] = MB_RRS
+        MB_VH0[d] = MB_RR0
+        MB_VH1[d] = MB_RR1
+        MB_VH2[d] = MB_RR2
+        MB_VHE[d] = MB_RRE
+        d = d + 1u64
+    }
+    fclose(MB_LFILE[0])
+    MB_VOK = 1u64
+    return 0u64
+}
+fn mb_gz_v_s(d: u64) -> i64 @export {
+    if d >= 128u64 { return 0i64 }
+    return MB_VHS[d]
+}
+fn mb_gz_v_l(d: u64, k: u64) -> u64 @export {
+    if d >= 128u64 { return 0u64 }
+    if k == 0u64 { return MB_VH0[d] }
+    if k == 1u64 { return MB_VH1[d] }
+    return MB_VH2[d]
+}
+fn mb_gz_v_e(d: u64) -> i64 @export {
+    if d >= 128u64 { return 0i64 }
+    return MB_VHE[d]
+}
 
 /* METABOLE: the organism now has a mouth.  What it eats, it proves. */

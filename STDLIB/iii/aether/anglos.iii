@@ -145,10 +145,12 @@ const ANW_EQUALS  : u32 = 631u32         /* registered by an_init              *
 const AN_FNV_OFFSET : u64 = 0xcbf29ce484222325u64
 const AN_FNV_PRIME  : u64 = 0x100000001b3u64
 
-/* verdicts (mirror the door's family) */
+/* verdicts (mirror the door's family; CARRIED = transduced to the
+ * threshold, complete and readable, the door not yet knocked) */
 const AN_V_ADMITTED : u64 = 1u64
 const AN_V_REFUSED  : u64 = 2u64
 const AN_V_UNHEARD  : u64 = 3u64
+const AN_V_CARRIED  : u64 = 4u64
 
 /* named refusal reasons */
 const AN_R_NONE     : u64 = 0u64
@@ -178,6 +180,8 @@ var AN_TCNT : [u32; 1]                   /* tokenize out-count                 *
 
 var AN_SCR : [u8; 8192]                  /* the claim-array JSON (the guest)   */
 var AN_SCN : u64 = 0u64
+var AN_CO : [u64; 16]                    /* claim i: offset of its '[' in SCR  */
+var AN_CL : [u64; 16]                    /* claim i: text length to ']' incl.  */
 var AN_PA : [u8; 512]                    /* clause subject phrase              */
 var AN_PB : [u8; 512]                    /* clause predicate phrase            */
 
@@ -344,9 +348,11 @@ fn an_scr_put(c: u8) -> u64 {
     return 0u64
 }
 fn an_scr_claim(alen: u64, vch: u64, blen: u64) -> u64 {
+    if AN_CLAIMS >= 16u64 { return AN_R_THROAT }
     let mut r : u64 = 0u64
     if AN_CLAIMS == 0u64 { r = r + an_scr_put(91u8) } else { r = r + an_scr_put(44u8) }
     r = r + an_scr_put(34u8)
+    let co : u64 = AN_SCN                /* the '[' of this claim's text       */
     r = r + an_scr_put(91u8)
     let mut i : u64 = 0u64
     while i < alen { r = r + an_scr_put(AN_PA[i])   i = i + 1u64 }
@@ -356,8 +362,11 @@ fn an_scr_claim(alen: u64, vch: u64, blen: u64) -> u64 {
     i = 0u64
     while i < blen { r = r + an_scr_put(AN_PB[i])   i = i + 1u64 }
     r = r + an_scr_put(93u8)
+    let cl : u64 = AN_SCN - co           /* '[' .. ']' inclusive               */
     r = r + an_scr_put(34u8)
     if r != 0u64 { return AN_R_THROAT }
+    AN_CO[AN_CLAIMS] = co
+    AN_CL[AN_CLAIMS] = cl
     AN_CLAIMS = AN_CLAIMS + 1u64
     return 0u64
 }
@@ -544,7 +553,14 @@ fn an_sentence(ts: u64, te: u64) -> u64 {
 }
 
 /* ==================== THE HEARING ==================== */
-fn an_hear(base: u64, len: u64) -> u64 @export {
+/* TRANSDUCTION WITHOUT ADMISSION: the whole pipeline -- intake, lexing,
+ * sentence split, role mapping, the claim-array assembled and CLOSED --
+ * but the door is NEVER knocked and the standing scroll NEVER touched.
+ * This is the sponsor's face (proxenos): a proposal must be carried to
+ * the threshold and TESTED before any admission.  Returns AN_V_CARRIED
+ * with the full verdict surface (claims, questions, trace) readable;
+ * UNHEARD / REFUSED exactly as an_hear. */
+fn an_transduce(base: u64, len: u64) -> u64 @export {
     an_init()
     AN_VERDICT = 0u64
     AN_REASON = AN_R_NONE
@@ -597,9 +613,17 @@ fn an_hear(base: u64, len: u64) -> u64 @export {
     let sr2 : u64 = an_sentence(s, AN_TN)
     if sr2 != 0u64 { return an_refuse(sr2) }
     if AN_CLAIMS == 0u64 { if AN_QN == 0u64 { AN_VERDICT = AN_V_UNHEARD   return AN_V_UNHEARD } }
-    /* statements knock at THE ONE DOOR (judged, booked, standing) */
     if AN_CLAIMS > 0u64 {
         if an_scr_put(93u8) != 0u64 { return an_refuse(AN_R_THROAT) }
+    }
+    AN_VERDICT = AN_V_CARRIED
+    return AN_V_CARRIED
+}
+fn an_hear(base: u64, len: u64) -> u64 @export {
+    let t : u64 = an_transduce(base, len)
+    if t != AN_V_CARRIED { return t }
+    /* statements knock at THE ONE DOOR (judged, booked, standing) */
+    if AN_CLAIMS > 0u64 {
         let v : u64 = xn_admit((&AN_SCR) as u64, AN_SCN)
         if v != 1u64 { return an_refuse(AN_R_DOOR) }
         AN_ADDR = xn_last_addr()
@@ -634,6 +658,12 @@ fn an_heard() -> u64 @export { return AN_HEARD }
 fn an_admitted() -> u64 @export { return AN_ADMIT }
 fn an_scroll_len() -> u64 @export { return AN_SCN }
 fn an_scroll_byte(i: u64) -> u8 @export { if i < AN_SCN { return AN_SCR[i] }   return 0u8 }
+/* the claim surface: each transduced claim's text "[a v b]" readable */
+fn an_claim_len(i: u64) -> u64 @export { if i < AN_CLAIMS { return AN_CL[i] }   return 0u64 }
+fn an_claim_byte(i: u64, k: u64) -> u8 @export {
+    if i < AN_CLAIMS { if k < AN_CL[i] { return AN_SCR[AN_CO[i] + k] } }
+    return 0u8
+}
 /* the anamnesis surface: the hearing explained, sentence by sentence */
 fn an_trace_n() -> u64 @export { return AN_TRN }
 fn an_trace_kind(i: u64) -> u64 @export { if i < AN_TRN { return AN_TRK[i] }   return AN_SENT }
@@ -771,6 +801,15 @@ fn an_arm390() -> u64 {
     if a1 == 0u64 { return 390u64 }
     if an_hear_text("a dog is an animal" as u64) != 1u64 { return 390u64 }
     if AN_ADDR != a1 { return 390u64 }
+    /* transduction WITHOUT admission: carried to the threshold, the claim
+     * text readable, the door untouched */
+    let xh : u64 = xn_last_addr()
+    if an_transduce("a dog is an animal" as u64, 18u64) != 4u64 { return 390u64 }
+    if AN_CLAIMS != 1u64 { return 390u64 }
+    if xn_last_addr() != xh { return 390u64 }
+    if an_claim_len(0u64) != 14u64 { return 390u64 }
+    if an_claim_byte(0u64, 0u64) != 91u8 { return 390u64 }
+    if an_claim_byte(0u64, 13u64) != 93u8 { return 390u64 }
     return 0u64
 }
 /* arm 391: THE THREE VERBS -- the surface reaches every verb of the tongue,

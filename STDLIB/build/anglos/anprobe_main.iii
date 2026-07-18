@@ -29,6 +29,14 @@ extern @abi(c-msvc-x64) fn an_say_byte(i: u64) -> u8 from "anglos.iii"
 extern @abi(c-msvc-x64) fn xn_grade() -> u64 from "xenos.iii"
 extern @abi(c-msvc-x64) fn xn_book_verify() -> u64 from "xenos.iii"
 
+extern @abi(c-msvc-x64) fn px_selfprove() -> u64 from "proxenos.iii"
+extern @abi(c-msvc-x64) fn px_propose_text(s: u64) -> u64 from "proxenos.iii"
+extern @abi(c-msvc-x64) fn px_addr() -> u64 from "proxenos.iii"
+extern @abi(c-msvc-x64) fn px_novel_count() -> u64 from "proxenos.iii"
+extern @abi(c-msvc-x64) fn px_novel_idx(j: u64) -> u64 from "proxenos.iii"
+extern @abi(c-msvc-x64) fn an_claim_len(i: u64) -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_claim_byte(i: u64, k: u64) -> u8 from "anglos.iii"
+
 var AP_SAY : [u8; 4096]
 
 fn ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
@@ -44,6 +52,9 @@ fn main(argc: i32, argv: u64) -> u64 {
     let ap : u64 = an_selfprove()
     if ap != 0u64 { ps("scroll anglos = RED arm " as u64)   pu(ap)   putchar(10i32)   return 3u64 }
     ps("scroll anglos = 390..399 green\n" as u64)
+    let pp : u64 = px_selfprove()
+    if pp != 0u64 { ps("scroll sponsor = RED arm " as u64)   pu(pp)   putchar(10i32)   return 7u64 }
+    ps("scroll sponsor = 400..404 green\n" as u64)
 
     /* the real utterance: a market described in the wild tongue, one question */
     let u : u64 = "the pool is a constant product market and the fee equals the premium. is the pool a constant product market" as u64
@@ -78,6 +89,20 @@ fn main(argc: i32, argv: u64) -> u64 {
     if an_hear((&AP_SAY) as u64, sn) != 1u64 { ps("scroll say    = RE-HEAR REFUSED\n" as u64)   return 6u64 }
     if an_addr() != d { ps("scroll say    = ADDRESS DRIFT\n" as u64)   return 6u64 }
     ps("scroll say    = " as u64)   pu(sn)   ps(" bytes, re-heard to the same address\n" as u64)
+
+    /* the sponsor: an untrusted mouth confirmed by derivation, then denied
+     * novelty -- its lie converted into a readable question */
+    if px_propose_text("the pool is a constant product market" as u64) != 1u64 { ps("scroll sponsor = NO CONFIRM\n" as u64)   return 8u64 }
+    ps("the sponsor : confirmed [pool < constant product market] booked at address " as u64)   pu(px_addr())   putchar(10i32)
+    if px_propose_text("the pool is a promise" as u64) != 2u64 { ps("scroll sponsor = NOVEL LEAK\n" as u64)   return 8u64 }
+    if px_novel_count() != 1u64 { ps("scroll sponsor = HARVEST MISS\n" as u64)   return 8u64 }
+    ps("the harvest : ? " as u64)
+    let hci : u64 = px_novel_idx(0u64)
+    let hcl : u64 = an_claim_len(hci)
+    i = 0u64
+    while i < hcl { putchar(an_claim_byte(hci, i) as i32)   i = i + 1u64 }
+    ps("   (not admitted; a question, not knowledge)\n" as u64)
+    ps("scroll sponsor= confirmed without narrowing, novelty denied by name\n" as u64)
 
     let bk : u64 = xn_book_verify()
     ps("scroll book   = " as u64)   pu(bk)   ps(" lines, all self-derived\n" as u64)

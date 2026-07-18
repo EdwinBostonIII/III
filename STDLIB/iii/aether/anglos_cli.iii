@@ -44,6 +44,16 @@ extern @abi(c-msvc-x64) fn an_trace_n() -> u64 from "anglos.iii"
 extern @abi(c-msvc-x64) fn an_trace_kind(i: u64) -> u64 from "anglos.iii"
 extern @abi(c-msvc-x64) fn an_trace_frags(i: u64) -> u64 from "anglos.iii"
 extern @abi(c-msvc-x64) fn an_trace_out(i: u64) -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_claim_len(i: u64) -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_claim_byte(i: u64, k: u64) -> u8 from "anglos.iii"
+
+extern @abi(c-msvc-x64) fn px_selfprove() -> u64 from "proxenos.iii"
+extern @abi(c-msvc-x64) fn px_propose(base: u64, len: u64) -> u64 from "proxenos.iii"
+extern @abi(c-msvc-x64) fn px_verdict() -> u64 from "proxenos.iii"
+extern @abi(c-msvc-x64) fn px_addr() -> u64 from "proxenos.iii"
+extern @abi(c-msvc-x64) fn px_novel_count() -> u64 from "proxenos.iii"
+extern @abi(c-msvc-x64) fn px_novel_idx(j: u64) -> u64 from "proxenos.iii"
+extern @abi(c-msvc-x64) fn px_stat(k: u64) -> u64 from "proxenos.iii"
 
 extern @abi(c-msvc-x64) fn xn_grade() -> u64 from "xenos.iii"
 extern @abi(c-msvc-x64) fn xn_reason() -> u64 from "xenos.iii"
@@ -96,6 +106,9 @@ fn usage() -> u64 {
     ps("  iii anglos prove                the self-proof (anglos 390..399)\n" as u64)
     ps("  iii anglos hear \"<english>\"     statements admitted through the door;\n" as u64)
     ps("                                  questions answered by derivation\n" as u64)
+    ps("  iii anglos propose \"<english>\"  the sponsor: an UNTRUSTED proposer's word,\n" as u64)
+    ps("                                  CONFIRMED by re-derivation or converted\n" as u64)
+    ps("                                  whole into named questions (never admitted)\n" as u64)
     ps("  iii anglos say                  the standing scroll spoken back in english\n\n" as u64)
     ps("exit: 0 heard/said | 1 refused/unheard/unsayable | 3 usage | 9 SELF-REFUSED\n" as u64)
     return 3u64
@@ -129,6 +142,8 @@ fn condition_of_motion() -> u64 {
     if dp != 0u64 { ps("THE DOOR REFUSES ITSELF: xenos self-proof arm " as u64)   pu(dp)   ps(" failed\n" as u64)   return 9u64 }
     let ap : u64 = an_selfprove()
     if ap != 0u64 { ps("THE TONGUE REFUSES ITSELF: anglos self-proof arm " as u64)   pu(ap)   ps(" failed\n" as u64)   return 9u64 }
+    let pp : u64 = px_selfprove()
+    if pp != 0u64 { ps("THE SPONSOR REFUSES ITSELF: proxenos self-proof arm " as u64)   pu(pp)   ps(" failed\n" as u64)   return 9u64 }
     return 0u64
 }
 /* the anamnesis printed: the organ explains its own hearing, sentence by
@@ -236,6 +251,61 @@ fn anglos_enter(argc: i32, argv: u64) -> u64 @export {
         let n : u64 = join_args(argc, argv, 2u64, (&AC_IN) as u64, 4095u64)
         an_hear((&AC_IN) as u64, n)
         return print_hearing()
+    }
+    if streq(cmd, "propose" as u64) == 1u32 {
+        /* the sponsor's face: an UNTRUSTED proposer's utterance -- confirmed
+         * by derivation, or converted whole into named questions.  The
+         * standing scroll lives in THIS process, so the house may speak
+         * first:  iii anglos propose "<known english>" -- "<proposal>"
+         * (the first part heard through the door; the second sponsored). */
+        if argc < 3i32 { return usage() }
+        let mut sep : u64 = 0u64
+        let mut si : u64 = 2u64
+        while (si as i64) < (argc as i64) {
+            if streq(av[si], "--" as u64) == 1u32 { sep = si   si = argc as u64 } else { si = si + 1u64 }
+        }
+        let mut frm : u64 = 2u64
+        if sep != 0u64 {
+            let kn : u64 = join_args(sep as i32, argv, 2u64, (&AC_IN) as u64, 4095u64)
+            if an_hear((&AC_IN) as u64, kn) != 1u64 {
+                ps("the house could not stand what you gave it to know:\n" as u64)
+                return print_hearing()
+            }
+            ps("the house stands: " as u64)   pu(an_claims())   ps(" claim(s) at address " as u64)   pu(an_addr())   putchar(10i32)
+            frm = sep + 1u64
+        }
+        if (frm as i64) >= (argc as i64) { return usage() }
+        let n : u64 = join_args(argc, argv, frm, (&AC_IN) as u64, 4095u64)
+        let v : u64 = px_propose((&AC_IN) as u64, n)
+        if v == 1u64 {
+            ps("CONFIRMED  every claim RE-DERIVED from what stands; the confirmation\n" as u64)
+            ps("           booked at the one door (address " as u64)   pu(px_addr())   ps(")\n" as u64)
+            ps("  the house re-stands WHOLE -- confirming a subset never narrows it\n" as u64)
+            return 0u64
+        }
+        if v == 2u64 {
+            ps("NOVEL      not knowledge -- the house cannot derive these; nothing was\n" as u64)
+            ps("           admitted.  The question harvest (what to seek next):\n" as u64)
+            let nn : u64 = px_novel_count()
+            let mut j : u64 = 0u64
+            while j < nn {
+                let ci : u64 = px_novel_idx(j)
+                ps("  ? " as u64)
+                let cl : u64 = an_claim_len(ci)
+                let mut k : u64 = 0u64
+                while k < cl { putchar(an_claim_byte(ci, k) as i32)   k = k + 1u64 }
+                putchar(10i32)
+                j = j + 1u64
+            }
+            ps("  [sponsored " as u64)   pu(px_stat(0u64))   ps(" confirmed, " as u64)
+            pu(px_stat(1u64))   ps(" novel, " as u64)   pu(px_stat(2u64))   ps(" refused]\n" as u64)
+            return 1u64
+        }
+        ps("REFUSED    the surface could not carry it (" as u64)
+        if an_verdict() == 2u64 { reason_word(an_reason()) } else { ps("no statement -- a bare question is the tongue's own face, not the sponsor's" as u64) }
+        ps(")\n" as u64)
+        print_trace()
+        return 1u64
     }
     if streq(cmd, "say" as u64) == 1u32 {
         let n : u64 = an_say()

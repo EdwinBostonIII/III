@@ -49,6 +49,7 @@ cc_one() {
 }
 
 cc_one "$ROOT/STDLIB/iii/aether/anglos.iii"   "$T/anglos.o"   || exit 2
+cc_one "$ROOT/STDLIB/iii/aether/proxenos.iii" "$T/proxenos.o" || exit 2
 cc_one "$ROOT/STDLIB/iii/verba/nl_lex.iii"    "$T/nl_lex.o"   || exit 2
 cc_one "$ROOT/STDLIB/iii/verba/nl_parse.iii"  "$T/nl_parse.o" || exit 2
 cc_one "$ROOT/STDLIB/iii/aether/xring.iii"    "$T/xring.o"    || exit 2
@@ -62,7 +63,7 @@ cc_one "$ROOT/STDLIB/iii/memoria/arena.iii"   "$T/arena.o"    || exit 2
 cc_one "$ROOT/STDLIB/build/anglos/anprobe_main.iii" "$T/anprobe_main.o" || exit 2
 
 gcc -o "$T/anprobe.exe" \
-    "$T/anprobe_main.o" "$T/anglos.o" "$T/nl_lex.o" "$T/nl_parse.o" \
+    "$T/anprobe_main.o" "$T/anglos.o" "$T/proxenos.o" "$T/nl_lex.o" "$T/nl_parse.o" \
     "$T/xenos.o" "$T/xring.o" "$T/eidolos.o" "$T/isub.o" \
     "$T/lexicon.o" "$T/json.o" "$T/builder.o" "$T/arena.o" \
     "$ARC" -lws2_32 -lkernel32 \
@@ -88,6 +89,8 @@ fi
 grep -q "^scroll vein   = 120..124 green" "$T/run1.txt"  || { echo "[anglos_gate] NO VEIN"; exit 6; }
 grep -q "^scroll door   = 109..118 green" "$T/run1.txt"  || { echo "[anglos_gate] NO DOOR"; exit 6; }
 grep -q "^scroll anglos = 390..399 green" "$T/run1.txt"  || { echo "[anglos_gate] NO TONGUE"; exit 6; }
+grep -q "^scroll sponsor = 400..404 green" "$T/run1.txt" || { echo "[anglos_gate] NO SPONSOR"; exit 6; }
+grep -q "^scroll sponsor= confirmed without narrowing" "$T/run1.txt" || { echo "[anglos_gate] NO SPONSORSHIP"; exit 6; }
 grep -q "^the hearing: claims=2 grade=1 " "$T/run1.txt"  || { echo "[anglos_gate] NO HEARING"; exit 6; }
 grep -q " : KNOWN$" "$T/run1.txt"                        || { echo "[anglos_gate] NO ANSWER"; exit 6; }
 grep -q "^scroll say    = [0-9].* same address" "$T/run1.txt" || { echo "[anglos_gate] NO SAY"; exit 6; }

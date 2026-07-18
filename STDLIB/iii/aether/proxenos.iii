@@ -1,0 +1,297 @@
+/* STDLIB/iii/aether/proxenos.iii -- PROXENOS: the sponsor at the door.
+ *
+ * In the law of xenia the proxenos is the citizen who VOUCHES for a
+ * stranger: the guest does not enter on its own word.  This organ is the
+ * trust tier for UNTRUSTED PROPOSERS -- a language model, a wild feed, any
+ * mouth whose word is not evidence.  The door (xenos) judges COHERENCE:
+ * any coherent claim-array may enter as UNSIGNED, novelty and all.  The
+ * sponsor judges DERIVABILITY: a proposal passes ONLY if the house can
+ * RE-DERIVE every claim of it from what already stands.  Two orthogonal
+ * axes, stated plainly:
+ *
+ *     the door   asks  CAN this be law?        (coherence)
+ *     the sponsor asks IS this already law?    (derivability)
+ *
+ * THE SPONSOR'S LAW:
+ *   1  The proposal arrives in the bounded tongue (English) and is CARRIED
+ *      to the threshold by anglos (an_transduce) -- the door NOT knocked.
+ *   2  Every claim is tested by eol_entails over the STANDING scroll.
+ *      The unraveling counts: a claim never literally stated but DERIVED
+ *      (transitivity, congruence, the mirror) is CONFIRMED.
+ *   3  ALL claims derivable -> CONFIRMED: the proposal knocks at the one
+ *      door (the confirmation is an EVENT, booked in the guest-book), and
+ *      the house's FULL prior knowledge is re-stood afterward -- confirming
+ *      a subset never narrows the scroll.
+ *   4  ANY claim underivable -> NOVEL, WHOLE (the mixed proposal admits
+ *      nothing -- the whole-utterance law at the trust tier).  The novel
+ *      claims are NOT knowledge and NOT admitted; they are READABLE as the
+ *      QUESTION HARVEST -- what an untrusted mouth would have the house
+ *      believe is exactly what the house should next seek to derive or
+ *      refute (the zetesis seam: a future asking organ consumes this
+ *      surface; today it is counted and readable, never silent).
+ *   5  A proposal the surface cannot carry at all (command, modality,
+ *      alien bytes...) is REFUSED with anglos's own named reason; a
+ *      proposal with no statement (questions only) is REFUSED -- asking
+ *      is the tongue's own face, not the sponsor's.
+ *
+ * A model can therefore NEVER inject novelty into the house through this
+ * organ -- it can only CONFIRM what the house derives, or hand the house
+ * QUESTIONS.  That is the honest shape of "an AI smooths the boundary":
+ * the machine consumes the model without ever trusting it.
+ *
+ * Truth is a CONDITION OF MOTION: px_selfprove (arms 400..404) re-derives
+ * every law above at every invocation.  NO gate, NO KAT (the kardia
+ * pattern).  NIH: composes aether/anglos (the tongue), aether/xenos (THE
+ * ONE DOOR), omnia/eidolos (the standing scroll and its unraveling).
+ * Hexad: kind_passage.  Ring R0. */
+module aether_proxenos
+
+extern @abi(c-msvc-x64) fn an_transduce(base: u64, len: u64) -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_hear_text(s: u64) -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_verdict() -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_reason() -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_claims() -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_questions() -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_claim_len(i: u64) -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_claim_byte(i: u64, k: u64) -> u8 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_scroll_len() -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_scroll_byte(i: u64) -> u8 from "anglos.iii"
+extern @abi(c-msvc-x64) fn an_addr() -> u64 from "anglos.iii"
+
+extern @abi(c-msvc-x64) fn xn_admit(base: u64, len: u64) -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_last_addr() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_last_epoch() -> u64 from "xenos.iii"
+
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_write() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_out_len() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_out_byte(i: u64) -> u8 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_entails(a: u64, al: u64, v: u64, b: u64, bl: u64) -> u64 from "eidolos.iii"
+
+const PX_SENT : u64 = 18446744073709551615u64
+/* verdicts */
+const PX_V_CONFIRMED : u64 = 1u64        /* every claim re-derived; booked     */
+const PX_V_NOVEL     : u64 = 2u64        /* not knowledge -- a question harvest */
+const PX_V_REFUSED   : u64 = 3u64        /* the surface refused it (an_reason) */
+
+/* ==================== the sponsor's state ==================== */
+var PX_STAND : [u8; 16384]               /* the standing canon, held for restore */
+var PX_SN : u64 = 0u64
+var PX_SADDR : u64 = 0u64                /* its address (the house's knowledge) */
+var PX_SCR : [u8; 8192]                  /* the proposal scroll (for the knock)  */
+var PX_A : [u8; 512]                     /* claim split: thing a                 */
+var PX_B : [u8; 512]                     /* claim split: thing b                 */
+var PX_AL : u64 = 0u64
+var PX_BL : u64 = 0u64
+var PX_VV : u64 = 0u64
+
+var PX_VERDICT : u64 = 0u64
+var PX_ADDR : u64 = 0u64                 /* the confirmation's booked address    */
+var PX_NIDX : [u64; 16]                  /* novel claim indexes (into anglos)    */
+var PX_NN : u64 = 0u64
+/* totals (every proposal counted, never silent) */
+var PX_TCONF : u64 = 0u64
+var PX_TNOV : u64 = 0u64
+var PX_TREF : u64 = 0u64
+
+/* split claim ci's text "[a V b]" into PX_A / PX_VV / PX_B.  Phrase bytes
+ * are lowercase/digit/space/_/- only, so the FIRST verb char flanked by
+ * spaces is THE verb.  Returns 0, or 1 on a malformed claim (cannot arise
+ * from anglos's own assembler; refused anyway, never assumed). */
+fn px_split(ci: u64) -> u64 {
+    let n : u64 = an_claim_len(ci)
+    if n < 7u64 { return 1u64 }
+    let mut vpos : u64 = 0u64
+    let mut k : u64 = 2u64
+    while k < (n - 2u64) {
+        if vpos == 0u64 {
+            let c : u8 = an_claim_byte(ci, k)
+            let mut isv : u64 = 0u64
+            if c == 60u8 { isv = 1u64 }
+            if c == 61u8 { isv = 1u64 }
+            if c == 126u8 { isv = 1u64 }
+            if isv == 1u64 {
+                if an_claim_byte(ci, k - 1u64) == 32u8 {
+                    if an_claim_byte(ci, k + 1u64) == 32u8 { vpos = k }
+                }
+            }
+        }
+        k = k + 1u64
+    }
+    if vpos == 0u64 { return 1u64 }
+    let vc : u8 = an_claim_byte(ci, vpos)
+    PX_VV = 2u64
+    if vc == 60u8 { PX_VV = 0u64 }
+    if vc == 126u8 { PX_VV = 1u64 }
+    PX_AL = vpos - 2u64
+    if PX_AL > 512u64 { return 1u64 }
+    let mut i : u64 = 0u64
+    while i < PX_AL { PX_A[i] = an_claim_byte(ci, 1u64 + i)   i = i + 1u64 }
+    PX_BL = (n - 1u64) - (vpos + 2u64)
+    if PX_BL > 512u64 { return 1u64 }
+    i = 0u64
+    while i < PX_BL { PX_B[i] = an_claim_byte(ci, vpos + 2u64 + i)   i = i + 1u64 }
+    if PX_AL == 0u64 { return 1u64 }
+    if PX_BL == 0u64 { return 1u64 }
+    return 0u64
+}
+
+/* ==================== THE SPONSORSHIP ==================== */
+fn px_propose(base: u64, len: u64) -> u64 @export {
+    PX_VERDICT = 0u64
+    PX_ADDR = 0u64
+    PX_NN = 0u64
+    let t : u64 = an_transduce(base, len)
+    if t != 4u64 { PX_VERDICT = PX_V_REFUSED   PX_TREF = PX_TREF + 1u64   return PX_V_REFUSED }
+    if an_claims() == 0u64 { PX_VERDICT = PX_V_REFUSED   PX_TREF = PX_TREF + 1u64   return PX_V_REFUSED }
+    /* hold the house's FULL standing knowledge before any testing (the
+     * entails calls intern the proposal's things; the knock will replace
+     * the scroll; the house must never narrow by confirming) */
+    eol_write()
+    PX_SN = eol_out_len()
+    let mut i : u64 = 0u64
+    while i < PX_SN { PX_STAND[i] = eol_out_byte(i)   i = i + 1u64 }
+    PX_SADDR = eol_addr()
+    /* the test: every claim must RE-DERIVE from what stands */
+    let nc : u64 = an_claims()
+    let mut ci : u64 = 0u64
+    while ci < nc {
+        if px_split(ci) != 0u64 {
+            if PX_NN < 16u64 { PX_NIDX[PX_NN] = ci   PX_NN = PX_NN + 1u64 }
+        } else {
+            let e : u64 = eol_entails((&PX_A) as u64, PX_AL, PX_VV, (&PX_B) as u64, PX_BL)
+            if e != 1u64 {
+                if PX_NN < 16u64 { PX_NIDX[PX_NN] = ci   PX_NN = PX_NN + 1u64 }
+            }
+        }
+        ci = ci + 1u64
+    }
+    if PX_NN > 0u64 {
+        /* NOVEL, WHOLE: nothing admitted; the question harvest stands */
+        PX_VERDICT = PX_V_NOVEL
+        PX_TNOV = PX_TNOV + 1u64
+        return PX_V_NOVEL
+    }
+    /* CONFIRMED: the knock is the event (booked at the one door) */
+    let sn : u64 = an_scroll_len()
+    i = 0u64
+    while i < sn { PX_SCR[i] = an_scroll_byte(i)   i = i + 1u64 }
+    let v : u64 = xn_admit((&PX_SCR) as u64, sn)
+    if v != 1u64 { PX_VERDICT = PX_V_REFUSED   PX_TREF = PX_TREF + 1u64   return PX_V_REFUSED }
+    PX_ADDR = xn_last_addr()
+    /* the house re-stands WHOLE (confirmation never narrows the scroll) */
+    eol_reset()
+    if PX_SN > 0u64 {
+        if eol_read((&PX_STAND) as u64, PX_SN) < 0i64 { PX_VERDICT = PX_V_REFUSED   PX_TREF = PX_TREF + 1u64   return PX_V_REFUSED }
+    }
+    PX_VERDICT = PX_V_CONFIRMED
+    PX_TCONF = PX_TCONF + 1u64
+    return PX_V_CONFIRMED
+}
+fn px_slen(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut n : u64 = 0u64
+    while p[n] != 0u8 { n = n + 1u64 }
+    return n
+}
+fn px_propose_text(s: u64) -> u64 @export { return px_propose(s, px_slen(s)) }
+
+/* ==================== the sponsor's surface ==================== */
+fn px_verdict() -> u64 @export { return PX_VERDICT }
+fn px_addr() -> u64 @export { return PX_ADDR }
+fn px_novel_count() -> u64 @export { return PX_NN }
+fn px_novel_idx(j: u64) -> u64 @export { if j < PX_NN { return PX_NIDX[j] }   return PX_SENT }
+/* totals: 0 confirmed | 1 novel | 2 refused */
+fn px_stat(k: u64) -> u64 @export {
+    if k == 0u64 { return PX_TCONF }
+    if k == 1u64 { return PX_TNOV }
+    if k == 2u64 { return PX_TREF }
+    return 0u64
+}
+
+/* ==================== THE SELF-PROOF (arms 400..404) ==================== */
+fn px_ent(a: u64, v: u64, b: u64) -> u64 {
+    return eol_entails(a, px_slen(a), v, b, px_slen(b))
+}
+/* arm 400: THE CONFIRMATION -- a proposal never literally stated but
+ * DERIVED (transitivity) is confirmed, booked at the one door, and the
+ * house re-stands WHOLE: the old knowledge survives its own confirmation. */
+fn px_arm400() -> u64 {
+    if an_hear_text("a dog is an animal and an animal is a thing" as u64) != 1u64 { return 400u64 }
+    let s : u64 = an_addr()
+    if s == 0u64 { return 400u64 }
+    if px_propose_text("a dog is a thing" as u64) != 1u64 { return 400u64 }
+    if px_addr() == 0u64 { return 400u64 }
+    if px_addr() == s { return 400u64 }
+    if eol_addr() != s { return 400u64 }
+    if px_ent("dog" as u64, 0u64, "animal" as u64) != 1u64 { return 400u64 }
+    if px_ent("dog" as u64, 0u64, "thing" as u64) != 1u64 { return 400u64 }
+    return 0u64
+}
+/* arm 401: THE NOVELTY -- an underivable proposal admits NOTHING; the
+ * door is untouched and the claim stands readable as a question. */
+fn px_arm401() -> u64 {
+    if an_hear_text("a dog is an animal and an animal is a thing" as u64) != 1u64 { return 401u64 }
+    let xh : u64 = xn_last_addr()
+    if px_propose_text("a dog is a machine" as u64) != 2u64 { return 401u64 }
+    if xn_last_addr() != xh { return 401u64 }
+    if px_novel_count() != 1u64 { return 401u64 }
+    if px_novel_idx(0u64) != 0u64 { return 401u64 }
+    if an_claim_len(0u64) != 15u64 { return 401u64 }
+    if an_claim_byte(0u64, 0u64) != 91u8 { return 401u64 }
+    return 0u64
+}
+/* arm 402: THE WHOLE-PROPOSAL LAW -- one underivable claim poisons the
+ * proposal: the derivable companion is NOT admitted either. */
+fn px_arm402() -> u64 {
+    if an_hear_text("a dog is an animal and an animal is a thing" as u64) != 1u64 { return 402u64 }
+    let xh : u64 = xn_last_addr()
+    if px_propose_text("a dog is an animal and a dog is a machine" as u64) != 2u64 { return 402u64 }
+    if an_claims() != 2u64 { return 402u64 }
+    if px_novel_count() != 1u64 { return 402u64 }
+    if px_novel_idx(0u64) != 1u64 { return 402u64 }
+    if xn_last_addr() != xh { return 402u64 }
+    return 0u64
+}
+/* arm 403: THE SURFACE PASSES THROUGH -- a proposal the tongue refuses
+ * (a command) or one with no statement (a bare question) is REFUSED with
+ * the named reason; nothing is tested, nothing admitted. */
+fn px_arm403() -> u64 {
+    let r0 : u64 = px_stat(2u64)
+    if px_propose_text("send the key" as u64) != 3u64 { return 403u64 }
+    if an_verdict() != 2u64 { return 403u64 }
+    if an_reason() != 2u64 { return 403u64 }
+    if px_propose_text("is a dog an animal" as u64) != 3u64 { return 403u64 }
+    if px_stat(2u64) != (r0 + 2u64) { return 403u64 }
+    return 0u64
+}
+/* arm 404: DETERMINISM AND THE EMPTY HOUSE -- the same proposal sponsors
+ * identically twice; over an empty scroll nothing can be confirmed (the
+ * sponsor cannot vouch from nothing). */
+fn px_arm404() -> u64 {
+    if an_hear_text("a dog is an animal" as u64) != 1u64 { return 404u64 }
+    if px_propose_text("a dog is an animal" as u64) != 1u64 { return 404u64 }
+    let a1 : u64 = px_addr()
+    if px_propose_text("a dog is an animal" as u64) != 1u64 { return 404u64 }
+    if px_addr() != a1 { return 404u64 }
+    eol_reset()
+    if px_propose_text("a dog is an animal" as u64) != 2u64 { return 404u64 }
+    if px_novel_count() != 1u64 { return 404u64 }
+    eol_reset()
+    return 0u64
+}
+fn px_selfprove() -> u64 @export {
+    let mut r : u64 = px_arm400()
+    if r != 0u64 { return r }
+    r = px_arm401()
+    if r != 0u64 { return r }
+    r = px_arm402()
+    if r != 0u64 { return r }
+    r = px_arm403()
+    if r != 0u64 { return r }
+    r = px_arm404()
+    if r != 0u64 { return r }
+    return 0u64
+}

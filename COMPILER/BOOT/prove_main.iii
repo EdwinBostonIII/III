@@ -161,7 +161,7 @@ fn compile_to_svir(path: u64, src: u64, con: u64, lenout: u64) -> u32 {
     return 0u32
 }
 
-fn main(argc: i32, argv: u64) -> u64 {
+fn prove_enter(argc: i32, argv: u64) -> u64 @export {
     let av : *u64 = argv as *u64
     if argc < 2i32 {
         ps("iii-prove -- prove two functions equal over ALL 2^64 inputs (III's own disposer)\n\n" as u64)

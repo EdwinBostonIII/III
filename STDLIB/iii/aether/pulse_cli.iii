@@ -96,7 +96,7 @@ fn print_sil() -> i32 {
     return 0i32
 }
 
-fn main(argc: i32, argv: u64) -> u64 {
+fn pulse_enter(argc: i32, argv: u64) -> u64 @export {
     if argc < 3i32 {
         ps("iii-pulse hash <image>\n" as u64)
         ps("iii-pulse attest <image> [expect-hex|none]\n" as u64)

@@ -1,0 +1,388 @@
+/* COMPILER/BOOT/iii_main.iii -- iii: THE ORGANISM.  The engine fleet, one body.
+ *
+ *   iii                      THE FACE: every skill's standing, dues, vitality
+ *   iii <skill> [args...]    any engine's whole surface, one level down:
+ *                            `iii kardia status`, `iii prove a.iii f b.iii g`,
+ *                            `iii ergon census`, `iii motion scroll`, ...
+ *   iii whole                the face, explicitly
+ *   iii due                  which skills owe a proof on THIS body (pin drift)
+ *   iii earn [N]             convert up to N due skills: run each one's own
+ *                            self-derivation to its OS-true exit, record PROOF
+ *   iii law                  the organism's laws, re-proven this invocation
+ *
+ * There are no engines here in the old sense.  Nothing is "running" or "not
+ * running": every skill has STANDING held in an append-only ledger
+ * (STDLIB/build/holos/holos.log), a reach-pin over exactly what its behavior
+ * depends on, and activation that is exactly drift or need.  EVERY invocation:
+ * (1) the holos self-proof arms run first -- a failed law refuses the face
+ * (exit 9, the autognosis pattern); (2) the asked skill executes IN-PROCESS
+ * (same argv contract as its retired standalone binary, shifted one seat);
+ * (3) the invocation appends a WORK event (skill, pin, exit, seq) -- the
+ * organism's autobiography; the exit passes through UNCHANGED.
+ *
+ * Skill exits are the skill's own.  The organism adds exactly three of its
+ * own: 3 usage (unknown skill/verb), 9 SELF-REFUSED (a holos law arm failed),
+ * and for `earn`: 1 when a probe reddened.  Requires CWD = the III root for
+ * the ledger + pins (a skill still runs elsewhere; the autobiography line is
+ * then counted as unwritable, never blocking the skill). */
+module iii_main
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn ho_selfprove() -> u64 from "holos.iii"
+extern @abi(c-msvc-x64) fn ho_count() -> u64 from "holos.iii"
+extern @abi(c-msvc-x64) fn ho_find(name: u64, len: u64) -> u64 from "holos.iii"
+extern @abi(c-msvc-x64) fn ho_name_byte(i: u64, j: u64) -> u8 from "holos.iii"
+extern @abi(c-msvc-x64) fn ho_name_len(i: u64) -> u64 from "holos.iii"
+extern @abi(c-msvc-x64) fn ho_class(i: u64) -> u8 from "holos.iii"
+extern @abi(c-msvc-x64) fn ho_probe(i: u64) -> u64 from "holos.iii"
+extern @abi(c-msvc-x64) fn ho_probe_len(i: u64) -> u64 from "holos.iii"
+extern @abi(c-msvc-x64) fn ho_standing(i: u64) -> u64 from "holos.iii"
+extern @abi(c-msvc-x64) fn ho_due(i: u64) -> u64 from "holos.iii"
+extern @abi(c-msvc-x64) fn ho_due_n() -> u64 from "holos.iii"
+extern @abi(c-msvc-x64) fn ho_standing_n(which: u64) -> u64 from "holos.iii"
+extern @abi(c-msvc-x64) fn ho_class_n(cls: u8) -> u64 from "holos.iii"
+extern @abi(c-msvc-x64) fn ho_vitality() -> u64 from "holos.iii"
+extern @abi(c-msvc-x64) fn ho_pin_all() -> i32 from "holos.iii"
+extern @abi(c-msvc-x64) fn ho_pin_skill(i: u64) -> u64 from "holos.iii"
+extern @abi(c-msvc-x64) fn ho_body_pin() -> u64 from "holos.iii"
+extern @abi(c-msvc-x64) fn ho_ledger_load() -> i64 from "holos.iii"
+extern @abi(c-msvc-x64) fn ho_ledger_append(i: u64, exitc: u64, mode: u8) -> i32 from "holos.iii"
+extern @abi(c-msvc-x64) fn ho_make_dir() -> i32 from "holos.iii"
+extern @abi(c-msvc-x64) fn ho_malformed() -> u64 from "holos.iii"
+extern @abi(c-msvc-x64) fn ho_missing() -> u64 from "holos.iii"
+extern @abi(c-msvc-x64) fn ho_uncited() -> u64 from "holos.iii"
+extern @abi(c-msvc-x64) fn ho_ingest_build() -> i64 from "holos.iii"
+extern @abi(c-msvc-x64) fn ho_w_seq(i: u64) -> u64 from "holos.iii"
+extern @abi(c-msvc-x64) fn ho_w_exit(i: u64) -> u64 from "holos.iii"
+extern @abi(c-msvc-x64) fn ho_w_present(i: u64) -> u8 from "holos.iii"
+
+extern @abi(c-msvc-x64) fn proc_run(cmd: u64, envp: u64, cap_ms: u32) -> i32 from "stoma_proc.iii"
+extern @abi(c-msvc-x64) fn proc_code() -> u32 from "stoma_proc.iii"
+
+/* the thirty skills, each its whole engine surface (argv shifted one seat) */
+extern @abi(c-msvc-x64) fn agon_enter(argc: i32, argv: u64) -> u64 from "agon_cli.iii"
+extern @abi(c-msvc-x64) fn author_enter(argc: i32, argv: u64) -> u64 from "author_cli.iii"
+extern @abi(c-msvc-x64) fn closure_enter(argc: i32, argv: u64) -> u64 from "closure_cli.iii"
+extern @abi(c-msvc-x64) fn crypto_enter(argc: i32, argv: u64) -> u64 from "crypto_cli.iii"
+extern @abi(c-msvc-x64) fn doxa_enter(argc: i32, argv: u64) -> u64 from "doxa_main.iii"
+extern @abi(c-msvc-x64) fn eidolos_enter(argc: i32, argv: u64) -> u64 from "eidolos_main.iii"
+extern @abi(c-msvc-x64) fn ergon_enter(argc: i32, argv: u64) -> u64 from "ergon_main.iii"
+extern @abi(c-msvc-x64) fn eval_enter(argc: u32, argv: u64) -> u32 from "eval_main.iii"
+extern @abi(c-msvc-x64) fn events_enter(argc: i32, argv: u64) -> u64 from "events_main.iii"
+extern @abi(c-msvc-x64) fn exact_enter(argc: i32, argv: u64) -> u64 from "exact_cli.iii"
+extern @abi(c-msvc-x64) fn friction_enter(argc: i32, argv: u64) -> u64 from "friction_cli.iii"
+extern @abi(c-msvc-x64) fn hexad_enter(argc: i32, argv: u64) -> u64 from "hexad_cli.iii"
+extern @abi(c-msvc-x64) fn intent_enter(argc: i32, argv: u64) -> u64 from "intent_cli.iii"
+extern @abi(c-msvc-x64) fn judge_enter(argc: i32, argv: u64) -> u64 from "judge_cli.iii"
+extern @abi(c-msvc-x64) fn kardia_enter(argc: i32, argv: u64) -> u64 from "kardia_main.iii"
+extern @abi(c-msvc-x64) fn line_enter(argc: i32, argv: u64) -> u64 from "line_main.iii"
+extern @abi(c-msvc-x64) fn manifold_enter(argc: i32, argv: u64) -> u64 from "manifold_main.iii"
+extern @abi(c-msvc-x64) fn motion_enter(argc: i32, argv: u64) -> u64 from "motion_main.iii"
+extern @abi(c-msvc-x64) fn plane_enter(argc: i32, argv: u64) -> u64 from "plane_main.iii"
+extern @abi(c-msvc-x64) fn proofcarry_enter(argc: i32, argv: u64) -> u64 from "proofcarry_main.iii"
+extern @abi(c-msvc-x64) fn prove_enter(argc: i32, argv: u64) -> u64 from "prove_main.iii"
+extern @abi(c-msvc-x64) fn pulse_enter(argc: i32, argv: u64) -> u64 from "pulse_cli.iii"
+extern @abi(c-msvc-x64) fn soma_enter(argc: i32, argv: u64) -> u64 from "soma_main.iii"
+extern @abi(c-msvc-x64) fn space_enter(argc: i32, argv: u64) -> u64 from "space_main.iii"
+extern @abi(c-msvc-x64) fn substrate_enter(argc: i32, argv: u64) -> u64 from "substrate_cli.iii"
+extern @abi(c-msvc-x64) fn testament_enter(argc: i32, argv: u64) -> u64 from "testament_cli.iii"
+extern @abi(c-msvc-x64) fn typecheck_enter(argc: i32, argv: u64) -> u64 from "typecheck_cli.iii"
+extern @abi(c-msvc-x64) fn witness_enter(argc: i32, argv: u64) -> u64 from "witness_cli.iii"
+extern @abi(c-msvc-x64) fn worldline_enter(argc: i32, argv: u64) -> u64 from "worldline_main.iii"
+extern @abi(c-msvc-x64) fn xeno_enter(argc: i32, argv: u64) -> u64 from "xeno_cli.iii"
+
+fn ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }
+    return 1u32
+}
+fn pu(v: u64) -> u32 { if v >= 10u64 { pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn phex(v: u64) -> u32 {
+    let mut k : u64 = 64u64
+    while k > 0u64 {
+        k = k - 4u64
+        let nib : u64 = (v >> k) & 15u64
+        if nib < 10u64 { putchar((48u64 + nib) as i32) } else { putchar((87u64 + nib) as i32) }
+    }
+    return 1u32
+}
+fn streq(a: u64, b: u64) -> u32 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while pa[i] != 0u8 { if pa[i] != pb[i] { return 0u32 }   i = i + 1u64 }
+    if pb[i] != 0u8 { return 0u32 }
+    return 1u32
+}
+fn slen(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut n : u64 = 0u64
+    while p[n] != 0u8 { n = n + 1u64 }
+    return n
+}
+fn parse_u64(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut v : u64 = 0u64
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { if p[i] >= 48u8 { if p[i] <= 57u8 { v = (v * 10u64) + ((p[i] - 48u8) as u64) } }   i = i + 1u64 }
+    return v
+}
+fn pname(i: u64) -> u32 {
+    let n : u64 = ho_name_len(i)
+    let mut j : u64 = 0u64
+    while j < n { putchar(ho_name_byte(i, j) as i32)   j = j + 1u64 }
+    while j < 11u64 { putchar(32i32)   j = j + 1u64 }
+    return 1u32
+}
+fn usage() -> u64 {
+    ps("iii -- THE ORGANISM: the engine fleet, one body\n\n" as u64)
+    ps("  iii                    THE FACE: every skill's standing, dues, vitality\n" as u64)
+    ps("  iii <skill> [args]     any engine's whole surface, one level down\n" as u64)
+    ps("  iii due                which skills owe a proof on THIS body\n" as u64)
+    ps("  iii earn [N]           convert up to N due skills (their own self-derivations)\n" as u64)
+    ps("  iii law                the organism's laws, re-proven this invocation\n\n" as u64)
+    ps("  skills: " as u64)
+    let n : u64 = ho_count()
+    let mut i : u64 = 0u64
+    while i < n {
+        let l : u64 = ho_name_len(i)
+        let mut j : u64 = 0u64
+        while j < l { putchar(ho_name_byte(i, j) as i32)   j = j + 1u64 }
+        if i + 1u64 < n { ps(" " as u64) }
+        i = i + 1u64
+    }
+    ps("\n\nnothing here is running or not running: skills have STANDING (ledger\n" as u64)
+    ps("STDLIB/build/holos/holos.log), reach-pins over exactly what they depend on,\n" as u64)
+    ps("and activation that is drift or need.  exit: skill's own | 3 usage | 9 SELF-REFUSED\n" as u64)
+    return 3u64
+}
+/* dispatch: the skill index runs IN-PROCESS with argv shifted one seat */
+fn dispatch(i: u64, argc: i32, argv: u64) -> u64 {
+    let ac : i32 = argc - 1i32
+    let av : u64 = argv + 8u64
+    if i == 0u64  { return agon_enter(ac, av) }
+    if i == 1u64  { return author_enter(ac, av) }
+    if i == 2u64  { return closure_enter(ac, av) }
+    if i == 3u64  { return crypto_enter(ac, av) }
+    if i == 4u64  { return doxa_enter(ac, av) }
+    if i == 5u64  { return eidolos_enter(ac, av) }
+    if i == 6u64  { return ergon_enter(ac, av) }
+    if i == 7u64  { let r32 : u32 = eval_enter(ac as u32, av)   return r32 as u64 }
+    if i == 8u64  { return events_enter(ac, av) }
+    if i == 9u64  { return exact_enter(ac, av) }
+    if i == 10u64 { return friction_enter(ac, av) }
+    if i == 11u64 { return hexad_enter(ac, av) }
+    if i == 12u64 { return intent_enter(ac, av) }
+    if i == 13u64 { return judge_enter(ac, av) }
+    if i == 14u64 { return kardia_enter(ac, av) }
+    if i == 15u64 { return line_enter(ac, av) }
+    if i == 16u64 { return manifold_enter(ac, av) }
+    if i == 17u64 { return motion_enter(ac, av) }
+    if i == 18u64 { return plane_enter(ac, av) }
+    if i == 19u64 { return proofcarry_enter(ac, av) }
+    if i == 20u64 { return prove_enter(ac, av) }
+    if i == 21u64 { return pulse_enter(ac, av) }
+    if i == 22u64 { return soma_enter(ac, av) }
+    if i == 23u64 { return space_enter(ac, av) }
+    if i == 24u64 { return substrate_enter(ac, av) }
+    if i == 25u64 { return testament_enter(ac, av) }
+    if i == 26u64 { return typecheck_enter(ac, av) }
+    if i == 27u64 { return witness_enter(ac, av) }
+    if i == 28u64 { return worldline_enter(ac, av) }
+    if i == 29u64 { return xeno_enter(ac, av) }
+    return 3u64
+}
+fn standing_word(s: u64) -> u32 {
+    if s == 0u64 { ps("PROVEN   " as u64)   return 1u32 }
+    if s == 1u64 { ps("STALE    " as u64)   return 1u32 }
+    if s == 3u64 { ps("RED      " as u64)   return 1u32 }
+    ps("UNPROVEN " as u64)
+    return 1u32
+}
+var IM_APPEND_FAIL : u64 = 0u64
+fn note_append(rc: i32) -> u32 { if rc != 0i32 { IM_APPEND_FAIL = IM_APPEND_FAIL + 1u64 }  return 1u32 }
+/* the whole face: pins, ledger, standing of every skill */
+fn face_whole() -> u64 {
+    ho_ledger_load()
+    ho_pin_all()
+    ho_ingest_build()
+    ps("== THE ORGANISM: the engine fleet, one body -- standing from the ledger, dues from drift ==\n" as u64)
+    ps("  body pin (iiis-2 + archive): " as u64)   phex(ho_body_pin())   putchar(10i32)
+    let n : u64 = ho_count()
+    let mut i : u64 = 0u64
+    while i < n {
+        ps("  " as u64)
+        pname(i)
+        if ho_class(i) == 1u8 { ps(" P " as u64) } else { ps(" U " as u64) }
+        standing_word(ho_standing(i))
+        if ho_w_present(i) == 1u8 {
+            ps(" last-work exit " as u64)
+            pu(ho_w_exit(i))
+            ps(" @seq " as u64)
+            pu(ho_w_seq(i))
+        } else {
+            ps(" no work recorded" as u64)
+        }
+        putchar(10i32)
+        i = i + 1u64
+    }
+    ps("  -- skills " as u64)   pu(n)
+    ps(" (P " as u64)   pu(ho_class_n(1u8))
+    ps(", U " as u64)   pu(ho_class_n(2u8))
+    ps(") | PROVEN " as u64)   pu(ho_standing_n(0u64))
+    ps(" STALE " as u64)   pu(ho_standing_n(1u64))
+    ps(" UNPROVEN " as u64)   pu(ho_standing_n(2u64))
+    ps(" RED " as u64)   pu(ho_standing_n(3u64))
+    ps(" | DUE " as u64)   pu(ho_due_n())
+    putchar(10i32)
+    ps("  -- malformed ledger lines " as u64)   pu(ho_malformed())
+    ps(" | unreadable dep paths " as u64)   pu(ho_missing())
+    ps(" | dep paths uncited by build_iii.sh " as u64)   pu(ho_uncited())
+    ps(" | autobiography append failures " as u64)   pu(IM_APPEND_FAIL)
+    putchar(10i32)
+    let v : u64 = ho_vitality()
+    if v == 0u64 {
+        ps("  VITALITY REFUSED (a skill's own proof is RED on this body -- the organism will not call itself healthy)\n" as u64)
+        return 1u64
+    }
+    ps("  VITALITY = " as u64)   phex(v)   ps("  (fold over every PROVEN skill on this body)\n" as u64)
+    if ho_uncited() > 0u64 { return 1u64 }
+    return 0u64
+}
+fn face_due() -> u64 {
+    ho_ledger_load()
+    ho_pin_all()
+    ps("== DUE: which skills owe a proof on THIS body (pin drift or nothing earned) ==\n" as u64)
+    let n : u64 = ho_count()
+    let mut d : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < n {
+        if ho_due(i) == 1u64 {
+            ps("  DUE " as u64)
+            pname(i)
+            standing_word(ho_standing(i))
+            putchar(10i32)
+            d = d + 1u64
+        }
+        i = i + 1u64
+    }
+    ps("  " as u64)   pu(d)   ps(" due of " as u64)   pu(ho_class_n(1u8))
+    ps(" provable skills (" as u64)   pu(ho_class_n(2u8))
+    ps(" U-class counted apart: their laws run at every real invocation;\n   deep verification owned by ergon autarkeia/exec, the kardia cells, the event corpus)\n" as u64)
+    return 0u64
+}
+/* earn: convert up to cap due skills by running each one's OWN self-derivation
+ * as a fresh organism process (OS-true exit), recording PROOF standing */
+var IM_CMD : [u8; 512]
+fn probe_cap_ms(i: u64) -> u32 {
+    /* heavy faculties get the Γ-scale cap; the rest the exec-seat cap */
+    let n : u64 = ho_name_len(i)
+    if n == 8u64 { if ho_name_byte(i, 0u64) == 102u8 { return 420000u32 } }      /* friction */
+    if n == 9u64 { if ho_name_byte(i, 0u64) == 115u8 { return 420000u32 } }      /* substrate */
+    if n == 4u64 { if ho_name_byte(i, 0u64) == 120u8 { return 300000u32 } }      /* xeno */
+    if n == 6u64 { if ho_name_byte(i, 0u64) == 109u8 { return 300000u32 } }      /* motion */
+    return 120000u32
+}
+fn earn(cap: u64) -> u64 {
+    ho_make_dir()
+    ho_ledger_load()
+    ho_pin_all()
+    ps("== EARN: due skills run their OWN self-derivations; proof is recorded, never assumed ==\n" as u64)
+    let n : u64 = ho_count()
+    let mut done : u64 = 0u64
+    let mut green : u64 = 0u64
+    let mut red : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < n {
+        if done < cap { if ho_due(i) == 1u64 {
+            let cp : *u8 = (&IM_CMD) as *u8
+            let mut a : u64 = 0u64
+            let pre : u64 = "COMPILED\\iii.exe " as u64
+            let pp : *u8 = pre as *u8
+            let mut t : u64 = 0u64
+            while pp[t] != 0u8 { cp[a] = pp[t]   a = a + 1u64   t = t + 1u64 }
+            let nl : u64 = ho_name_len(i)
+            let mut j : u64 = 0u64
+            while j < nl { cp[a] = ho_name_byte(i, j)   a = a + 1u64   j = j + 1u64 }
+            cp[a] = 32u8   a = a + 1u64
+            let pr : u64 = ho_probe(i)
+            let pl : u64 = ho_probe_len(i)
+            let prp : *u8 = pr as *u8
+            j = 0u64
+            while j < pl { cp[a] = prp[j]   a = a + 1u64   j = j + 1u64 }
+            cp[a] = 0u8
+            ps("  earn " as u64)
+            pname(i)
+            let r : i32 = proc_run((&IM_CMD) as u64, 0u64, probe_cap_ms(i))
+            let mut got : u64 = 9901u64
+            if r == 0i32 { got = proc_code() as u64 }
+            if r == 1i32 { got = 9902u64 }
+            note_append(ho_ledger_append(i, got, 2u8))
+            if got == 0u64 {
+                ps(" -> exit 0  PROVEN on this body\n" as u64)
+                green = green + 1u64
+            } else {
+                ps(" -> exit " as u64)
+                pu(got)
+                ps("  RED (its own derivation refused; 9901 spawn-fail, 9902 cap)\n" as u64)
+                red = red + 1u64
+            }
+            done = done + 1u64
+        } }
+        i = i + 1u64
+    }
+    ps("  earned this run: " as u64)   pu(done)
+    ps(" attempted -> " as u64)   pu(green)
+    ps(" proven, " as u64)   pu(red)
+    ps(" red; remaining due " as u64)   pu(ho_due_n())
+    putchar(10i32)
+    if red > 0u64 { return 1u64 }
+    return 0u64
+}
+fn law_face() -> u64 {
+    ps("ORGANISM LAWS PROVEN (this invocation, before any verb moved):\n" as u64)
+    ps("  21 registration is injective (dedupe; unknown -> refusal)\n" as u64)
+    ps("  22 the ledger fold is last-wins BY SEQUENCE within a mode class\n" as u64)
+    ps("  23 THE MODE LAW: a WORK record never displaces PROOF standing\n" as u64)
+    ps("     (verbs answer 1 for honest refutations -- an answer is not a wound)\n" as u64)
+    ps("  24 DUE is exactly drift: a proof on this body rests; drift wakes it;\n" as u64)
+    ps("     U-class skills are counted apart, never silently claimed\n" as u64)
+    ps("  25 malformed ledger lines are REFUSED and COUNTED (garbage teeth)\n" as u64)
+    ps("  26 well-formed records fold (the teeth bite garbage, not food)\n" as u64)
+    ps("  27 VITALITY refuses over a live wound\n" as u64)
+    ps("and THE TWO-SOURCE LAW at every face: every dep path this organ pins\n" as u64)
+    ps("must be cited by COMPILER/BOOT/build_iii.sh (drift counted, never silent).\n" as u64)
+    return 0u64
+}
+fn main(argc: i32, argv: u64) -> u64 {
+    let av : *u64 = argv as *u64
+    /* THE CONDITION OF MOTION */
+    let sp : u64 = ho_selfprove()
+    if sp != 0u64 {
+        ps("THE ORGANISM REFUSES ITSELF: holos law arm " as u64)
+        pu(sp)
+        ps(" failed -- no skill runs over broken law\n" as u64)
+        return 9u64
+    }
+    if argc < 2i32 { return face_whole() }
+    let cmd : u64 = av[1u64]
+    if streq(cmd, "whole" as u64) == 1u32 { return face_whole() }
+    if streq(cmd, "due" as u64) == 1u32 { return face_due() }
+    if streq(cmd, "law" as u64) == 1u32 { return law_face() }
+    if streq(cmd, "earn" as u64) == 1u32 {
+        let mut cap : u64 = 4u64
+        if argc >= 3i32 { cap = parse_u64(av[2u64])   if cap == 0u64 { cap = 4u64 } }
+        return earn(cap)
+    }
+    let idx : u64 = ho_find(cmd, slen(cmd))
+    if idx == 18446744073709551615u64 { return usage() }
+    /* the skill IS the answer; the autobiography records it (best-effort) */
+    ho_ledger_load()
+    ho_make_dir()
+    ho_pin_skill(idx)
+    let rc : u64 = dispatch(idx, argc, argv)
+    note_append(ho_ledger_append(idx, rc, 1u8))
+    return rc
+}

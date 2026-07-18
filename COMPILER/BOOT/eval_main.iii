@@ -522,7 +522,7 @@ fn repl_loop() -> u32 {
     return 0u32
 }
 
-fn main(argc: u32, argv: u64) -> u32 @export {
+fn eval_enter(argc: u32, argv: u64) -> u32 @export {
     if argc < 2u32 {
         em_lit("III_EVAL_USAGE" as u64, 14u64)
         em_nl()

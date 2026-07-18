@@ -261,7 +261,7 @@ fn verdict_line(rc: u64) {
     putchar(10i32)
 }
 
-fn main(argc: i32, argv: u64) -> u64 {
+fn events_enter(argc: i32, argv: u64) -> u64 @export {
     let av : *u64 = argv as *u64
     let mut quiet : u32 = 0u32
     let mut tamper : u32 = 0u32

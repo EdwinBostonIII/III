@@ -2367,7 +2367,7 @@ fn parse_alg6(a2: u64, a3: u64, a4: u64, a5: u64, a6: u64, a7: u64) -> u64 {
     return 9u64
 }
 
-fn main(argc: i32, argv: u64) -> u64 {
+fn exact_enter(argc: i32, argv: u64) -> u64 @export {
     let av : *u64 = argv as *u64
     if argc < 2i32 {
         ps("iii-exact -- EXACT sign of a sum of square roots (no floating point anywhere)\n\n" as u64)

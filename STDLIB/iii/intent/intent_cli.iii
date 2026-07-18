@@ -90,7 +90,7 @@ fn eidolos_domain_word(m: u64) {
     ps("void" as u64)
 }
 
-fn main(argc: i32, argv: u64) -> u64 {
+fn intent_enter(argc: i32, argv: u64) -> u64 @export {
     let av : *u64 = argv as *u64
     if argc < 2i32 {
         ps("iii-intent -- resolve a human intent to ONE interpretation, or REJECT with the reason\n\n" as u64)

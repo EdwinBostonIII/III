@@ -100,7 +100,7 @@ fn print_hexad(dst: u64) {
     putchar(41i32)   /* ) */
 }
 
-fn main(argc: i32, argv: u64) -> u64 {
+fn hexad_enter(argc: i32, argv: u64) -> u64 @export {
     let av : *u64 = argv as *u64
     if argc < 2i32 {
         ps("iii-hexad -- the asymmetric ternary safety ground: is a hexad admitted, or bricking?\n\n" as u64)

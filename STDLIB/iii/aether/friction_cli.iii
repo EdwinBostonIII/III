@@ -447,7 +447,7 @@ fn cmd_judge(lawfuel: u64) -> u64 {
     return 0u64
 }
 
-fn main(argc: i32, argv: u64) -> u64 {
+fn friction_enter(argc: i32, argv: u64) -> u64 @export {
     if argc < 2i32 {
         ps("iii-friction check | rot | pdep | judge <lawfuel>\n" as u64)
         return 1u64

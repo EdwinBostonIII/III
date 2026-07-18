@@ -739,7 +739,7 @@ fn cmd_isa() -> u64 {
     return 0u64
 }
 
-fn main(argc: i32, argv: u64) -> u64 {
+fn xeno_enter(argc: i32, argv: u64) -> u64 @export {
     if argc < 2i32 {
         ps("iii-xeno fair <N> | census <n> | anchor <lawfuel> | sweep <fuel> <lawfuel> | check <fuel> | isa\n" as u64)
         return 1u64

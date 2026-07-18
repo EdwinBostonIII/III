@@ -715,7 +715,7 @@ fn usage() -> u64 {
     return 1u64
 }
 
-fn main(argc: i32, argv: u64) -> u64 {
+fn typecheck_enter(argc: i32, argv: u64) -> u64 @export {
     let av : *u64 = argv as *u64
     if argc < 2i32 { return usage() }
     tc_reset()

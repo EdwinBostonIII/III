@@ -440,7 +440,7 @@ fn print_table() -> i32 {
     return 0i32
 }
 
-fn main(argc: i32, argv: u64) -> u64 {
+fn substrate_enter(argc: i32, argv: u64) -> u64 @export {
     if argc < 2i32 {
         ps("iii-substrate real           (this machine's derived algebra)\n" as u64)
         ps("iii-substrate variance <N>   (falsifier: does it vary with the substrate?)\n" as u64)

@@ -88,7 +88,7 @@ fn usage() -> u64 {
     ps("exit: 0 ok | 3 usage | 4 refused | 9 SELF-REFUSED\n" as u64)
     return 3u64
 }
-fn main(argc: i32, argv: u64) -> u64 {
+fn line_enter(argc: i32, argv: u64) -> u64 @export {
     let av : *u64 = argv as *u64
     if argc < 2i32 { return usage() }
     let sp : u64 = xl_selfprove()

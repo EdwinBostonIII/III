@@ -122,7 +122,7 @@ fn errexit(rc: i64) -> u64 {
     return 3u64
 }
 
-fn main(argc: i32, argv: u64) -> u64 {
+fn closure_enter(argc: i32, argv: u64) -> u64 @export {
     if argc < 3i32 { return usage() }
     let av  : *u64 = argv as *u64
     let cmd : u64  = av[1u64]

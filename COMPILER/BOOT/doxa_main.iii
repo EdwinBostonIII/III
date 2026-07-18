@@ -471,7 +471,7 @@ fn do_drip(n: u64, doxadir: u64) -> u64 {
     } else { i = rn } }
     return opened
 }
-fn main(argc: i32, argv: u64) -> u64 {
+fn doxa_enter(argc: i32, argv: u64) -> u64 @export {
     let av : *u64 = argv as *u64
     if argc < 2i32 { return usage() }
     /* THE CONDITION OF MOTION: prove the laws before touching any state */

@@ -51,7 +51,7 @@ fn argopt(av: *u64, argc: i32, idx: i32) -> u64 {
     return a
 }
 
-fn main(argc: i32, argv: u64) -> u64 {
+fn witness_enter(argc: i32, argv: u64) -> u64 @export {
     if argc < 3i32 {
         ps("iii-witness verify <testament.dat> [pkpin|none] [parent|none] [root|none] [manifest|none]\n" as u64)
         return 1u64

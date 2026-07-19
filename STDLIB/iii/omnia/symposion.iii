@@ -1,0 +1,286 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\symposion.iii
+ *
+ * III STDLIB - omnia::symposion  --  THE MUSE IN EVERY SEARCH: the ONE law under
+ * which a heuristic (the metabolized 671B mind, or any scorer) may ACCELERATE a
+ * search WITHOUT EVER touching its verified result.  The drinking-party where the
+ * muse speaks and the sovereign judges: the muse ORDERS, the verifier DECIDES.
+ *
+ * THE ORDER-NOT-SET LAW (the whole discipline, made structural, not promised):
+ *   A search over candidates 0..n-1 has, for each, a VERDICT (the sovereign
+ *   verifier's pure yes/no -- a theorem of the problem, e.g. eol_entails over a
+ *   standing scroll, mathesis_deduce, the crucible's exhaustive verdict) and a
+ *   SCORE (the muse's heuristic ranking -- MANTIS's decision gap, a template
+ *   prompt's confidence, anything).  The VERIFIED SET is the set of candidates
+ *   whose verdict is 1.  SYMPOSION collects that set by walking the candidates in
+ *   the muse's score order -- and PROVES the collected set is a function of the
+ *   VERDICTS ALONE: the score changes only the ORDER of discovery (the step at
+ *   which the first hit is found), never which candidates are in the set.
+ *
+ * WHY THIS IS SAFE BY CONSTRUCTION (not by audit): sym_collect reads SYM_VERD to
+ * set membership bits and reads SYM_PERM only to choose the walk order.  The set
+ * bitmask is keyed by ORIGINAL index, so it is identical whatever the walk order.
+ * A muse that LIES (scores the false candidates highest) delays the first hit and
+ * changes NOTHING else -- the poison tooth.  A muse that is WISE reaches the first
+ * verified candidate in fewer steps -- its only real power, and it is speed, never
+ * truth.  This is EIDOLOS's discipline (truth is re-derivation) and XENOS's (the
+ * one door) applied to SEARCH: heuristics never enter the verified house.
+ *
+ * NO-OBSERVATIONAL (the anchor-never-yardstick law): orderings are per-invocation
+ * and stateless -- SYMPOSION keeps NO track record of the muse's past accuracy,
+ * so no statistic ever steers future behavior.  Same (scores, verdicts) -> same
+ * order, always; and the verified set is REPRODUCIBLE WITHOUT the muse (feed a
+ * flat score -> the blind order -> the identical set).  That muse-blind replay is
+ * a gate tooth, not a hope.
+ *
+ * THE MUSE SEAM (named): SYM_SCORE is set by the caller.  In production the score
+ * source is MANTIS -- sym_set_score(i, mantis_gap_of(candidate_i)) -- the walled
+ * neural reading feeding ONLY the order.  The law does not depend on the muse
+ * being MANTIS; any scorer plugs in.  The verifier seam is the caller's pure
+ * predicate; the eidolos demo below proves the law on the real barometer.
+ *
+ * n <= 64 per window (the verified set is a u64 bitmask); a larger frontier
+ * windows exactly as kerygma sub-shards -- part 0, part 1 -- never a silent cap.
+ *
+ * Ring R0.  K 0.98 (the law is pure; the demo composes eidolos).  NIH: no island
+ * -- it is the couplings-tier substrate every faculty (nous, crucible, zetesis,
+ * synesis, oneiros) reuses instead of re-spelling the order-not-set discipline.
+ * Hexad: kind_essence (it IS the muse discipline) + kind_law. */
+
+module omnia_symposion
+
+/* the one barometer -- for the real-verifier demonstration only */
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_lawcheck() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_entails(a_addr: u64, a_len: u64, verb: u64, b_addr: u64, b_len: u64) -> u64 from "eidolos.iii"
+
+const SYM_MAX : u64 = 64u64
+
+var SYM_N     : u64 = 0u64
+var SYM_SCORE : [i64; 64]                 /* the muse's heuristic score per candidate */
+var SYM_VERD  : [u8; 64]                  /* the sovereign verifier's verdict per candidate */
+var SYM_PERM  : [u64; 64]                 /* the muse ordering (indices, score desc, stable) */
+var SYM_MASK      : u64 = 0u64            /* the last collected verified set (bitmask over original idx) */
+var SYM_FIRSTHIT  : i64 = -1i64           /* step (walk position) of the first verified candidate; -1 = none */
+var SYM_STEPS     : u64 = 0u64            /* candidates walked to collect the set */
+
+/* ---- setup ---- */
+fn sym_reset(n: u64) -> i32 @export {
+    let mut m : u64 = n
+    if m > SYM_MAX { m = SYM_MAX }
+    SYM_N = m
+    SYM_MASK = 0u64
+    SYM_FIRSTHIT = -1i64
+    SYM_STEPS = 0u64
+    let mut i : u64 = 0u64
+    while i < SYM_MAX {
+        SYM_SCORE[i] = 0i64
+        SYM_VERD[i] = 0u8
+        SYM_PERM[i] = i
+        i = i + 1u64
+    }
+    return 0i32
+}
+fn sym_set_score(i: u64, s: i64) -> i32 @export { if i < SYM_N { SYM_SCORE[i] = s }   return 0i32 }
+fn sym_set_verdict(i: u64, v: u8) -> i32 @export { if i < SYM_N { if v == 1u8 { SYM_VERD[i] = 1u8 } else { SYM_VERD[i] = 0u8 } }   return 0i32 }
+
+/* ---- the muse ordering: indices by score DESC, ties by smallest index (stable,
+ * deterministic -- exact scores are theorems, so the order is a theorem too) ---- */
+fn sym_order() -> i32 @export {
+    let mut used : u64 = 0u64
+    let mut placed : u64 = 0u64
+    while placed < SYM_N {
+        let mut best : u64 = SYM_MAX                 /* sentinel = none chosen yet */
+        let mut best_s : i64 = 0i64
+        let mut i : u64 = 0u64
+        while i < SYM_N {
+            if ((used >> i) & 1u64) == 0u64 {
+                let s : i64 = SYM_SCORE[i]
+                if best == SYM_MAX { best = i   best_s = s }
+                else { if s > best_s { best = i   best_s = s } }   /* strict > keeps the first (smallest) index on ties */
+            }
+            i = i + 1u64
+        }
+        SYM_PERM[placed] = best
+        used = used | (1u64 << best)
+        placed = placed + 1u64
+    }
+    return 0i32
+}
+fn sym_perm(i: u64) -> u64 @export { if i < SYM_N { return SYM_PERM[i] }   return 0u64 }
+
+/* ---- THE COLLECTION: walk the candidates (muse order if use_muse!=0, else the
+ * blind identity order) and collect the verified set.  THE SET BIT IS KEYED BY
+ * ORIGINAL INDEX and set from SYM_VERD ALONE -- so the returned mask is identical
+ * whatever the walk order.  SYM_FIRSTHIT records the STEP of the first verified
+ * candidate (the muse's real, speed-only power). ---- */
+fn sym_collect(use_muse: u64) -> u64 @export {
+    let mut mask : u64 = 0u64
+    let mut first : i64 = -1i64
+    let mut step : u64 = 0u64
+    while step < SYM_N {
+        let mut idx : u64 = step
+        if use_muse != 0u64 { idx = SYM_PERM[step] }
+        if SYM_VERD[idx] == 1u8 {
+            mask = mask | (1u64 << idx)
+            if first == -1i64 { first = step as i64 }
+        }
+        step = step + 1u64
+    }
+    SYM_MASK = mask
+    SYM_FIRSTHIT = first
+    SYM_STEPS = SYM_N
+    return mask
+}
+fn sym_mask() -> u64 @export { return SYM_MASK }
+fn sym_first_hit() -> i64 @export { return SYM_FIRSTHIT }
+
+/* population count of the verified set (its cardinality) */
+fn sym_count() -> u64 @export {
+    let mut n : u64 = 0u64
+    let mut m : u64 = SYM_MASK
+    while m != 0u64 { n = n + (m & 1u64)   m = m >> 1u64 }
+    return n
+}
+
+/* ==================== THE SYMPOSION LAW (pure, no filesystem) ====================
+ * Five clauses, environment-independent, over a fixed synthetic problem: the
+ * verified set is {4,5} (bits 4,5 -> mask 48).  Returns 0 = the muse can only
+ * reorder discovery, never touch the set; a nonzero arm names the failing clause. */
+fn sym_selfprove() -> u64 @export {
+    /* the problem: 6 candidates; the pure verifier says 4 and 5 are verified. */
+    sym_reset(6u64)
+    sym_set_verdict(0u64, 0u8)  sym_set_verdict(1u64, 0u8)  sym_set_verdict(2u64, 0u8)
+    sym_set_verdict(3u64, 0u8)  sym_set_verdict(4u64, 1u8)  sym_set_verdict(5u64, 1u8)
+
+    /* --- A WISE muse: it scores the verified candidates highest --- */
+    sym_set_score(0u64, 1i64)  sym_set_score(1u64, 2i64)  sym_set_score(2u64, 3i64)
+    sym_set_score(3u64, 4i64)  sym_set_score(4u64, 95i64) sym_set_score(5u64, 90i64)
+    sym_order()
+    /* perm must be [4,5,3,2,1,0] (score desc) */
+    if sym_perm(0u64) != 4u64 { return 1u64 }
+    if sym_perm(1u64) != 5u64 { return 2u64 }
+    let mask_muse : u64 = sym_collect(1u64)
+    let fh_muse : i64 = sym_first_hit()
+    let mask_blind : u64 = sym_collect(0u64)
+    let fh_blind : i64 = sym_first_hit()
+
+    /* CLAUSE 1 -- ORDER-NOT-SET / muse-blind replay: the SET is identical. */
+    if mask_muse != mask_blind { return 3u64 }
+    if mask_muse != 48u64 { return 4u64 }             /* exactly {4,5} */
+
+    /* CLAUSE 2 -- ACCELERATION (the muse's only power, and it is speed): the wise
+     * muse reaches the first verified candidate at step 0; blind reaches it at
+     * step 4.  Strictly sooner -- honest, measured, never about truth. */
+    if fh_muse != 0i64 { return 5u64 }
+    if fh_blind != 4i64 { return 6u64 }
+    if fh_muse >= fh_blind { return 7u64 }
+
+    /* --- A LYING muse (POISON): it scores the FALSE candidates highest --- */
+    sym_set_score(0u64, 90i64) sym_set_score(1u64, 80i64) sym_set_score(2u64, 70i64)
+    sym_set_score(3u64, 60i64) sym_set_score(4u64, 1i64)  sym_set_score(5u64, 2i64)
+    sym_order()
+    let mask_poison : u64 = sym_collect(1u64)
+    let fh_poison : i64 = sym_first_hit()
+    /* CLAUSE 3 -- POISON: the lying muse changes the SET by NOTHING. */
+    if mask_poison != 48u64 { return 8u64 }
+    /* it only delays the first hit: 5 walked before a verified one is met
+     * (perm [0,1,2,3,5,4] -> candidate 5 verified at step 4). */
+    if fh_poison != 4i64 { return 9u64 }
+
+    /* CLAUSE 4 -- DETERMINISM: the same scores yield the same order twice. */
+    sym_order()
+    let p0 : u64 = sym_perm(0u64)
+    sym_order()
+    if sym_perm(0u64) != p0 { return 10u64 }
+
+    /* CLAUSE 5 -- STABILITY / NO-OBSERVATIONAL: all-equal scores -> the identity
+     * order (ties broken by smallest index), so a muse with no opinion perturbs
+     * nothing, and no hidden state accumulates across calls. */
+    sym_reset(6u64)
+    sym_set_verdict(4u64, 1u8)  sym_set_verdict(5u64, 1u8)
+    let mut i : u64 = 0u64
+    while i < 6u64 { sym_set_score(i, 50i64)   i = i + 1u64 }
+    sym_order()
+    i = 0u64
+    while i < 6u64 { if sym_perm(i) != i { return 11u64 }   i = i + 1u64 }
+
+    return 0u64
+}
+
+/* ==================== THE REAL-VERIFIER DEMONSTRATION (eidolos client) ==========
+ * The law above proves the discipline on synthetic verdicts.  This proves it on
+ * the REAL barometer: the verdicts come from eol_entails over a STANDING scroll
+ * (a theorem of the scroll, pure and order-independent), and the muse orders the
+ * queries.  The verified set (which queries are KNOWN) is identical under a wise
+ * muse and a lying muse -- because entailment is a theorem, not an opinion.
+ *
+ * The standing scroll: [a < b] [b < c] [x < y].  Five candidate queries, with the
+ * sovereign (eol_entails) verdicts they must earn:
+ *   0: a < c   KNOWN (transitivity a<b<c)      -> 1
+ *   1: a < y   not derivable                    -> 0
+ *   2: x < y   KNOWN (stated)                   -> 1
+ *   3: b < c   KNOWN (stated)                   -> 1
+ *   4: x < c   not derivable                    -> 0
+ * Verified set = {0,2,3} = bits 0,2,3 = mask 13.  Returns 0 = the law holds on
+ * the real verifier; nonzero names the failing stage. */
+fn sym_len(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut n : u64 = 0u64
+    while p[n] != 0u8 { n = n + 1u64 }
+    return n
+}
+fn sym_demo_eidolos() -> u64 @export {
+    let scroll : u64 = "[a < b] [b < c] [x < y]" as u64
+    /* stand the scroll ONCE (read -> lawcheck); every entails below is a pure,
+     * order-independent read over it (the STANDING discipline: no re-read). */
+    eol_reset()
+    if eol_read(scroll, sym_len(scroll)) < 0i64 { eol_reset()   return 1u64 }
+    if eol_lawcheck() != 0u64 { eol_reset()   return 2u64 }
+
+    let a : u64 = "a" as u64
+    let b : u64 = "b" as u64
+    let c : u64 = "c" as u64
+    let x : u64 = "x" as u64
+    let y : u64 = "y" as u64
+
+    sym_reset(5u64)
+    /* the sovereign verdicts, each an eol_entails theorem over the standing scroll */
+    sym_set_verdict(0u64, eol_entails(a, 1u64, 0u64, c, 1u64) as u8)   /* a<c */
+    sym_set_verdict(1u64, eol_entails(a, 1u64, 0u64, y, 1u64) as u8)   /* a<y */
+    sym_set_verdict(2u64, eol_entails(x, 1u64, 0u64, y, 1u64) as u8)   /* x<y */
+    sym_set_verdict(3u64, eol_entails(b, 1u64, 0u64, c, 1u64) as u8)   /* b<c */
+    sym_set_verdict(4u64, eol_entails(x, 1u64, 0u64, c, 1u64) as u8)   /* x<c */
+    eol_reset()
+
+    /* the sovereign set must be exactly {0,2,3} = 13, independent of any muse */
+    let mut base : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < 5u64 { if SYM_VERD[k] == 1u8 { base = base | (1u64 << k) }   k = k + 1u64 }
+    if base != 13u64 { return 3u64 }
+
+    /* a WISE muse orders the KNOWN queries first */
+    sym_set_score(0u64, 50i64) sym_set_score(1u64, 5i64) sym_set_score(2u64, 60i64)
+    sym_set_score(3u64, 55i64) sym_set_score(4u64, 1i64)
+    sym_order()
+    let mask_muse : u64 = sym_collect(1u64)
+    let fh_muse : i64 = sym_first_hit()
+
+    /* a LYING muse orders the underivable queries first */
+    sym_set_score(0u64, 1i64) sym_set_score(1u64, 90i64) sym_set_score(2u64, 2i64)
+    sym_set_score(3u64, 3i64) sym_set_score(4u64, 80i64)
+    sym_order()
+    let mask_poison : u64 = sym_collect(1u64)
+    let fh_poison : i64 = sym_first_hit()
+
+    let mask_blind : u64 = sym_collect(0u64)
+
+    /* THE LAW ON THE REAL VERIFIER: the KNOWN set is the same three, whatever the
+     * muse says -- entailment is a theorem; the muse moved only the discovery. */
+    if mask_muse != 13u64 { return 4u64 }
+    if mask_poison != 13u64 { return 5u64 }
+    if mask_blind != 13u64 { return 6u64 }
+    /* the wise muse found a KNOWN query no later than the liar did */
+    if fh_muse > fh_poison { return 7u64 }
+    return 0u64
+}

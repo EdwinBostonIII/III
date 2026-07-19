@@ -1,115 +1,121 @@
-# III-HERMENEUS — THE ENGLISH-TO-EIDOLOS DOOR
+# III-HERMENEUS — THE ONE ENGLISH DOOR
 
-*The interpreter (ἑρμηνεύς). Ambiguous English enters as a PROPOSAL; only the
-house's own exact law, plus a human's confirm, lets it cross into the proven
-core. The statistical guessing is quarantined behind a wall it can never climb
-— not one epsilon of hallucination reaches the reduction. What crosses is
-exactly what a human confirmed, reduced to the same minimal basis it would have
-had if hand-written.*
+*English becomes exact EIDOLOS claims, human-confirmed, and delivered across
+nodes — under one law: the statistical part may PROPOSE; only the exact law plus
+a human DECIDES. Not one epsilon of hallucination reaches the reduction: what
+crosses is exactly what a human confirmed, reduced to the same minimal basis it
+would have had if hand-written.*
 
 Organ: `STDLIB/iii/omnia/hermeneus.iii`. Gate: `STDLIB/scripts/hermeneus_gate.sh`
-(`hermeneus_selfprove`, arms 1..18, re-derived at every invocation — no gate, no
+(`hermeneus_selfprove`, arms 1..7, re-derived at every invocation — no gate, no
 KAT: the kardia pattern). Ring R0. Hexad: `kind_passage` + `kind_witness`.
 
-## The gap it closes
+## The merge: one door, three organs as its layers
 
-Two halves of the pipeline were already proven and met nowhere. `omnia/diadosis`
-reduces claims *already* in `[ thing verb thing ]` form to the minimal basis and
-delivers them content-addressed (`closure(B) = closure(G)`, bit-faithful);
-`omnia/eidolos` is the language beneath it (`<` under · `=` is · `~` mirrors).
-`aether/xenos` admits foreign **JSON** and transduces its *structure*, and
-`omnia/mantis` consults the oracle and emits *provenance* — neither turns an
-English **sentence** into **semantic** claims whose verb reflects the real
-relation. That step is HERMENEUS.
+HERMENEUS is not a second English parser. It is the **immune system** of a door
+whose other two layers already existed and are proven — it composes them, it does
+not reinvent them:
 
-## The one law
+- **anglos = THE SENSORY ORGAN** (`aether/anglos.iii`, on `verba/nl_lex` +
+  `verba/nl_parse`). A deterministic, fully-proven English→EIDOLOS transducer:
+  determiners (`a/an` → `<` kind-membership, `the` → `=` identity), adjective
+  predication ("the proof is valid" → `[proof < valid]`), `and`-composition into
+  multiple claims, questions, and named refusal of modals / conditionals / `or` /
+  imperatives. Its `an_say` renders a scroll back to English that re-hears to the
+  same address. anglos proves its own grammar (`an_selfprove` 390..399).
+- **xenos = THE STRUCTURAL FILTER** (`aether/xenos.iii`). Both muses emit a JSON
+  claim-array; `xn_admit` judges it by the house's own re-derivation — a cyclic or
+  lying array is refused *by name* — and stands the claims. Unchanged.
+- **HERMENEUS = THE IMMUNE SYSTEM.** The quarantine no auto-admitting door has:
+  the `an_say` read-back a human confirms, the confirm-pin WALL (no unconfirmed
+  proposal reaches the core), and the content-addressed DIADOSIS delivery that
+  distributes the reduced minimal basis exactly.
 
-> The statistical part may **propose**; only the exact law plus a human **decides**.
+The hand-rolled cue matcher and gloss of the first HERMENEUS were **deleted** the
+day anglos was found — compounding a proven organ instead of sprawling a second.
 
-Already the tree's ethos in three built places, which HERMENEUS *composes* (no
-new inference, no island): MANTIS's WALL (provisional never becomes canon),
-XENOS's judge-by-re-derivation + `lx_check` vocabulary audit, and DIADOSIS's
-exact reduction.
+## Two muses, one chokepoint
 
-## The five faculties
+```
+  in-house : English ─► an_transduce ─► JSON claim-array ─┐
+  external : any LLM's JSON proposal ─────────────────────┴─► xn_admit ─► hm_vet
+                            ─► an_say (read-back) ─► human confirm-wall ─► DIADOSIS
+```
 
-1. **PROPOSER** (the muse, *provisional by construction*) — English → candidate
-   claims.
-2. **VETTING** — the candidate must be a coherent scroll (no cycle) and its
-   words are audited (`lx_check`), before the human's attention is spent.
-3. **READ-BACK** — each claim is glossed back to canonical English, so the human
-   confirms *meaning*, not brackets. English in → claims → English out.
-4. **CONFIRM-GATE** — a vetted proposal stands PROVISIONAL; only a recorded human
-   confirm, content-addressed to *exactly* the proposal it approves, promotes it.
-5. **DELIVERY** — on confirm, the claims enter DIADOSIS, proven exact from there.
+Both the deterministic sensory organ and an external LLM funnel through the
+*identical* `xn_admit` chokepoint, then the *identical* quarantine. The only
+difference is who proposed — anglos (III's own proven parser) or a foreign model
+whose guess is admitted only through the house's re-derivation.
 
-Read aloud (the live demo): *"dream must be proven before proof; proof is law"* →
-`[dream < proof] [proof = law]` → read back as *"dream sits under proof; proof is
-law"* → confirm pinned → delivered as one DIADOSIS handle.
+## The one law and its self-proof
 
-## The hybrid muse and its ASYMMETRIC self-proof
+A muse is never proven honest; the QUARANTINE that makes a dishonest muse harmless
+is, every invocation. Because anglos already proves the grammar, `hermeneus_selfprove`
+proves **only the seam and the wall** (arms 1..7):
 
-A muse cannot be proven honest. What CAN be proven, as a condition of motion, is
-the quarantine that makes a dishonest muse harmless. The two backends differ only
-in how much *more* than the shared quarantine each proves about itself:
-
-- **Deterministic proposer** (an in-house space-delimited pattern grammar over
-  the unambiguous fragment: `A before B → [A < B]`, `A is B → [A = B]`,
-  `A mirrors B → [A ~ B]`) is a *known finite function*, so it proves the most:
-  **exactness on its domain** (each template → its exact claim, by address),
-  **total refusal off-domain** (a cue-free utterance yields ZERO claims and a
-  counter), and **determinism**.
-- **External door** (`hm_admit_ext`) admits any out-of-tree muse's JSON proposal
-  through `xn_admit` *unchanged*, reads the admitted claims, glosses them itself,
-  and stands them PROVISIONAL. It proves ONLY the door (re-derivation admits the
-  truthful, refuses the incoherent) — it makes **no** claim about the muse's
-  translation quality. That is the human's judgment alone.
-
-## The three quarantine theorems (both backends)
-
-1. **Inverse round-trip** — `gloss` and the deterministic `parse` are mutual
-   inverses on the fragment: `parse(gloss(C)) ≡ C` by address. The read-back the
-   human confirms means *exactly* the claim that will cross.
-2. **The wall** — no path from an unconfirmed (or mis-confirmed) proposal to the
-   core: delivery before a confirm is DENIED; a confirm is content-addressed to
-   its proposal (`cad(english ‖ addr)`), so a confirm for X cannot free Y.
-3. **Seam-exactness** — a confirmed English utterance reduces to the *same*
-   DIADOSIS address as the equivalent hand-written claims. HERMENEUS is a pure
-   gate: it adds and loses nothing; it only decides *whether* to cross.
+1. **THE SEAM (in)** — English through the sensory organ admits through the filter
+   and stands PROVISIONAL, carrying exactly the claim anglos's surface law dictates.
+2. **READ-BACK IS THE KEY** — `an_say`'s output, re-rendered fresh from the standing
+   scroll, is the EXACT string that passes the confirm-pin. What the human is shown
+   is what unlocks the wall — no gap between them.
+3. **THE WALL** — a freshly stood (unconfirmed) proposal yields the wall sentinel on
+   delivery; the core is never touched.
+4. **RELEASE + SEAM-EXACTNESS** — a confirmed `and`-composed utterance delivers a
+   DIADOSIS handle, and reduces to the *same* address as the hand-written claims fed
+   straight to DIADOSIS. HERMENEUS is a pure gate: it adds and loses nothing.
+5. **CLOSURE** — the delivered handle resolves; a component claim is entailed at the
+   consumer, and a claim outside the closure is not delivered-as-known.
+6. **THE EXTERNAL MUSE** — an LLM's JSON rides the same chokepoint: a truthful array
+   stands PROVISIONAL, a cyclic one is refused at the filter, never stood.
+7. **THE PIN** — distinct proposals earn distinct confirm-pins (a confirm cannot be
+   replayed against a different proposal).
 
 ## Honest scope
 
-Pure `.iii` does not "understand English," and this organ claims no such thing.
-The deterministic proposer matches **syntax**: a sentence that superficially fits
-a template (a question like *"what is it"* fits `X is Y`) still proposes a claim —
-and that is precisely why the human confirm is mandatory. The proven property is
-narrower and load-bearing: **the proposer emits a claim only where a cue is
-present (never inventing one from cue-free text), and nothing crosses the wall
-without a human confirm pinned to exactly that proposal.** The wall makes a
-*wrong* muse harmless; it does not make a *right* one. Alien vocabulary is a
-warning, not a wall (the liberation law: minting stays open; `lx_check` flags,
-the human decides). Mechanism novelty: none claimed — pattern grammars, content
-addressing, human-in-the-loop confirmation, and provisional/canonical firewalls
-are decades old. What is III's own is the *unification*: one door where a
-fallible muse's proposal is judged by the house's own re-derivation, glossed back
-for a human, quarantined behind a pinned confirm, and delivered into a back-end
-already proven exact — with the whole discipline re-proven at every invocation.
+Pure `.iii` does not "understand English." anglos matches a bounded, auditable
+*surface*: a sentence that superficially fits a template proposes a claim, and the
+human confirm is exactly why that is safe. The read-back is `an_say`; a scroll it
+cannot speak (a word colliding with a structural keyword) is refused rather than
+mangled, so the external door is bounded to sayable claims — the human must be able
+to read what they confirm. The wall makes a *wrong* muse harmless, not a *right*
+one. Alien vocabulary is a warning, not a wall (the liberation law: minting stays
+open; `lx_check` flags, the human decides). Mechanism novelty: none — pattern
+grammars, content addressing, human-in-the-loop confirmation, and provisional /
+canonical firewalls are decades old. What is III's own is the *unification*: one
+door where a fallible muse's proposal is heard by a proven parser, filtered by the
+house's re-derivation, glossed back for a human, quarantined behind a pinned
+confirm, and delivered into a back-end already proven exact — the whole discipline
+re-proven at every invocation.
 
 ## Purity
 
-Composes `omnia/eidolos` (the tongue), `omnia/diadosis` (the proven back-end —
-its five faculties promoted to `@export` so it is composed, not left an island),
-`verba/lexicon` (`lx_check`), `aether/xenos` (the external door, unchanged), and
-`numera/idfold` (the pin). It imports no ground organ, no faculty, no parser: the
-system speaks the language; the language never leans on the system.
+Composes `aether/anglos` (+ `verba/nl_lex` + `verba/nl_parse`), `aether/xenos`,
+`omnia/eidolos`, `omnia/diadosis` (its five faculties promoted to `@export` so the
+proven back-end is composed, not islanded), `verba/lexicon`, and `numera/idfold`.
+It imports no ground organ and hand-rolls no grammar: the system speaks the
+language; the language leans on nothing.
 
-## What it measured (the 18 arms, byte-deterministic)
+## The standing tool
 
-Exactness on `< = ~` (1–3); total refusal off-domain (4); determinism (5);
-read-back inverse for all three verbs (6–7); vetting refuses a cycle and flags an
-alien word (8–9); the external door admits a truthful proposal PROVISIONAL and
-refuses an incoherent one (10–11); the wall denies delivery before/against a
-mismatched confirm and the pin is content-addressed and distinct (12–14);
-delivery releases a handle, the seam is exact, closure holds at the consumer, and
-a claim outside the closure is not delivered-as-known (15–18). The gate rebuilds
-every composed organ from clean objects and demands two byte-identical runs.
+`STDLIB/iii/omnia/hermeneus_cli.iii` (`iii hermeneus`). Every invocation self-proves
+the logos, the vein, the door, the lexicon, the tongue, the back-end, and the immune
+system FIRST, and refuses to run over a broken law (exit 9 — the kardia pattern):
+
+- `iii hermeneus prove` — the 7 seam+wall arms, re-derived.
+- `iii hermeneus translate "<english>"` — the EIDOLOS claims + the `an_say` read-back
+  (no delivery; the wall is not crossed).
+- `iii hermeneus deliver "<english>"` — hear + confirm + deliver into DIADOSIS.
+- `iii hermeneus` — the live REPL: an assertion is heard, its read-back shown, and the
+  human types `yes` to cross the wall or anything else to hold it. The confirm is real —
+  nothing reaches DIADOSIS without it.
+
+## What it measured (7 arms + the gate, byte-deterministic)
+
+The seam admits; the `an_say` read-back is the confirm key; the wall denies the
+unconfirmed; the confirmed path is seam-exact to DIADOSIS and closes at the
+consumer; the external muse rides the same chokepoint; distinct proposals earn
+distinct pins. The gate (`STDLIB/scripts/hermeneus_gate.sh`) rebuilds every composed
+organ from clean objects and demands: the self-proof green and byte-identical over two
+runs; a determiner + adjective + `and`-composed utterance *delivered* end to end and
+byte-identical over two runs; and the wall *held* when the REPL is told `no` (nothing
+delivered without the human's `yes`).

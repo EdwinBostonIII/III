@@ -1,0 +1,227 @@
+/* STDLIB/iii/omnia/hermeneus_cli.iii -- iii hermeneus: THE ONE ENGLISH DOOR as a standing tool.
+ *
+ *   iii hermeneus prove                    the self-proof (7 seam+wall arms, over the proven
+ *                                          sensory organ + filter + back-end)
+ *   iii hermeneus translate "<english>"    hear English -> the EIDOLOS claims + the read-back
+ *                                          (no delivery; the wall is not crossed)
+ *   iii hermeneus deliver "<english>"      hear + CONFIRM (the invocation is the human's word)
+ *                                          + deliver into DIADOSIS; print the handle
+ *   iii hermeneus                          the live REPL: assertion -> read-back -> you type
+ *   iii hermeneus repl                     'yes' to cross the wall, anything else holds it
+ *
+ * EVERY invocation self-proves the logos, the vein, the door, the vocabulary, the tongue, the
+ * back-end, and the immune system FIRST, and refuses to run over a broken law (exit 9): the
+ * kardia condition-of-motion pattern.  The human confirm is real: nothing reaches DIADOSIS
+ * without it.  exit: 0 ok | 1 refused | 3 usage | 9 SELF-REFUSED. */
+module hermeneus_cli
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn getchar() -> i32 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn hermeneus_selfprove() -> u64 from "hermeneus.iii"
+extern @abi(c-msvc-x64) fn hm_hear(base: u64, len: u64) -> u64 from "hermeneus.iii"
+extern @abi(c-msvc-x64) fn hm_confirm_readback() -> u64 from "hermeneus.iii"
+extern @abi(c-msvc-x64) fn hm_deliver() -> u64 from "hermeneus.iii"
+extern @abi(c-msvc-x64) fn hm_reason() -> u64 from "hermeneus.iii"
+extern @abi(c-msvc-x64) fn hm_cand_len() -> u64 from "hermeneus.iii"
+extern @abi(c-msvc-x64) fn hm_cand_byte(i: u64) -> u8 from "hermeneus.iii"
+extern @abi(c-msvc-x64) fn hm_eng_len() -> u64 from "hermeneus.iii"
+extern @abi(c-msvc-x64) fn hm_eng_byte(i: u64) -> u8 from "hermeneus.iii"
+extern @abi(c-msvc-x64) fn hm_addr() -> u64 from "hermeneus.iii"
+extern @abi(c-msvc-x64) fn hm_last_alien() -> u64 from "hermeneus.iii"
+
+extern @abi(c-msvc-x64) fn eol_keep_selfprove() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn xr_selfprove() -> u64 from "xring.iii"
+extern @abi(c-msvc-x64) fn xn_selfprove() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn lx_selfprove() -> u64 from "lexicon.iii"
+extern @abi(c-msvc-x64) fn an_selfprove() -> u64 from "anglos.iii"
+extern @abi(c-msvc-x64) fn diadosis_selfprove() -> u64 from "diadosis.iii"
+
+const HC_WALL : u64 = 18446744073709551615u64
+
+var HC_IN  : [u8; 4096]
+var HC_ANS : [u8; 256]
+
+/* ==================== I/O + string tools ==================== */
+fn ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn pu(v: u64) -> u32 { if v >= 10u64 { pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn streq(a: u64, b: u64) -> u32 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while pa[i] != 0u8 { if pa[i] != pb[i] { return 0u32 }   i = i + 1u64 }
+    if pb[i] != 0u8 { return 0u32 }
+    return 1u32
+}
+/* rejoin argv[frm..argc) with single spaces into dst (null-terminated); returns length */
+fn join_args(argc: i32, argv: u64, frm: u64, dst: u64, cap: u64) -> u64 {
+    let av : *u64 = argv as *u64
+    let d : *u8 = dst as *u8
+    let mut n : u64 = 0u64
+    let mut i : u64 = frm
+    while (i as i64) < (argc as i64) {
+        if i > frm { if n < cap { d[n] = 32u8   n = n + 1u64 } }
+        let p : *u8 = av[i] as *u8
+        let mut k : u64 = 0u64
+        while p[k] != 0u8 { if n < cap { d[n] = p[k]   n = n + 1u64 }   k = k + 1u64 }
+        i = i + 1u64
+    }
+    if n < cap { d[n] = 0u8 }
+    return n
+}
+/* read one line from stdin into buf (null-terminated), stripping CR.  Returns the length, or -1
+ * on EOF with nothing read (so an empty line -> 0, a closed pipe -> -1). */
+fn read_line(buf: u64, cap: u64) -> i64 {
+    let b : *u8 = buf as *u8
+    let mut n : u64 = 0u64
+    let mut go : u64 = 1u64
+    let mut got : u64 = 0u64
+    while go == 1u64 {
+        let c : i32 = getchar()
+        if c < 0i32 { go = 0u64 } else {
+            got = 1u64
+            if c == 10i32 { go = 0u64 } else {
+            if c == 13i32 { } else {
+                if n < cap { b[n] = c as u8   n = n + 1u64 }
+            } }
+        }
+    }
+    b[n] = 0u8
+    if got == 0u64 { return 0i64 - 1i64 }
+    return n as i64
+}
+
+/* ==================== condition of motion (the kardia pattern) ==================== */
+fn condition_of_motion() -> u64 {
+    let lp : u64 = eol_keep_selfprove()
+    if lp != 0u64 { ps("THE LOGOS REFUSES ITSELF (eidolos kept-house arm " as u64)   pu(lp)   ps(")\n" as u64)   return 9u64 }
+    let vp : u64 = xr_selfprove()
+    if vp != 0u64 { ps("THE VEIN REFUSES ITSELF (xring arm " as u64)   pu(vp)   ps(")\n" as u64)   return 9u64 }
+    let dp : u64 = xn_selfprove()
+    if dp != 0u64 { ps("THE DOOR REFUSES ITSELF (xenos arm " as u64)   pu(dp)   ps(")\n" as u64)   return 9u64 }
+    let xp : u64 = lx_selfprove()
+    if xp != 0u64 { ps("THE LEXICON REFUSES ITSELF (arm " as u64)   pu(xp)   ps(")\n" as u64)   return 9u64 }
+    let ap : u64 = an_selfprove()
+    if ap != 0u64 { ps("THE TONGUE REFUSES ITSELF (anglos arm " as u64)   pu(ap)   ps(")\n" as u64)   return 9u64 }
+    let bp : u64 = diadosis_selfprove()
+    if bp != 0u64 { ps("THE BACK-END REFUSES ITSELF (diadosis arm " as u64)   pu(bp)   ps(")\n" as u64)   return 9u64 }
+    let hp : u64 = hermeneus_selfprove()
+    if hp != 0u64 { ps("THE DOOR REFUSES ITSELF (hermeneus seam+wall arm " as u64)   pu(hp)   ps(")\n" as u64)   return 9u64 }
+    return 0u64
+}
+
+/* ==================== presentation ==================== */
+fn hm_reason_word(r: u64) -> u32 {
+    /* the sensory organ / immune-system refusal, named */
+    if r == 1u64 { ps("the tongue could not hear it (unparsed / imperative / modal / conditional / or / verb-beyond-surface)" as u64)   return 1u32 }
+    if r == 2u64 { ps("over an envelope (refused whole)" as u64)   return 1u32 }
+    if r == 3u64 { ps("incoherent -- a cycle, refused by the filter" as u64)   return 1u32 }
+    if r == 6u64 { ps("admitted but unsayable -- the read-back would mangle it, so it cannot be quarantined" as u64)   return 1u32 }
+    ps("(reason " as u64)   pu(r)   ps(")" as u64)
+    return 1u32
+}
+fn print_translation() -> u64 {
+    ps("  claims   : " as u64)
+    let cl : u64 = hm_cand_len()
+    let mut i : u64 = 0u64
+    while i < cl { putchar(hm_cand_byte(i) as i32)   i = i + 1u64 }
+    putchar(10i32)
+    ps("  read-back: " as u64)
+    let el : u64 = hm_eng_len()
+    i = 0u64
+    while i < el { putchar(hm_eng_byte(i) as i32)   i = i + 1u64 }
+    putchar(10i32)
+    ps("  address  : " as u64)   pu(hm_addr())   putchar(10i32)
+    if hm_last_alien() > 0u64 { ps("  note     : " as u64)   pu(hm_last_alien())   ps(" word(s) not in the pooled lexicon -- confirm only if you mean to mint them\n" as u64) }
+    return 0u64
+}
+
+fn usage() -> u64 {
+    ps("iii hermeneus -- the ONE English door: hear, quarantine, deliver.\n\n" as u64)
+    ps("  iii hermeneus prove                  the self-proof (7 seam+wall arms)\n" as u64)
+    ps("  iii hermeneus translate \"<english>\"  the EIDOLOS claims + read-back (no delivery)\n" as u64)
+    ps("  iii hermeneus deliver \"<english>\"    hear + confirm + deliver into DIADOSIS\n" as u64)
+    ps("  iii hermeneus                        the live REPL (assertion -> read-back -> yes/no)\n\n" as u64)
+    ps("exit: 0 ok | 1 refused | 3 usage | 9 SELF-REFUSED\n" as u64)
+    return 3u64
+}
+fn cmd_prove() -> u64 {
+    ps("THE ONE ENGLISH DOOR PROVEN -- 7 seam+wall arms over the proven sensory organ (anglos),\n" as u64)
+    ps("structural filter (xenos), and delivery back-end (diadosis), re-derived at THIS invocation:\n" as u64)
+    ps("  1 the transduced claim-array admits through the filter, standing PROVISIONAL;\n" as u64)
+    ps("  2 the an_say read-back is the EXACT string that passes the confirm-pin;\n" as u64)
+    ps("  3 an unconfirmed standing claim yields the WALL on delivery;\n" as u64)
+    ps("  4 the confirmed path reduces to the SAME address as the hand claims (seam-exact);\n" as u64)
+    ps("  5 the delivered handle resolves and closes at the consumer;\n" as u64)
+    ps("  6 an external LLM's JSON rides the same chokepoint (truthful stands, cyclic refused);\n" as u64)
+    ps("  7 distinct proposals earn distinct confirm-pins (no replay).\n" as u64)
+    ps("anglos owns the grammar (its own an_selfprove 390..399); this proves the seam and the wall.\n" as u64)
+    return 0u64
+}
+fn cmd_translate(argc: i32, argv: u64) -> u64 {
+    let n : u64 = join_args(argc, argv, 2u64, (&HC_IN) as u64, 4095u64)
+    let r : u64 = hm_hear((&HC_IN) as u64, n)
+    if r <= 6u64 { ps("REFUSED -- " as u64)   hm_reason_word(hm_reason())   putchar(10i32)   return 1u64 }
+    print_translation()
+    ps("  (translation only -- 'iii hermeneus deliver' or the REPL crosses the wall)\n" as u64)
+    return 0u64
+}
+fn cmd_deliver(argc: i32, argv: u64) -> u64 {
+    let n : u64 = join_args(argc, argv, 2u64, (&HC_IN) as u64, 4095u64)
+    let r : u64 = hm_hear((&HC_IN) as u64, n)
+    if r <= 6u64 { ps("REFUSED -- " as u64)   hm_reason_word(hm_reason())   putchar(10i32)   return 1u64 }
+    print_translation()
+    let pin : u64 = hm_confirm_readback()
+    if pin == 0u64 { ps("  CONFIRM FAILED (the read-back did not match the standing proposal)\n" as u64)   return 1u64 }
+    let h : u64 = hm_deliver()
+    if h == HC_WALL { ps("  WALL -- not delivered\n" as u64)   return 1u64 }
+    ps("  CONFIRMED pin " as u64)   pu(pin)   ps(", delivered into DIADOSIS at handle " as u64)   pu(h)   putchar(10i32)
+    return 0u64
+}
+fn repl() -> u64 {
+    ps("iii hermeneus -- the one English door.  Speak an assertion; empty line or 'quit' closes it.\n" as u64)
+    ps("  e.g.  the dream is a proof and the proof equals the law\n\n" as u64)
+    let mut go : u64 = 1u64
+    while go == 1u64 {
+        ps("en> " as u64)
+        let r : i64 = read_line((&HC_IN) as u64, 4095u64)
+        if r < 0i64 { go = 0u64 } else {
+        let rl : u64 = r as u64
+        if rl == 0u64 { go = 0u64 } else {
+        if streq((&HC_IN) as u64, "quit" as u64) == 1u32 { go = 0u64 } else {
+        if streq((&HC_IN) as u64, "exit" as u64) == 1u32 { go = 0u64 } else {
+            let hr : u64 = hm_hear((&HC_IN) as u64, rl)
+            if hr <= 6u64 {
+                ps("  REFUSED -- " as u64)   hm_reason_word(hm_reason())   ps("\n\n" as u64)
+            } else {
+                print_translation()
+                ps("  cross the wall? type 'yes' to deliver > " as u64)
+                let r2 : i64 = read_line((&HC_ANS) as u64, 255u64)
+                if r2 < 0i64 { go = 0u64 } else {
+                    if streq((&HC_ANS) as u64, "yes" as u64) == 1u32 {
+                        let pin : u64 = hm_confirm_readback()
+                        let h : u64 = hm_deliver()
+                        ps("  CONFIRMED pin " as u64)   pu(pin)   ps(", delivered DIADOSIS handle " as u64)   pu(h)   ps("\n\n" as u64)
+                    } else {
+                        ps("  held -- the wall stands; nothing delivered.\n\n" as u64)
+                    }
+                }
+            }
+        } } } }
+    }
+    ps("(the door closes)\n" as u64)
+    return 0u64
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let av : *u64 = argv as *u64
+    let cm : u64 = condition_of_motion()
+    if cm != 0u64 { return 9u64 }
+    if argc < 2i32 { return repl() }
+    let cmd : u64 = av[1u64]
+    if streq(cmd, "prove" as u64) == 1u32 { return cmd_prove() }
+    if streq(cmd, "repl" as u64) == 1u32 { return repl() }
+    if streq(cmd, "translate" as u64) == 1u32 { if argc < 3i32 { return usage() }   return cmd_translate(argc, argv) }
+    if streq(cmd, "deliver" as u64) == 1u32 { if argc < 3i32 { return usage() }   return cmd_deliver(argc, argv) }
+    return usage()
+}

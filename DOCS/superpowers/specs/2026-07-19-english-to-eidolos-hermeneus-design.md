@@ -214,10 +214,18 @@ Imports (all already in the house — NIH clean, no new inference):
 - `omnia/eidolos.iii` — the tongue (`eol_read`/`eol_keep`/`eol_reduce`/`eol_judge_claim`/`eol_addr`/
   `eol_witness`/`eol_verify`/`eol_write`).
 - `omnia/diadosis.iii` — the proven back-end (`dd_reduce_addr`, `dd_publish`, `dd_resolve`,
-  `dd_ripple`, `dd_consumer_entails`).
+  `dd_ripple`, `dd_consumer_entails`). **These are not `@export` today** — only
+  `diadosis_selfprove` consumes them, which is exactly the island MANTIS's header warns against.
+  Composing DIADOSIS therefore requires promoting those five faculties to `@export`: a minimal,
+  purely additive change (no logic touched), each new export consumed by HERMENEUS and covered by
+  a self-prove arm, so the ratchet stays clean.
 - `verba/lexicon.iii` — `lx_check` and the alien-word readout.
-- `aether/xenos.iii` **or** `verba/json.iii` directly — the external-muse JSON door (decision in §10).
-- `numera/idfold.iii` — the pin (`cad(english ‖ addr)`).
+- `aether/xenos.iii` — the external-muse door, **reused unchanged**: the muse emits an UNSIGNED
+  claim-array `["[dream < proof]", …]` (or a CONFORMING envelope), `xn_admit` vets it by the house's
+  own re-derivation and leaves the admitted claims standing in the eidolos state; HERMENEUS reads
+  them via `eol_kept_claims`/`eol_kept_claim_base` and glosses them *itself* for read-back (so the
+  human sees III's own reading of the muse's claims, not the muse's self-description). No XENOS edit.
+- `numera/idfold.iii` — the pin (`cad(english ‖ addr)`), folded exactly as XENOS folds names.
 
 The system speaks the language; the language never leans on the system: HERMENEUS imports no ground
 organ, no faculty, no parser.
@@ -249,10 +257,11 @@ back-end already proven exact — with the whole discipline re-proven as a condi
 
 ## 10. Open design choices (to settle in the plan)
 
-1. **External door: reuse `xenos.iii` vs a hermeneus-local envelope.** *Recommendation:* reuse
-   XENOS's admission machinery via a `hermeneus`-tagged envelope grade, so the re-derivation, guest-
-   book, and refusal vocabulary come for free and stay identical to the JSON door. Fall back to a
-   local `verba/json` reader only if the XENOS envelope shape proves too rigid.
+1. **External door: reuse `xenos.iii`.** *Resolved:* reuse `xn_admit` **unchanged** — the muse
+   emits an UNSIGNED claim-array (or a CONFORMING `speak:eidolos` envelope), XENOS vets it by
+   re-derivation and stands the claims; HERMENEUS reads the standing claims and glosses them itself.
+   No new envelope grade, no XENOS edit. (A `hermeneus`-tagged envelope was considered and rejected:
+   it would fall through XENOS as a STRANGER and be transduced structurally, not semantically.)
 2. **Confirm persistence: in-memory vs a guest-book file.** *Recommendation:* mirror `xenos.gbk` —
    a self-verifying EIDOLOS event line per confirm/reject (`STDLIB/data/hermeneus.gbk`), so the
    quarantine's history is auditable and tamper-evident, not process-local state.
@@ -277,4 +286,6 @@ back-end already proven exact — with the whole discipline re-proven as a condi
 - It does not put the statistical translator *inside* III (the deterministic proposer is not
   statistical; the external muse lives out of tree).
 - It does not auto-cross any proposal — human confirm is mandatory, mechanized by the wall.
-- It does not modify DIADOSIS or EIDOLOS; it composes them unchanged.
+- It does not change any DIADOSIS or EIDOLOS *behavior*. The only edit to an existing organ is
+  promoting DIADOSIS's five faculties to `@export` (additive, arm-covered) so the proven back-end
+  can finally be composed instead of remaining an island. XENOS and EIDOLOS are untouched.

@@ -329,3 +329,30 @@ remembers across processes and federates across machines; and whose own mathemat
 compiler, and body accept the mind's suggestions exactly as far as proof carries them and
 not one step further. The first LLM that is a mathematical function, inside the first
 system built to refuse everything less.
+
+---
+
+## 10. LANDED (2026-07-18) — Tiers 3 and 4, the pure-provable cores
+
+Each organ below is green (its own self-proving law, `*_selfprove=0`), additive, and
+carries the Feast seam NAMED and empty (the synthetic data is replaced by streamed R1
+rows with the math unchanged). Gates/corpus foregone by standing order — compile-checks +
+direct probes throughout.
+
+| Phase / track | Organ | The law it proves | Commit |
+|---|---|---|---|
+| Φ4 MANTIS honesty | `DOCS/III-MANTIS-OPTIMIZATION.md` §2 | fast tier consumes R1 in seconds; certified UNDECIDED at 896 bits (gap 2⁻⁸³⁵ vs width 2¹²⁶⁶³); the eskalation win is regime-specific | e52cd343 |
+| **Φ5 SYMPOSION** (the substrate) | `omnia/symposion.iii` | THE ORDER-NOT-SET LAW: the muse ORDERS, the verifier DECIDES; a lying muse changes the verified set by NOTHING, a wise muse only reaches it sooner; every set muse-blind reproducible. Proven pure AND on the barometer (eol_entails) | 7f045abd |
+| Φ5 first coupling | `omnia/symposion.iii` (`sym_couple_beam`) | the law on a landed search faculty (nous/beam_search): CALM merge = muse-blind replay; ungated → cheap-WRONG v11 = the verifier is load-bearing; guided reaches v5 where single walks are trapped | 1d40ea59 |
+| Φ6-B PHYSIOGNOMIA | `omnia/physiognomia.iii` | a certified robustness THEOREM: no ‖δ‖∞ < m/(2·‖W‖∞) changes the elected token; sound (r ≤ true safe radius) and non-vacuous (a bigger δ flips); the Lipschitz ladder at depth | daff0173 |
+| Φ6-C NEKROSKOPIA | `omnia/nekroskopia.iii` | head-role certificates as theorems: a copying head certified by OV-circuit (W_O W_V) diagonal dominance; a swap head refused by proof | 7ef1e0b1 |
+| Φ6-D ONOMASTIKON | `omnia/onomastikon.iii` | the embedding table as exact geometry: the nearest-neighbor graph is an integer-exact theorem (no float flip), strict-margin stable separations earn GLOSSA names by proof | 58756936 |
+
+**The couplings tier is now substrate-complete:** every faculty (nous conjecture ordering,
+oneiros cassandra, synesis bridge ranking, zetesis question prioritization) reuses the ONE
+`symposion` order-not-set law — the muse feeds `sym_set_score`, the faculty's own verifier
+decides, and the verified set is muse-blind reproducible. The archaeology tier's three
+weight-only theorem tracks (functional bounds, circuit roles, embedding geometry) stand as
+pure cores. Track E (APOMNEMONEUMATA) runs through the one door (anglos/xenos) — the
+boundary session's jurisdiction — and is left to it. Track F (EXACT SURGERY) is
+PHYSIOGNOMIA's sworn-deviation margin applied to pruning, and follows the same shape.

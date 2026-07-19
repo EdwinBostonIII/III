@@ -1,0 +1,185 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\nekroskopia.iii
+ *
+ * III STDLIB - omnia::nekroskopia  --  THE CORPSE-EXAMINATION (ENSOMATOSIS Tier
+ * 4, archaeology track C): mechanistic interpretability with CERTIFICATES, not
+ * plots.  A head's ROLE is proven over the exact weights, not inferred from
+ * activation heatmaps: the machine dissects the metabolized mind and swears what
+ * each circuit DOES.
+ *
+ * THE FIRST ROLE -- THE COPYING HEAD, certified through the OV circuit:
+ *   A head writes  out_i = sum_j attn[i,j] . (W_O W_V x_j)  -- the attention
+ *   pattern decides WHERE it reads, the OV circuit  W_OV = W_O W_V  decides WHAT
+ *   it writes.  The OV circuit is an EXACT integer matrix product, independent of
+ *   the input.  A COPYING head is one whose W_OV preserves the token it reads:
+ *   when W_OV = I, the head writes the attended token's embedding UNCHANGED, so
+ *   whatever the attention copies, the residual receives verbatim.  This is an
+ *   input-free THEOREM about the weights -- exactly the certificate float
+ *   interpretability can only estimate.
+ *
+ *   THE ROBUST CERTIFICATE (the PHYSIOGNOMIA margin, reused): a head need not be
+ *   exactly identity to copy -- it suffices that each output coordinate is
+ *   DOMINATED by the token's own coordinate: W_OV[k,k] - sum_{l!=k} |W_OV[k,l]|
+ *   > 0 (row diagonal dominance).  Then the copied component out-weighs every
+ *   cross-term, the token identity survives the OV map, and the copying-margin is
+ *   an exact integer.  A head that SWAPS or mixes coordinates (off-diagonal
+ *   dominant) fails the certificate BY PROOF -- it is not a copying head.
+ *
+ * SOUNDNESS + NON-VACUITY (prove-both-arms): a constructed copying head (W_V, W_O
+ * non-trivial but W_O W_V = I) is CERTIFIED and its action on any token is proven
+ * to be the identity; a constructed swap head (W_OV off-diagonal) is REFUSED and
+ * its action is proven to permute -- the certificate discriminates real roles.
+ *
+ * THE FEAST SEAM (named, empty): here W_V, W_O are constructed 2x2 heads so the
+ * theorem is environment-free.  In production they are R1's real per-head value
+ * and output projections streamed from metabole; W_OV = W_O W_V folded exactly,
+ * the diagonal-dominance margin computed per row, and every head classified
+ * copying / not -- a sworn circuit census.  The organ that dissects a synthetic
+ * head dissects the real one unchanged.
+ *
+ * Ring R0.  K 0.99 (integer-exact; the role is a theorem of the weights).  NIH:
+ * the certificate-not-plot face of the same exact linear algebra PHYSIOGNOMIA and
+ * DIEXODOS walk; no float.  Hexad: kind_measure (it measures circuit role). */
+
+module omnia_nekroskopia
+
+const NEK_N : u64 = 2u64                    /* head dimension (the constructed 2x2 circuit) */
+var NEK_WV : [i64; 4]                        /* value projection W_V, row-major NxN */
+var NEK_WO : [i64; 4]                        /* output projection W_O */
+var NEK_OV : [i64; 4]                        /* the OV circuit W_O W_V */
+var NEK_X  : [i64; 2]                        /* a token embedding */
+var NEK_Y  : [i64; 2]                        /* the head's write for that token */
+
+fn nek_abs(x: i64) -> i64 { if x < 0i64 { return 0i64 - x }   return x }
+
+/* the exact OV circuit: OV = A B (NxN integer matrix product). */
+fn nek_matmul(A: u64, B: u64, out: u64) -> i32 @export {
+    let pa : *i64 = A as *i64
+    let pb : *i64 = B as *i64
+    let po : *i64 = out as *i64
+    let mut i : u64 = 0u64
+    while i < NEK_N {
+        let mut j : u64 = 0u64
+        while j < NEK_N {
+            let mut s : i64 = 0i64
+            let mut k : u64 = 0u64
+            while k < NEK_N { s = s + pa[i * NEK_N + k] * pb[k * NEK_N + j]   k = k + 1u64 }
+            po[i * NEK_N + j] = s
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* is M the identity matrix exactly? (the pure copying head) */
+fn nek_is_identity(M: u64) -> u64 @export {
+    let p : *i64 = M as *i64
+    let mut i : u64 = 0u64
+    while i < NEK_N {
+        let mut j : u64 = 0u64
+        while j < NEK_N {
+            let mut want : i64 = 0i64
+            if i == j { want = 1i64 }
+            if p[i * NEK_N + j] != want { return 0u64 }
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    return 1u64
+}
+
+/* the copying-margin of row k: M[k,k] - sum_{l!=k} |M[k,l]|.  > 0 == the token's
+ * own coordinate dominates the OV write for that coordinate (diagonal dominance). */
+fn nek_diag_margin(M: u64, row: u64) -> i64 @export {
+    let p : *i64 = M as *i64
+    let diag : i64 = p[row * NEK_N + row]
+    let mut off : i64 = 0i64
+    let mut l : u64 = 0u64
+    while l < NEK_N { if l != row { off = off + nek_abs(p[row * NEK_N + l]) }   l = l + 1u64 }
+    return diag - off
+}
+
+/* THE COPYING CERTIFICATE: 1 iff EVERY row is diagonally dominant (all copying-
+ * margins > 0) -- the head provably preserves the token identity it reads. */
+fn nek_copy_cert(M: u64) -> u64 @export {
+    let mut i : u64 = 0u64
+    while i < NEK_N {
+        if nek_diag_margin(M, i) <= 0i64 { return 0u64 }
+        i = i + 1u64
+    }
+    return 1u64
+}
+
+/* the head's write for a token: out = M x (the OV circuit applied to the read). */
+fn nek_apply(M: u64, x: u64, out: u64) -> i32 @export {
+    let pm : *i64 = M as *i64
+    let px : *i64 = x as *i64
+    let po : *i64 = out as *i64
+    let mut i : u64 = 0u64
+    while i < NEK_N {
+        let mut s : i64 = 0i64
+        let mut k : u64 = 0u64
+        while k < NEK_N { s = s + pm[i * NEK_N + k] * px[k]   k = k + 1u64 }
+        po[i] = s
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* ==================== THE CORPSE-EXAMINATION LAW (pure, exact) ================
+ * A constructed COPYING head (W_V and W_O both non-trivial, product = I) is
+ * certified and proven to write tokens unchanged; a constructed SWAP head is
+ * refused and proven to permute.  Returns 0 = the certificate discriminates the
+ * roles; nonzero names the failing clause. */
+fn nek_selfprove() -> u64 @export {
+    let WV : u64 = (&NEK_WV) as u64
+    let WO : u64 = (&NEK_WO) as u64
+    let OV : u64 = (&NEK_OV) as u64
+    let X  : u64 = (&NEK_X) as u64
+    let Y  : u64 = (&NEK_Y) as u64
+
+    /* --- a COPYING head: W_V=[[1,1],[0,1]], W_O=[[1,-1],[0,1]] -> W_OV = I --- */
+    NEK_WV[0u64]=1i64 NEK_WV[1u64]=1i64 NEK_WV[2u64]=0i64 NEK_WV[3u64]=1i64
+    NEK_WO[0u64]=1i64 NEK_WO[1u64]=0i64 - 1i64 NEK_WO[2u64]=0i64 NEK_WO[3u64]=1i64
+    nek_matmul(WO, WV, OV)
+    /* CLAUSE 1 -- the exact OV product is the identity. */
+    if NEK_OV[0u64] != 1i64 { return 1u64 }
+    if NEK_OV[1u64] != 0i64 { return 2u64 }
+    if NEK_OV[2u64] != 0i64 { return 3u64 }
+    if NEK_OV[3u64] != 1i64 { return 4u64 }
+    /* CLAUSE 2 -- it is certified a COPYING head (identity AND diagonally dominant). */
+    if nek_is_identity(OV) != 1u64 { return 5u64 }
+    if nek_copy_cert(OV) != 1u64 { return 6u64 }
+    if nek_diag_margin(OV, 0u64) != 1i64 { return 7u64 }        /* 1 - 0 */
+
+    /* CLAUSE 3 -- it writes any token UNCHANGED: OV.x == x. */
+    NEK_X[0u64]=7i64 NEK_X[1u64]=0i64 - 3i64
+    nek_apply(OV, X, Y)
+    if NEK_Y[0u64] != 7i64 { return 8u64 }
+    if NEK_Y[1u64] != 0i64 - 3i64 { return 9u64 }
+
+    /* --- a robust (non-identity) copying head: W_OV = [[3,1],[1,3]] --- */
+    NEK_WV[0u64]=3i64 NEK_WV[1u64]=1i64 NEK_WV[2u64]=1i64 NEK_WV[3u64]=3i64
+    NEK_WO[0u64]=1i64 NEK_WO[1u64]=0i64 NEK_WO[2u64]=0i64 NEK_WO[3u64]=1i64   /* W_O = I */
+    nek_matmul(WO, WV, OV)
+    /* CLAUSE 4 -- not identity, yet certified copying by diagonal dominance (margin 2). */
+    if nek_is_identity(OV) == 1u64 { return 10u64 }
+    if nek_copy_cert(OV) != 1u64 { return 11u64 }
+    if nek_diag_margin(OV, 0u64) != 2i64 { return 12u64 }       /* 3 - |1| */
+
+    /* --- a SWAP head: W_OV = [[0,1],[1,0]] -- NOT copying --- */
+    NEK_WV[0u64]=0i64 NEK_WV[1u64]=1i64 NEK_WV[2u64]=1i64 NEK_WV[3u64]=0i64
+    NEK_WO[0u64]=1i64 NEK_WO[1u64]=0i64 NEK_WO[2u64]=0i64 NEK_WO[3u64]=1i64   /* W_O = I */
+    nek_matmul(WO, WV, OV)
+    /* CLAUSE 5 -- the certificate REFUSES it (off-diagonal dominant, margin < 0). */
+    if nek_is_identity(OV) == 1u64 { return 13u64 }
+    if nek_copy_cert(OV) != 0u64 { return 14u64 }               /* refused */
+    if nek_diag_margin(OV, 0u64) != 0i64 - 1i64 { return 15u64 }  /* 0 - |1| = -1 */
+    /* CLAUSE 6 -- and it PROVABLY permutes: OV.x swaps the coordinates. */
+    NEK_X[0u64]=7i64 NEK_X[1u64]=0i64 - 3i64
+    nek_apply(OV, X, Y)
+    if NEK_Y[0u64] != 0i64 - 3i64 { return 16u64 }              /* swapped */
+    if NEK_Y[1u64] != 7i64 { return 17u64 }
+
+    return 0u64
+}

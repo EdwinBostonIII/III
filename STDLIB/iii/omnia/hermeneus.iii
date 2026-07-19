@@ -1,0 +1,604 @@
+/* STDLIB/iii/omnia/hermeneus.iii -- HERMENEUS: the interpreter, III's English-to-EIDOLOS door.
+ *
+ * The gap this closes: eidolos/diadosis consume claims ALREADY in `[ thing verb thing ]` form;
+ * xenos moves foreign JSON *structure*, not meaning; mantis emits provenance, not translation.
+ * HERMENEUS is the missing step -- an English utterance turned into SEMANTIC claims whose verb
+ * (< under, = is, ~ mirrors) reflects the sentence's actual relation -- under one law:
+ *
+ *   THE STATISTICAL PART MAY PROPOSE; ONLY THE EXACT LAW PLUS A HUMAN DECIDES.
+ *
+ * A muse cannot be proven honest.  What CAN be proven -- as a condition of motion -- is the
+ * quarantine that makes a dishonest muse harmless: an in-house DETERMINISTIC proposer that is a
+ * known finite function (exact on its domain, TOTALLY REFUSING off it -- zero hallucination), an
+ * external muse admitted only through the house's own re-derivation, a read-back that is the
+ * proposer's INVERSE (so the human confirms meaning, not brackets), a confirm content-addressed to
+ * exactly its proposal (no back-channel to the core), and a seam onto the proven DIADOSIS back-end
+ * that adds and loses nothing.  hermeneus_selfprove re-derives all of it, pure, every invocation.
+ *
+ * Ring R0.  Composes omnia/eidolos + omnia/diadosis + verba/lexicon + aether/xenos + numera/idfold.
+ * NIH: no new inference, no island.  ASCII only.  (Built faculty-by-faculty per the plan; this
+ * revision carries the deterministic order-verb proposer and its exactness/refusal proof.) */
+module omnia_hermeneus
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_write() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_out_len() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_out_byte(i: u64) -> u8 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_rcap() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn lx_check(addr: u64, len: u64) -> u64 from "lexicon.iii"
+extern @abi(c-msvc-x64) fn dd_reduce_addr(claims: u64) -> u64 from "diadosis.iii"
+extern @abi(c-msvc-x64) fn dd_publish(addr: u64) -> u64 from "diadosis.iii"
+extern @abi(c-msvc-x64) fn dd_resolve(h: u64, out: u64) -> u64 from "diadosis.iii"
+extern @abi(c-msvc-x64) fn dd_ripple(handle: u64, count: u64) -> u64 from "diadosis.iii"
+extern @abi(c-msvc-x64) fn dd_consumer_entails(reduced: u64, q: u64) -> u64 from "diadosis.iii"
+extern @abi(c-msvc-x64) fn idfold_basis() -> u64 from "idfold.iii"
+extern @abi(c-msvc-x64) fn idfold_u64(h: u64, v: u64) -> u64 from "idfold.iii"
+extern @abi(c-msvc-x64) fn idfold_seal(h: u64) -> u64 from "idfold.iii"
+extern @abi(c-msvc-x64) fn xn_admit(base: u64, len: u64) -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_canon_len() -> u64 from "xenos.iii"
+extern @abi(c-msvc-x64) fn xn_canon_byte(i: u64) -> u8 from "xenos.iii"
+
+/* the verbs, as their ASCII bytes (the eidolos canon) */
+const HM_V_UNDER  : u8 = 60u8              /* '<' */
+const HM_V_IS     : u8 = 61u8              /* '=' */
+const HM_V_MIRROR : u8 = 126u8             /* '~' */
+
+const HM_WALL : u64 = 18446744073709551615u64   /* delivery denied sentinel */
+
+/* vetting reasons (0 = clean) */
+const HM_R_NONE : u64 = 0u64
+const HM_R_GRAMMAR : u64 = 1u64            /* proposer refusal (off-domain) */
+const HM_R_CAP : u64 = 2u64                /* over an envelope */
+const HM_R_LAW : u64 = 3u64                /* incoherent: cycle / self-under */
+const HM_R_ALIEN : u64 = 4u64              /* alien vocabulary (a flag, not a wall) */
+const HM_R_LYING : u64 = 5u64              /* external stated-address mismatch */
+
+/* ==================== the candidate scroll + counters ==================== */
+var HM_CAND : [u8; 16384]                  /* the proposer's candidate claim text */
+var HM_CN : u64 = 0u64
+var HM_RGRAMMAR : u64 = 0u64               /* off-domain utterances refused (zero-hallucination) */
+var HM_TMP : [u8; 4096]                    /* gloss / read-back scratch */
+var HM_CANON : [u8; 16384]                 /* the vetted canonical scroll */
+var HM_CNN : u64 = 0u64
+var HM_LAST_ADDR : u64 = 0u64              /* the standing scroll's (pre-reduction) address */
+var HM_LAST_ALIEN : u64 = 0u64             /* alien words flagged (liberation law: warn, not wall) */
+var HM_ENG : [u8; 4096]                    /* the standing proposal's English */
+var HM_ENGN : u64 = 0u64
+var HM_CLAIMS : [u8; 16384]                /* the standing proposal's raw claims (for delivery) */
+var HM_CLN : u64 = 0u64
+var HM_ADDR : u64 = 0u64                   /* the standing proposal's REDUCED address */
+var HM_CONFIRMED : u64 = 0u64              /* 1 iff a matching human confirm has crossed */
+var HM_PIN : u64 = 0u64                    /* the confirm's content-address cad(english||addr) */
+var HM_RWALL : u64 = 0u64                  /* delivery denied (unconfirmed / mismatched) */
+var HM_RECV : [u8; 16384]                  /* the resolved reduced-scroll bytes (consumer side) */
+var HM_JBUF : [u8; 1024]                    /* external-muse JSON build scratch (self-proof) */
+
+/* ==================== small tools (defined before use; no forward refs) ==================== */
+fn hm_slen(s: u64) -> u64 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { i = i + 1u64 }   return i }
+fn hm_pu(v: u64) -> i32 { if v >= 10u64 { hm_pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1i32 }
+fn hm_ps(s: u64) -> i32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1i32 }
+
+fn hm_cput(c: u8) -> u64 { if HM_CN >= 16384u64 { return 1u64 }   HM_CAND[HM_CN] = c   HM_CN = HM_CN + 1u64   return 0u64 }
+
+/* the exact canonical address of a scroll's bytes (0 = incoherent / cycle) */
+fn hm_addr_of(base: u64, len: u64) -> u64 {
+    eol_reset()
+    if eol_read(base, len) < 0i64 { return 0u64 }
+    return eol_addr()
+}
+
+/* first index of needle in hay[0..hlen), or hlen if absent */
+fn hm_find(needle: u64, nlen: u64, hay: u64, hlen: u64) -> u64 {
+    if nlen == 0u64 { return hlen }
+    if nlen > hlen { return hlen }
+    let np : *u8 = needle as *u8
+    let hp : *u8 = hay as *u8
+    let last : u64 = hlen - nlen
+    let mut i : u64 = 0u64
+    while i <= last {
+        let mut j : u64 = 0u64
+        let mut m : u64 = 1u64
+        while j < nlen {
+            if hp[i + j] != np[j] { m = 0u64   j = nlen } else { j = j + 1u64 }
+        }
+        if m == 1u64 { return i }
+        i = i + 1u64
+    }
+    return hlen
+}
+
+/* a "thing" is a lawful eidolos phrase iff non-empty, every byte in [a-z 0-9 space _ -],
+ * no leading/trailing space and no double space.  Anything else makes the WHOLE utterance
+ * unrecognized -- never a silently-mangled claim (the zero-hallucination boundary). */
+fn hm_thing_lawful(base: u64, len: u64) -> u64 {
+    if len == 0u64 { return 0u64 }
+    let p : *u8 = base as *u8
+    if p[0u64] == 32u8 { return 0u64 }
+    if p[len - 1u64] == 32u8 { return 0u64 }
+    let mut i : u64 = 0u64
+    let mut prev : u64 = 0u64
+    while i < len {
+        let c : u8 = p[i]
+        let mut ok : u64 = 0u64
+        if c >= 97u8 { if c <= 122u8 { ok = 1u64 } }
+        if c >= 48u8 { if c <= 57u8 { ok = 1u64 } }
+        if c == 32u8 { ok = 1u64 }
+        if c == 95u8 { ok = 1u64 }
+        if c == 45u8 { ok = 1u64 }
+        if ok == 0u64 { return 0u64 }
+        if c == 32u8 {
+            if prev == 1u64 { return 0u64 }
+            prev = 1u64
+        } else { prev = 0u64 }
+        i = i + 1u64
+    }
+    return 1u64
+}
+fn hm_emit_bytes(base: u64, len: u64) -> u64 {
+    let p : *u8 = base as *u8
+    let mut i : u64 = 0u64
+    let mut r : u64 = 0u64
+    while i < len { if hm_cput(p[i]) != 0u64 { r = 1u64 }   i = i + 1u64 }
+    return r
+}
+
+/* ==================== the deterministic proposer ==================== */
+/* try one cue in sentence s[0..n): 0 = cue absent (try the next); 1 = emitted [A verb B];
+ * 2 = cue present but A/B not a lawful phrase => HARD REFUSE the whole utterance. */
+fn hm_try_cue(s: u64, n: u64, cue: u64, clen: u64, verb: u8) -> u64 {
+    let idx : u64 = hm_find(cue, clen, s, n)
+    if idx >= n { return 0u64 }
+    let sp : *u8 = s as *u8
+    /* A = trim(s[0 .. idx]) */
+    let mut a0 : u64 = 0u64
+    let mut go : u64 = 1u64
+    while go == 1u64 { if a0 < idx { if sp[a0] == 32u8 { a0 = a0 + 1u64 } else { go = 0u64 } } else { go = 0u64 } }
+    let mut a1 : u64 = idx
+    go = 1u64
+    while go == 1u64 { if a1 > a0 { if sp[a1 - 1u64] == 32u8 { a1 = a1 - 1u64 } else { go = 0u64 } } else { go = 0u64 } }
+    /* B = trim(s[idx+clen .. n]) */
+    let mut b0 : u64 = idx + clen
+    go = 1u64
+    while go == 1u64 { if b0 < n { if sp[b0] == 32u8 { b0 = b0 + 1u64 } else { go = 0u64 } } else { go = 0u64 } }
+    let mut b1 : u64 = n
+    go = 1u64
+    while go == 1u64 { if b1 > b0 { if sp[b1 - 1u64] == 32u8 { b1 = b1 - 1u64 } else { go = 0u64 } } else { go = 0u64 } }
+    if hm_thing_lawful(s + a0, a1 - a0) == 0u64 { return 2u64 }
+    if hm_thing_lawful(s + b0, b1 - b0) == 0u64 { return 2u64 }
+    hm_cput(91u8)                                   /* [ */
+    hm_emit_bytes(s + a0, a1 - a0)
+    hm_cput(32u8)   hm_cput(verb)   hm_cput(32u8)
+    hm_emit_bytes(s + b0, b1 - b0)
+    hm_cput(93u8)   hm_cput(32u8)                   /* ] separator */
+    return 1u64
+}
+/* match one sentence to exactly one claim.  Order cues are tried LONGEST-FIRST so " before "
+ * cannot steal "must be proven before"; the order verb is checked before identity (Task 3) so
+ * "is under" is not stolen by "is".  Returns 1 emitted | 2 hard-refuse | 0 no cue. */
+fn hm_match_one(s: u64, n: u64) -> u64 {
+    /* cues are SPACE-DELIMITED so a relation word is only matched at word boundaries
+     * (" is " never fires inside "wisdom").  Longest/most-specific first: order, then mirror
+     * (before identity so " is the dual of " is not stolen by " is "), then identity. */
+    let mut r : u64 = hm_try_cue(s, n, " must be proven before " as u64, hm_slen(" must be proven before " as u64), HM_V_UNDER)
+    if r != 0u64 { return r }
+    r = hm_try_cue(s, n, " precedes " as u64, hm_slen(" precedes " as u64), HM_V_UNDER)
+    if r != 0u64 { return r }
+    r = hm_try_cue(s, n, " is under " as u64, hm_slen(" is under " as u64), HM_V_UNDER)
+    if r != 0u64 { return r }
+    r = hm_try_cue(s, n, " sits under " as u64, hm_slen(" sits under " as u64), HM_V_UNDER)
+    if r != 0u64 { return r }
+    r = hm_try_cue(s, n, " before " as u64, hm_slen(" before " as u64), HM_V_UNDER)
+    if r != 0u64 { return r }
+    r = hm_try_cue(s, n, " is the dual of " as u64, hm_slen(" is the dual of " as u64), HM_V_MIRROR)
+    if r != 0u64 { return r }
+    r = hm_try_cue(s, n, " mirrors " as u64, hm_slen(" mirrors " as u64), HM_V_MIRROR)
+    if r != 0u64 { return r }
+    r = hm_try_cue(s, n, " reflects " as u64, hm_slen(" reflects " as u64), HM_V_MIRROR)
+    if r != 0u64 { return r }
+    r = hm_try_cue(s, n, " equals " as u64, hm_slen(" equals " as u64), HM_V_IS)
+    if r != 0u64 { return r }
+    r = hm_try_cue(s, n, " is exactly " as u64, hm_slen(" is exactly " as u64), HM_V_IS)
+    if r != 0u64 { return r }
+    r = hm_try_cue(s, n, " is " as u64, hm_slen(" is " as u64), HM_V_IS)
+    if r != 0u64 { return r }
+    return 0u64
+}
+/* THE MUSE (deterministic): English (';'-separated sentences) -> candidate claim scroll.
+ * Returns the claim count; 0 = refused (HM_RGRAMMAR bumped, candidate cleared).  Never a
+ * partial or guessed claim: any sentence that does not match a template refuses the WHOLE
+ * utterance.  Composes eidolos only through the address check; emits pure claim text here. */
+fn hm_propose_det(english: u64, len: u64) -> u64 @export {
+    HM_CN = 0u64
+    let sp : *u8 = english as *u8
+    let mut off : u64 = 0u64
+    let mut count : u64 = 0u64
+    while off < len {
+        /* sentence span [off .. stop) up to ';' or end */
+        let mut stop : u64 = off
+        let mut go : u64 = 1u64
+        while go == 1u64 { if stop < len { if sp[stop] == 59u8 { go = 0u64 } else { stop = stop + 1u64 } } else { go = 0u64 } }
+        /* trim the sentence */
+        let mut ts : u64 = off
+        go = 1u64
+        while go == 1u64 { if ts < stop { if sp[ts] == 32u8 { ts = ts + 1u64 } else { go = 0u64 } } else { go = 0u64 } }
+        let mut te : u64 = stop
+        go = 1u64
+        while go == 1u64 { if te > ts { if sp[te - 1u64] == 32u8 { te = te - 1u64 } else { go = 0u64 } } else { go = 0u64 } }
+        if te > ts {
+            let r : u64 = hm_match_one(english + ts, te - ts)
+            if r != 1u64 { HM_CN = 0u64   HM_RGRAMMAR = HM_RGRAMMAR + 1u64   return 0u64 }
+            count = count + 1u64
+        }
+        off = stop + 1u64
+    }
+    if count == 0u64 { HM_RGRAMMAR = HM_RGRAMMAR + 1u64   return 0u64 }
+    return count
+}
+
+/* accessors (consumed by the gate probe / arms) */
+fn hm_cand_len() -> u64 @export { return HM_CN }
+fn hm_cand_byte(i: u64) -> u8 @export { if i < HM_CN { return HM_CAND[i] }   return 0u8 }
+fn hm_rgrammar() -> u64 @export { return HM_RGRAMMAR }
+
+/* ==================== gloss / read-back (claims -> English; the proposer's inverse) ========= */
+fn hm_rel_word(verb: u8) -> u64 {
+    if verb == 60u8 { return " sits under " as u64 }
+    if verb == 61u8 { return " is " as u64 }
+    return " mirrors " as u64
+}
+/* gloss ONE canonical claim [A verb B] to English in `out` (null-terminated); returns length.
+ * The verb is the sole '<'/'='/'~' byte; the English relation re-parses to the same claim. */
+fn hm_gloss(cb: u64, cl: u64, out: u64) -> u64 @export {
+    let p : *u8 = cb as *u8
+    let mut vp : u64 = 0u64
+    let mut found : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < cl {
+        let c : u8 = p[i]
+        if c == 60u8 { vp = i   found = 1u64   i = cl } else {
+        if c == 61u8 { vp = i   found = 1u64   i = cl } else {
+        if c == 126u8 { vp = i   found = 1u64   i = cl } else { i = i + 1u64 } } }
+    }
+    if found == 0u64 { return 0u64 }
+    let verb : u8 = p[vp]
+    let o : *u8 = out as *u8
+    let mut w : u64 = 0u64
+    let mut k : u64 = 1u64                        /* A = [1 .. vp-1) */
+    while k < vp - 1u64 { o[w] = p[k]   w = w + 1u64   k = k + 1u64 }
+    let rel : u64 = hm_rel_word(verb)
+    let rp : *u8 = rel as *u8
+    let mut j : u64 = 0u64
+    while rp[j] != 0u8 { o[w] = rp[j]   w = w + 1u64   j = j + 1u64 }
+    k = vp + 2u64                                 /* B = [vp+2 .. cl-1) */
+    while k < cl - 1u64 { o[w] = p[k]   w = w + 1u64   k = k + 1u64 }
+    o[w] = 0u8
+    return w
+}
+/* gloss the whole standing candidate; claims joined by "; " */
+fn hm_readback(out: u64) -> u64 @export {
+    let o : *u8 = out as *u8
+    let mut w : u64 = 0u64
+    let mut first : u64 = 1u64
+    let mut i : u64 = 0u64
+    while i < HM_CN {
+        if HM_CAND[i] == 91u8 {
+            let mut j : u64 = i
+            let mut go : u64 = 1u64
+            while go == 1u64 { if j < HM_CN { if HM_CAND[j] == 93u8 { go = 0u64 } else { j = j + 1u64 } } else { go = 0u64 } }
+            if first == 0u64 { o[w] = 59u8   w = w + 1u64   o[w] = 32u8   w = w + 1u64 }
+            first = 0u64
+            let g : u64 = hm_gloss(((&HM_CAND) as u64) + i, j - i + 1u64, out + w)
+            w = w + g
+            i = j + 1u64
+        } else { i = i + 1u64 }
+    }
+    o[w] = 0u8
+    return w
+}
+
+/* ==================== vetting + standing (the exact law before the human looks) ============= */
+fn hm_last_addr() -> u64 @export { return HM_LAST_ADDR }
+fn hm_last_alien() -> u64 @export { return HM_LAST_ALIEN }
+fn hm_confirmed() -> u64 @export { return HM_CONFIRMED }
+
+/* vet the standing candidate HM_CAND: a coherent scroll (no cycle) + the XENOS re-derivation +
+ * vocabulary audit.  0 = clean (alien is FLAGGED in HM_LAST_ALIEN, never a wall -- the liberation
+ * law: minting stays open); else a named reason (HM_R_LAW cycle | HM_R_CAP over-cap). */
+fn hm_vet() -> u64 {
+    let rcap0 : u64 = eol_rcap()
+    eol_reset()
+    if eol_read((&HM_CAND) as u64, HM_CN) < 0i64 {
+        eol_reset()
+        if eol_rcap() > rcap0 { return HM_R_CAP }
+        return HM_R_LAW
+    }
+    let a : u64 = eol_addr()
+    if a == 0u64 { eol_reset()   return HM_R_LAW }
+    eol_write()
+    HM_CNN = eol_out_len()
+    if HM_CNN == 0u64 { eol_reset()   return HM_R_LAW }
+    let mut i : u64 = 0u64
+    while i < HM_CNN { HM_CANON[i] = eol_out_byte(i)   i = i + 1u64 }
+    /* THE RE-DERIVATION: the canonical text, read from scratch, derives the same address */
+    eol_reset()
+    if eol_read((&HM_CANON) as u64, HM_CNN) < 0i64 { eol_reset()   return HM_R_LAW }
+    if eol_addr() != a { eol_reset()   return HM_R_LAW }
+    HM_LAST_ADDR = a
+    /* vocabulary at the door (lx owns the eidolos state during the check; we re-read after) */
+    HM_LAST_ALIEN = lx_check((&HM_CANON) as u64, HM_CNN)
+    if HM_LAST_ALIEN == HM_WALL { HM_LAST_ALIEN = 0u64 }
+    eol_reset()
+    if eol_read((&HM_CANON) as u64, HM_CNN) < 0i64 { eol_reset()   return HM_R_LAW }
+    return HM_R_NONE
+}
+/* stand a vetted proposal: record its English + raw claims + REDUCED address; CONFIRMED := 0.
+ * Returns the reduced address (a huge idfold, never 1..5) on success, or the vet reason on refusal. */
+fn hm_stand(english: u64, len: u64) -> u64 @export {
+    let v : u64 = hm_vet()
+    if v != 0u64 { return v }
+    let ep : *u8 = english as *u8
+    let mut i : u64 = 0u64
+    while i < len { if i < 4096u64 { HM_ENG[i] = ep[i] }   i = i + 1u64 }
+    HM_ENGN = len
+    i = 0u64
+    while i < HM_CN { HM_CLAIMS[i] = HM_CAND[i]   i = i + 1u64 }
+    HM_CLN = HM_CN
+    HM_CLAIMS[HM_CLN] = 0u8
+    HM_ADDR = dd_reduce_addr((&HM_CLAIMS) as u64)
+    HM_CONFIRMED = 0u64
+    return HM_ADDR
+}
+
+/* ==================== the confirm-gate (the quarantine) ==================== */
+fn hm_rwall() -> u64 @export { return HM_RWALL }
+fn hm_pin() -> u64 @export { return HM_PIN }
+
+/* the confirm's content-address: cad(english bytes || the 8 bytes of the reduced address) */
+fn hm_pin_of(english: u64, len: u64, addr: u64) -> u64 {
+    let p : *u8 = english as *u8
+    let mut h : u64 = idfold_basis()
+    let mut i : u64 = 0u64
+    while i < len { h = idfold_u64(h, p[i] as u64)   i = i + 1u64 }
+    let mut a : u64 = addr
+    let mut k : u64 = 0u64
+    while k < 8u64 { h = idfold_u64(h, a & 255u64)   a = a >> 8u64   k = k + 1u64 }
+    let v : u64 = idfold_seal(h)
+    if v == 0u64 { return 1u64 }
+    return v
+}
+/* record a human confirm: matches the STANDING proposal (English AND reduced address).  On match
+ * CONFIRMED := 1 and HM_PIN := the content-address; returns the pin.  0 = no match (state unchanged). */
+fn hm_confirm(english: u64, len: u64, addr: u64) -> u64 @export {
+    if len != HM_ENGN { return 0u64 }
+    if addr != HM_ADDR { return 0u64 }
+    let p : *u8 = english as *u8
+    let mut i : u64 = 0u64
+    let mut same : u64 = 1u64
+    while i < len { if p[i] != HM_ENG[i] { same = 0u64   i = len } else { i = i + 1u64 } }
+    if same == 0u64 { return 0u64 }
+    HM_PIN = hm_pin_of(english, len, addr)
+    HM_CONFIRMED = 1u64
+    return HM_PIN
+}
+/* deliver the confirmed proposal into DIADOSIS.  DENIED (HM_WALL) if unconfirmed/mismatched --
+ * no path from an unconfirmed proposal to the exact core.  (DIADOSIS side wired in Task 7.) */
+fn hm_deliver() -> u64 @export {
+    if HM_CONFIRMED == 0u64 { HM_RWALL = HM_RWALL + 1u64   return HM_WALL }
+    /* re-stand the reduced house from the confirmed raw claims, publish content-addressed, ripple.
+     * From here the pipeline is DIADOSIS's proven ground: closure(B)=closure(G), faithful delivery. */
+    let a : u64 = dd_reduce_addr((&HM_CLAIMS) as u64)
+    let h : u64 = dd_publish(a)
+    let _r : u64 = dd_ripple(h, 1u64)
+    return h
+}
+
+/* ==================== the external door (muse B): XENOS, reused unchanged ==================== */
+/* build an UNSIGNED claim-array ["<claim>"] into out; returns length (byte-built: no escapes) */
+fn hm_wrap_unsigned(claim: u64, len: u64, out: u64) -> u64 {
+    let o : *u8 = out as *u8
+    let c : *u8 = claim as *u8
+    let mut w : u64 = 0u64
+    o[w] = 91u8   w = w + 1u64                    /* [ */
+    o[w] = 34u8   w = w + 1u64                    /* " */
+    let mut i : u64 = 0u64
+    while i < len { o[w] = c[i]   w = w + 1u64   i = i + 1u64 }
+    o[w] = 34u8   w = w + 1u64
+    o[w] = 93u8   w = w + 1u64                    /* ] */
+    o[w] = 0u8
+    return w
+}
+/* build ["<c1>","<c2>"] into out; returns length */
+fn hm_wrap_two(c1: u64, l1: u64, c2: u64, l2: u64, out: u64) -> u64 {
+    let o : *u8 = out as *u8
+    let mut w : u64 = 0u64
+    o[w] = 91u8   w = w + 1u64   o[w] = 34u8   w = w + 1u64
+    let p1 : *u8 = c1 as *u8
+    let mut i : u64 = 0u64
+    while i < l1 { o[w] = p1[i]   w = w + 1u64   i = i + 1u64 }
+    o[w] = 34u8   w = w + 1u64   o[w] = 44u8   w = w + 1u64   o[w] = 34u8   w = w + 1u64
+    let p2 : *u8 = c2 as *u8
+    i = 0u64
+    while i < l2 { o[w] = p2[i]   w = w + 1u64   i = i + 1u64 }
+    o[w] = 34u8   w = w + 1u64   o[w] = 93u8   w = w + 1u64
+    o[w] = 0u8
+    return w
+}
+/* THE EXTERNAL DOOR: admit a muse's JSON proposal through XENOS (the house's own re-derivation),
+ * then read the admitted canonical claims and STAND them PROVISIONAL (never auto-confirmed).  The
+ * human-facing surface is III's OWN read-back gloss of the admitted claims, not the muse's words.
+ * XENOS is reused UNCHANGED.  Returns hm_stand's result (reduced addr) or a refusal reason. */
+fn hm_admit_ext(json: u64, len: u64) -> u64 @export {
+    let v : u64 = xn_admit(json, len)
+    if v != 1u64 { return HM_R_LAW }                 /* not ADMITTED -> refused at the door */
+    let cn : u64 = xn_canon_len()
+    if cn == 0u64 { return HM_R_LAW }
+    HM_CN = 0u64
+    let mut i : u64 = 0u64
+    while i < cn { if hm_cput(xn_canon_byte(i)) != 0u64 { return HM_R_CAP }   i = i + 1u64 }
+    let gl : u64 = hm_readback((&HM_TMP) as u64)     /* III's own reading -> the confirm surface */
+    return hm_stand((&HM_TMP) as u64, gl)
+}
+
+/* ==================== the self-proof (condition of motion) ==================== */
+fn hermeneus_selfprove() -> u64 @export {
+    /* arm 1: EXACTNESS on the < domain -- the English maps to exactly the hand-written claim */
+    let e1 : u64 = "dream must be proven before proof" as u64
+    if hm_propose_det(e1, hm_slen(e1)) != 1u64 { return 1u64 }
+    let h1 : u64 = "[dream < proof]" as u64
+    if hm_addr_of((&HM_CAND) as u64, HM_CN) != hm_addr_of(h1, hm_slen(h1)) { return 1u64 }
+
+    /* arm 2: EXACTNESS on the = domain */
+    let e2 : u64 = "proof is law" as u64
+    if hm_propose_det(e2, hm_slen(e2)) != 1u64 { return 2u64 }
+    let h2 : u64 = "[proof = law]" as u64
+    if hm_addr_of((&HM_CAND) as u64, HM_CN) != hm_addr_of(h2, hm_slen(h2)) { return 2u64 }
+
+    /* arm 3: EXACTNESS on the ~ domain */
+    let e3 : u64 = "dream mirrors wake" as u64
+    if hm_propose_det(e3, hm_slen(e3)) != 1u64 { return 3u64 }
+    let h3 : u64 = "[dream ~ wake]" as u64
+    if hm_addr_of((&HM_CAND) as u64, HM_CN) != hm_addr_of(h3, hm_slen(h3)) { return 3u64 }
+
+    /* arm 4: TOTAL REFUSAL off-domain -- a cue-free sentence yields ZERO claims + a counter */
+    let g0 : u64 = HM_RGRAMMAR
+    let e4 : u64 = "hello there friend" as u64
+    if hm_propose_det(e4, hm_slen(e4)) != 0u64 { return 4u64 }
+    if HM_RGRAMMAR != g0 + 1u64 { return 4u64 }
+    if HM_CN != 0u64 { return 4u64 }
+
+    /* arm 5: DETERMINISM -- same English twice -> same canonical address */
+    let e5 : u64 = "dream must be proven before proof" as u64
+    hm_propose_det(e5, hm_slen(e5))
+    let d1 : u64 = hm_addr_of((&HM_CAND) as u64, HM_CN)
+    hm_propose_det(e5, hm_slen(e5))
+    if hm_addr_of((&HM_CAND) as u64, HM_CN) != d1 { return 5u64 }
+
+    /* arm 6: READ-BACK is the proposer's INVERSE (parse(gloss(C)) == C), verb < */
+    let c6 : u64 = "[dream < proof]" as u64
+    hm_gloss(c6, hm_slen(c6), (&HM_TMP) as u64)
+    if hm_propose_det((&HM_TMP) as u64, hm_slen((&HM_TMP) as u64)) != 1u64 { return 6u64 }
+    if hm_addr_of((&HM_CAND) as u64, HM_CN) != hm_addr_of(c6, hm_slen(c6)) { return 6u64 }
+
+    /* arm 7: the inverse for = and ~ (each gloss re-parses to its claim) */
+    let c7a : u64 = "[proof = law]" as u64
+    hm_gloss(c7a, hm_slen(c7a), (&HM_TMP) as u64)
+    if hm_propose_det((&HM_TMP) as u64, hm_slen((&HM_TMP) as u64)) != 1u64 { return 7u64 }
+    if hm_addr_of((&HM_CAND) as u64, HM_CN) != hm_addr_of(c7a, hm_slen(c7a)) { return 7u64 }
+    let c7b : u64 = "[dream ~ wake]" as u64
+    hm_gloss(c7b, hm_slen(c7b), (&HM_TMP) as u64)
+    if hm_propose_det((&HM_TMP) as u64, hm_slen((&HM_TMP) as u64)) != 1u64 { return 7u64 }
+    if hm_addr_of((&HM_CAND) as u64, HM_CN) != hm_addr_of(c7b, hm_slen(c7b)) { return 7u64 }
+
+    /* arm 8: an incoherent (cyclic) proposal is REFUSED by vetting, never reaching the core */
+    let e8 : u64 = "a before b; b before a" as u64
+    hm_propose_det(e8, hm_slen(e8))
+    if hm_vet() != HM_R_LAW { return 8u64 }
+
+    /* arm 9: an alien word is FLAGGED (liberation law: minting stays open, alien warns not walls) */
+    let e9 : u64 = "banana before proof" as u64
+    hm_propose_det(e9, hm_slen(e9))
+    if hm_vet() != HM_R_NONE { return 9u64 }
+    if hm_last_alien() == 0u64 { return 9u64 }
+
+    /* stand a proposal P for the confirm-gate arms */
+    let ep : u64 = "dream must be proven before proof" as u64
+    hm_propose_det(ep, hm_slen(ep))
+    let pa : u64 = hm_stand(ep, hm_slen(ep))
+
+    /* arm 12: THE WALL -- delivery before any confirm is DENIED (the core is never touched) */
+    if hm_deliver() != HM_WALL { return 12u64 }
+    if hm_confirmed() != 0u64 { return 12u64 }
+
+    /* arm 13: THE PIN -- a confirm is content-addressed to its proposal; a different proposal earns
+     * a different pin; and the pin is deterministic (same proposal -> same pin) */
+    let pin1 : u64 = hm_confirm(ep, hm_slen(ep), pa)
+    if pin1 == 0u64 { return 13u64 }
+    if hm_confirmed() != 1u64 { return 13u64 }
+    let eq : u64 = "proof is law" as u64
+    hm_propose_det(eq, hm_slen(eq))
+    let qa : u64 = hm_stand(eq, hm_slen(eq))
+    let pin2 : u64 = hm_confirm(eq, hm_slen(eq), qa)
+    if pin2 == 0u64 { return 13u64 }
+    if pin1 == pin2 { return 13u64 }
+    hm_propose_det(ep, hm_slen(ep))
+    let pa2 : u64 = hm_stand(ep, hm_slen(ep))
+    if hm_confirm(ep, hm_slen(ep), pa2) != pin1 { return 13u64 }
+
+    /* arm 14: a MISMATCHED confirm does not release -- a confirm for X cannot free Y */
+    hm_propose_det(ep, hm_slen(ep))
+    let pa3 : u64 = hm_stand(ep, hm_slen(ep))
+    let _pa3 : u64 = pa3
+    if hm_confirm(eq, hm_slen(eq), qa) != 0u64 { return 14u64 }
+    if hm_confirmed() != 0u64 { return 14u64 }
+    if hm_deliver() != HM_WALL { return 14u64 }
+
+    /* --- delivery into the proven back-end: a two-claim English utterance, confirmed --- */
+    let de : u64 = "dream must be proven before proof; proof is law" as u64
+    let dh : u64 = "[dream < proof] [proof = law]" as u64
+    hm_propose_det(de, hm_slen(de))
+    let da : u64 = hm_stand(de, hm_slen(de))
+    if hm_confirm(de, hm_slen(de), da) == 0u64 { return 15u64 }
+    let h : u64 = hm_deliver()
+
+    /* arm 15: RELEASE -- a confirmed proposal delivers a valid DIADOSIS handle */
+    if h >= 256u64 { return 15u64 }                          /* DD_NSLOT = 256 */
+
+    /* arm 16: SEAM-EXACTNESS -- the English path reduces to the SAME address as the hand claims
+     * fed straight to DIADOSIS.  HERMENEUS is a pure gate: it adds and loses nothing. */
+    if da != dd_reduce_addr(dh) { return 16u64 }
+
+    /* arm 17: CLOSURE at the consumer -- resolve the delivered handle; a component claim is entailed */
+    let rl : u64 = dd_resolve(h, (&HM_RECV) as u64)
+    if rl == 0u64 { return 17u64 }
+    if dd_consumer_entails((&HM_RECV) as u64, "[dream < proof]" as u64) != 1u64 { return 17u64 }
+
+    /* arm 18: NEGATIVE WALL -- a claim OUTSIDE the confirmed closure is not delivered-as-known */
+    if dd_consumer_entails((&HM_RECV) as u64, "[law < dream]" as u64) == 1u64 { return 18u64 }
+
+    /* arm 10: a truthful external proposal (UNSIGNED claim-array) is ADMITTED + stood PROVISIONAL */
+    let claim10 : u64 = "[dream < proof]" as u64
+    let jn : u64 = hm_wrap_unsigned(claim10, hm_slen(claim10), (&HM_JBUF) as u64)
+    let rx : u64 = hm_admit_ext((&HM_JBUF) as u64, jn)
+    if rx <= 5u64 { return 10u64 }
+    if hm_last_addr() != hm_addr_of(claim10, hm_slen(claim10)) { return 10u64 }
+    if hm_confirmed() != 0u64 { return 10u64 }
+
+    /* arm 11: an incoherent (cyclic) external proposal is REFUSED at the door, never stood */
+    let jn2 : u64 = hm_wrap_two("[a < b]" as u64, hm_slen("[a < b]" as u64), "[b < a]" as u64, hm_slen("[b < a]" as u64), (&HM_JBUF) as u64)
+    if hm_admit_ext((&HM_JBUF) as u64, jn2) > 5u64 { return 11u64 }
+
+    return 0u64
+}
+
+/* THE LIVE DEMO: one English utterance carried end to end -- propose, read-back, confirm, deliver. */
+fn hm_show() -> i32 @export {
+    hm_ps("HERMENEUS -- the English-to-EIDOLOS door: propose -> vet -> read-back -> confirm -> deliver.\n" as u64)
+    let eng : u64 = "dream must be proven before proof; proof is law" as u64
+    hm_ps("  english  : " as u64)   hm_ps(eng)   putchar(10i32)
+    let n : u64 = hm_propose_det(eng, hm_slen(eng))
+    hm_ps("  proposed : " as u64)
+    let mut i : u64 = 0u64
+    while i < HM_CN { putchar(HM_CAND[i] as i32)   i = i + 1u64 }
+    putchar(10i32)
+    let a : u64 = hm_stand(eng, hm_slen(eng))
+    hm_readback((&HM_TMP) as u64)
+    hm_ps("  read-back: " as u64)   hm_ps((&HM_TMP) as u64)   putchar(10i32)
+    let pin : u64 = hm_confirm(eng, hm_slen(eng), a)
+    hm_ps("  confirm  : " as u64)
+    if pin == 0u64 { hm_ps("REJECTED\n" as u64) } else { hm_ps("pinned " as u64)   hm_pu(pin)   putchar(10i32) }
+    let h : u64 = hm_deliver()
+    hm_ps("  delivered: DIADOSIS handle " as u64)   hm_pu(h)   hm_ps("  (claims=" as u64)   hm_pu(n)   hm_ps(")\n" as u64)
+    return 0i32
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let _a : i32 = argc   let _v : u64 = argv
+    hm_show()
+    let r : u64 = hermeneus_selfprove()
+    hm_ps("hermeneus_selfprove = " as u64)   hm_pu(r)
+    if r == 0u64 { hm_ps("  GREEN (all 18 arms: propose -> vet -> read-back -> confirm-wall -> DIADOSIS; + external door)\n" as u64) } else { hm_ps("  (arm failed)\n" as u64) }
+    return r
+}

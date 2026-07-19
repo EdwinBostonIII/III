@@ -1,0 +1,189 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\physiognomia.iii
+ *
+ * III STDLIB - omnia::physiognomia  --  THE FACE-READING (ENSOMATOSIS Tier 4,
+ * track B): certified functional bounds on the metabolized mind, turning "the
+ * model is probably robust here" into an EXACT THEOREM: no input perturbation
+ * within radius r changes the elected token.  Not an estimate, not a sample -- a
+ * proof over the exact weights, the DIEXODOS width-ledger's cousin for robustness.
+ *
+ * THE MATH (exact, integer/rational -- no float, decidable):
+ *   The certified operator infinity-norm of a weight matrix is its MAX ABSOLUTE
+ *   ROW SUM: ||W||_inf = max_i sum_j |W[i,j]|.  It is an exact upper bound on how
+ *   far W stretches an input in the sup-norm: ||W x||_inf <= ||W||_inf ||x||_inf.
+ *   For a chain of L layers with 1-Lipschitz nonlinearities (ReLU, tanh, and the
+ *   standard smooth activations are all 1-Lipschitz in sup-norm), the whole map
+ *   x -> logits is Lipschitz with constant  Lc = prod_l ||W_l||_inf  (biases do
+ *   not affect the Lipschitz constant).
+ *
+ *   THE ROBUSTNESS THEOREM: if the elected logit beats every rival by margin
+ *   m = logit[win] - max_{j != win} logit[j] > 0, then for ANY perturbation delta
+ *   with ||delta||_inf < m / (2 Lc), every logit moves by at most Lc||delta||_inf
+ *   < m/2, so the winner falls by < m/2, each rival rises by < m/2, the gap m > 0
+ *   survives, and the ARGMAX IS UNCHANGED.  The certified robust radius is
+ *   therefore  r = m / (2 Lc)  -- carried as the exact pair (m, 2 Lc), never a
+ *   rounded float.
+ *
+ * SOUNDNESS + NON-VACUITY (both proven, [prove-both-arms]): for a single linear
+ * head the WORST-CASE flip is exact -- rival c overtakes the winner exactly when a
+ * perturbation of sup-magnitude k reaches  k * denom_c >= m, where denom_c =
+ * sum_j |W[c,j] - W[win,j]|.  Since denom_c <= ||W[c]||_1 + ||W[win]||_1 <= 2 Lc,
+ * the certified r = m/(2 Lc) never exceeds the true safe radius m/denom_c (SOUND),
+ * and it is strictly smaller than a genuine flip threshold (NON-VACUOUS: a real
+ * perturbation beyond it flips, demonstrated concretely).
+ *
+ * THE FEAST SEAM (named, empty): here the weights are a small synthetic head so
+ * the theorem is proved environment-free.  In production the rows are streamed
+ * from R1 by metabole (pb_dz_* over the real lm_head / a layer), ||W||_inf folded
+ * exactly per row; the margin m is a MANTIS consult's decision gap.  The organ
+ * that certifies a synthetic head certifies the real one unchanged -- only the
+ * weight source moves.  Composes the exact-arithmetic substrate; no float ever.
+ *
+ * Ring R0.  K 0.99 (integer-exact; the theorem is algebra).  NIH: no island --
+ * the robustness face of the same exact linear algebra DIEXODOS walks.  Hexad:
+ * kind_measure (it measures certified functional bounds). */
+
+module omnia_physiognomia
+
+/* a small synthetic head: 3 classes x 4 features, row-major i64 (the Feast seam
+ * replaces these rows with streamed R1 weights; the math is identical). */
+var PHYS_W : [i64; 12]                     /* W[i*4 + j] */
+var PHYS_X : [i64; 4]                      /* the input */
+var PHYS_W2 : [i64; 6]                     /* a 2nd layer 2x3 for the Lipschitz ladder */
+
+fn phys_abs(x: i64) -> i64 { if x < 0i64 { return 0i64 - x }   return x }
+
+/* THE CERTIFIED OPERATOR INFINITY-NORM: max absolute row sum of a row-major i64
+ * matrix.  An exact upper bound on the map's sup-norm stretch. */
+fn phys_rowsum_inf(mat: u64, rows: u64, cols: u64) -> i64 @export {
+    let p : *i64 = mat as *i64
+    let mut best : i64 = 0i64
+    let mut i : u64 = 0u64
+    while i < rows {
+        let mut s : i64 = 0i64
+        let mut j : u64 = 0u64
+        while j < cols { s = s + phys_abs(p[i * cols + j])   j = j + 1u64 }
+        if s > best { best = s }
+        i = i + 1u64
+    }
+    return best
+}
+
+/* one logit: the dot product W[row] . x */
+fn phys_logit(W: u64, cols: u64, row: u64, x: u64) -> i64 @export {
+    let pw : *i64 = W as *i64
+    let px : *i64 = x as *i64
+    let mut s : i64 = 0i64
+    let mut j : u64 = 0u64
+    while j < cols { s = s + pw[row * cols + j] * px[j]   j = j + 1u64 }
+    return s
+}
+
+/* the exact worst-case flip denominator for rival c against winner w:
+ * sum_j |W[c,j] - W[w,j]|.  A sup-magnitude-k perturbation lets c overtake w
+ * exactly when k * denom >= margin. */
+fn phys_flip_denom(W: u64, cols: u64, w: u64, c: u64) -> i64 @export {
+    let pw : *i64 = W as *i64
+    let mut s : i64 = 0i64
+    let mut j : u64 = 0u64
+    while j < cols { s = s + phys_abs(pw[c * cols + j] - pw[w * cols + j])   j = j + 1u64 }
+    return s
+}
+
+/* the 2-layer Lipschitz constant: the product of the per-layer operator norms
+ * (1-Lipschitz nonlinearity between them).  The chain rule for robustness. */
+fn phys_ladder2(n1: i64, n2: i64) -> i64 @export { return n1 * n2 }
+
+/* THE CERTIFIED ROBUST RADIUS as the exact pair (numerator=margin, denominator=
+ * 2*Lc).  r = margin / (2 Lc).  Callers compare against a perturbation budget by
+ * cross-multiplication -- never a rounded division. */
+var PHYS_R_NUM : i64 = 0i64
+var PHYS_R_DEN : i64 = 0i64
+fn phys_radius(margin: i64, lc: i64) -> i32 @export {
+    PHYS_R_NUM = margin
+    PHYS_R_DEN = 2i64 * lc
+    return 0i32
+}
+fn phys_radius_num() -> i64 @export { return PHYS_R_NUM }
+fn phys_radius_den() -> i64 @export { return PHYS_R_DEN }
+
+/* ==================== THE ROBUSTNESS THEOREM (pure, exact) ====================
+ * Proven on the synthetic head W=[[3,1,0,2],[1,2,1,0],[0,1,3,1]], x=[2,1,1,1]:
+ * logits [9,5,5], winner 0, margin 4, ||W||_inf = 6, certified r = 4/12 = 1/3.
+ * Returns 0 = the theorem holds; nonzero names the failing clause. */
+fn phys_selfprove() -> u64 @export {
+    /* load the synthetic head */
+    PHYS_W[0u64]=3i64  PHYS_W[1u64]=1i64  PHYS_W[2u64]=0i64  PHYS_W[3u64]=2i64
+    PHYS_W[4u64]=1i64  PHYS_W[5u64]=2i64  PHYS_W[6u64]=1i64  PHYS_W[7u64]=0i64
+    PHYS_W[8u64]=0i64  PHYS_W[9u64]=1i64  PHYS_W[10u64]=3i64 PHYS_W[11u64]=1i64
+    PHYS_X[0u64]=2i64  PHYS_X[1u64]=1i64  PHYS_X[2u64]=1i64  PHYS_X[3u64]=1i64
+    let W : u64 = (&PHYS_W) as u64
+    let X : u64 = (&PHYS_X) as u64
+
+    /* CLAUSE 1 -- the certified operator infinity-norm is the max abs row sum. */
+    let lc : i64 = phys_rowsum_inf(W, 3u64, 4u64)
+    if lc != 6i64 { return 1u64 }                 /* rows sum to 6,4,5 -> 6 */
+
+    /* CLAUSE 2 -- the logits, the winner, and the margin are exact. */
+    let l0 : i64 = phys_logit(W, 4u64, 0u64, X)
+    let l1 : i64 = phys_logit(W, 4u64, 1u64, X)
+    let l2 : i64 = phys_logit(W, 4u64, 2u64, X)
+    if l0 != 9i64 { return 2u64 }
+    if l1 != 5i64 { return 3u64 }
+    if l2 != 5i64 { return 4u64 }
+    /* winner is class 0; margin over the best rival (both rivals = 5) */
+    let mut top_rival : i64 = l1
+    if l2 > top_rival { top_rival = l2 }
+    let m : i64 = l0 - top_rival
+    if m != 4i64 { return 5u64 }
+    if m <= 0i64 { return 6u64 }                  /* there is a strict winner */
+
+    /* the certified radius r = m / (2 Lc) = 4/12 */
+    phys_radius(m, lc)
+    if phys_radius_num() != 4i64 { return 7u64 }
+    if phys_radius_den() != 12i64 { return 8u64 }
+
+    /* CLAUSE 3 -- SOUNDNESS: for every rival c, the exact flip denominator is
+     * <= 2 Lc, so the certified r = m/(2Lc) never exceeds the true safe radius
+     * m/denom_c.  The certificate NEVER over-claims safety. */
+    let d1 : i64 = phys_flip_denom(W, 4u64, 0u64, 1u64)   /* |1-3|+|2-1|+|1-0|+|0-2| = 6 */
+    let d2 : i64 = phys_flip_denom(W, 4u64, 0u64, 2u64)   /* |0-3|+|1-1|+|3-0|+|1-2| = 7 */
+    if d1 != 6i64 { return 9u64 }
+    if d2 != 7i64 { return 10u64 }
+    let two_lc : i64 = 2i64 * lc                  /* 12 */
+    if d1 > two_lc { return 11u64 }               /* denom <= 2Lc: r <= true threshold */
+    if d2 > two_lc { return 12u64 }
+
+    /* CLAUSE 4 -- NON-VACUITY: the certified r is strictly INSIDE the true safe
+     * region for the tightest rival (r < m/denom_2), verified by cross-multiply
+     * (num * denom_2 < m * den): 4*7 < 4*12  ->  28 < 48. */
+    if phys_radius_num() * d2 >= m * phys_radius_den() { return 13u64 }
+
+    /* ...and a CONCRETE flip beyond the radius: the worst sup-magnitude-1
+     * perturbation delta_j = sign(W[2,j]-W[0,j]) = [-1,0,+1,-1] drives rival 2
+     * over the winner (||delta||_inf = 1 > r = 1/3).  Recompute exactly. */
+    PHYS_X[0u64]=2i64 - 1i64   PHYS_X[1u64]=1i64 + 0i64
+    PHYS_X[2u64]=1i64 + 1i64   PHYS_X[3u64]=1i64 - 1i64      /* x' = [1,1,2,0] */
+    let f0 : i64 = phys_logit(W, 4u64, 0u64, X)             /* 3+1+0+0 = 4 */
+    let f2 : i64 = phys_logit(W, 4u64, 2u64, X)             /* 0+1+6+0 = 7 */
+    if f0 != 4i64 { return 14u64 }
+    if f2 != 7i64 { return 15u64 }
+    if f2 <= f0 { return 16u64 }                  /* the winner DID flip: the certificate is meaningful */
+
+    /* CLAUSE 5 -- THE LIPSCHITZ LADDER: a 2-layer chain's constant is the product
+     * of the per-layer operator norms (1-Lipschitz nonlinearity between).  A 2x3
+     * second layer with ||W2||_inf = 5 gives Lc_total = 6 * 5 = 30, and the same
+     * radius formula applies with the product. */
+    PHYS_W2[0u64]=2i64 PHYS_W2[1u64]=1i64 PHYS_W2[2u64]=1i64   /* row sum 4 */
+    PHYS_W2[3u64]=1i64 PHYS_W2[4u64]=3i64 PHYS_W2[5u64]=1i64   /* row sum 5 */
+    let n2 : i64 = phys_rowsum_inf((&PHYS_W2) as u64, 2u64, 3u64)
+    if n2 != 5i64 { return 17u64 }
+    let lc_total : i64 = phys_ladder2(lc, n2)
+    if lc_total != 30i64 { return 18u64 }
+    /* the deeper certified radius r_total = m / (2 * 30) = m/60, strictly smaller
+     * (depth widens the worst case) yet still a POSITIVE certified guarantee. */
+    phys_radius(m, lc_total)
+    if phys_radius_den() != 60i64 { return 19u64 }
+    if phys_radius_num() <= 0i64 { return 20u64 }
+
+    return 0u64
+}

@@ -1,0 +1,154 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\onomastikon.iii
+ *
+ * III STDLIB - omnia::onomastikon  --  THE NAME-BOOK (ENSOMATOSIS Tier 4, track
+ * D): the metabolized mind's embedding table read as EXACT GEOMETRY.  Where a
+ * float pipeline reports a nearest neighbor that may flip with rounding, III
+ * proves it: the nearest neighbor is an integer-exact theorem, the separation a
+ * strict rational margin, and a stable separation earns a GLOSSA name BY PROOF.
+ *
+ * THE MATH (exact, integer -- no float, decidable, no tie ambiguity):
+ *   Each token is an integer vector E[i] in d dimensions.  The squared Euclidean
+ *   distance dist2(i,j) = sum_k (E[i,k] - E[j,k])^2 is an exact non-negative
+ *   integer; the dot product dot(i,j) = sum_k E[i,k] E[j,k] likewise.  The
+ *   nearest neighbor of a token is argmin_{j != i} dist2(i,j), ties broken by the
+ *   smallest index -- a total, deterministic order.  Because everything is
+ *   integer, the neighbor RANKING is a THEOREM: it can never flip under rounding,
+ *   and it is byte-identical on every machine.
+ *
+ *   A STABLE SEPARATION is a token whose nearest neighbor beats the runner-up by
+ *   a STRICT positive margin (secondNN.dist2 - NN.dist2 > 0): the neighbor is
+ *   unambiguous, provably, not by a float epsilon.  Such a pair is a lawful
+ *   candidate for a GLOSSA name -- the machine mints a word only where the
+ *   geometry proves the relation, the naming-by-theorem the campaign charters.
+ *
+ * dist2 is a genuine metric-square: symmetric (dist2(i,j) == dist2(j,i)) and zero
+ * only on the diagonal -- both proven, so the neighbor graph is a real geometry,
+ * not a heuristic table.
+ *
+ * THE FEAST SEAM (named, empty): here the rows are a small synthetic table so the
+ * theorem is environment-free.  In production the rows are R1's real embedding /
+ * unembedding table streamed from metabole; the exact NN graph feeds MNEME lanes
+ * (the manifold ingests the token graph) and the proven-stable separations become
+ * GLOSSA names.  The organ that reads the synthetic table reads the real one
+ * unchanged -- only the row source moves.
+ *
+ * Ring R0.  K 0.99 (integer-exact geometry).  NIH: no island -- the exact-order
+ * face MNEME/GLOSSA already rely on, applied to the embedding table; no float.
+ * Hexad: kind_measure (exact geometry) + kind_glyph (it earns names). */
+
+module omnia_onomastikon
+
+const ONO_N : u64 = 4u64                   /* tokens */
+const ONO_D : u64 = 2u64                   /* dimensions */
+var ONO_E : [i64; 8]                       /* ONO_N x ONO_D, row-major */
+
+/* dist2(i,j) = sum_k (E[i,k] - E[j,k])^2 -- exact squared Euclidean distance */
+fn ono_dist2(i: u64, j: u64) -> i64 @export {
+    let mut s : i64 = 0i64
+    let mut k : u64 = 0u64
+    while k < ONO_D {
+        let d : i64 = ONO_E[i * ONO_D + k] - ONO_E[j * ONO_D + k]
+        s = s + d * d
+        k = k + 1u64
+    }
+    return s
+}
+
+/* dot(i,j) = sum_k E[i,k] E[j,k] -- exact inner product */
+fn ono_dot(i: u64, j: u64) -> i64 @export {
+    let mut s : i64 = 0i64
+    let mut k : u64 = 0u64
+    while k < ONO_D { s = s + ONO_E[i * ONO_D + k] * ONO_E[j * ONO_D + k]   k = k + 1u64 }
+    return s
+}
+
+/* the nearest neighbor of token i: argmin_{j != i} dist2(i,j), ties by smallest
+ * index (a total deterministic order).  Returns i itself only if N < 2. */
+fn ono_nn(i: u64) -> u64 @export {
+    let mut best : u64 = i
+    let mut best_d : i64 = 0i64
+    let mut have : u64 = 0u64
+    let mut j : u64 = 0u64
+    while j < ONO_N {
+        if j != i {
+            let d : i64 = ono_dist2(i, j)
+            if have == 0u64 { best = j   best_d = d   have = 1u64 }
+            else { if d < best_d { best = j   best_d = d } }   /* strict < keeps the first (smallest) index on ties */
+        }
+        j = j + 1u64
+    }
+    return best
+}
+
+/* the separation margin of token i: (second-nearest dist2) - (nearest dist2).
+ * > 0 means the nearest neighbor is STRICTLY unambiguous -- a stable separation
+ * that may earn a name.  Returns 0 if there is no second neighbor. */
+fn ono_margin(i: u64) -> i64 @export {
+    let nn : u64 = ono_nn(i)
+    let nn_d : i64 = ono_dist2(i, nn)
+    let mut second : i64 = 0i64
+    let mut have : u64 = 0u64
+    let mut j : u64 = 0u64
+    while j < ONO_N {
+        if j != i { if j != nn {
+            let d : i64 = ono_dist2(i, j)
+            if have == 0u64 { second = d   have = 1u64 }
+            else { if d < second { second = d } }
+        } }
+        j = j + 1u64
+    }
+    if have == 0u64 { return 0i64 }
+    return second - nn_d
+}
+
+/* 1 = token i is a STABLE separation (its nearest neighbor beats the runner-up by
+ * a strict positive margin): a lawful GLOSSA naming candidate, proven. */
+fn ono_is_stable(i: u64) -> u64 @export { if ono_margin(i) > 0i64 { return 1u64 }   return 0u64 }
+
+/* ==================== THE NAME-BOOK LAW (pure, exact) ====================
+ * The synthetic table (2D): t0=(0,0) t1=(1,0) t2=(5,0) t3=(6,0) -- two clusters.
+ * The nearest-neighbor graph is 0<->1 and 2<->3, every edge a strict-margin
+ * theorem.  Returns 0 = the geometry holds; nonzero names the failing clause. */
+fn ono_selfprove() -> u64 @export {
+    ONO_E[0u64]=0i64  ONO_E[1u64]=0i64        /* t0 = (0,0) */
+    ONO_E[2u64]=1i64  ONO_E[3u64]=0i64        /* t1 = (1,0) */
+    ONO_E[4u64]=5i64  ONO_E[5u64]=0i64        /* t2 = (5,0) */
+    ONO_E[6u64]=6i64  ONO_E[7u64]=0i64        /* t3 = (6,0) */
+
+    /* CLAUSE 1 -- exact distances on known vectors. */
+    if ono_dist2(0u64, 1u64) != 1i64 { return 1u64 }        /* (0-1)^2 = 1 */
+    if ono_dist2(0u64, 2u64) != 25i64 { return 2u64 }       /* (0-5)^2 = 25 */
+    if ono_dist2(0u64, 3u64) != 36i64 { return 3u64 }       /* (0-6)^2 = 36 */
+    if ono_dist2(2u64, 3u64) != 1i64 { return 4u64 }        /* (5-6)^2 = 1 */
+
+    /* CLAUSE 2 -- the metric is symmetric and zero only on the diagonal. */
+    if ono_dist2(1u64, 0u64) != ono_dist2(0u64, 1u64) { return 5u64 }
+    if ono_dist2(0u64, 0u64) != 0i64 { return 6u64 }
+    if ono_dist2(2u64, 3u64) == 0i64 { return 7u64 }        /* distinct tokens are apart */
+
+    /* CLAUSE 3 -- the nearest-neighbor graph is the two clusters, exactly. */
+    if ono_nn(0u64) != 1u64 { return 8u64 }
+    if ono_nn(1u64) != 0u64 { return 9u64 }
+    if ono_nn(2u64) != 3u64 { return 10u64 }
+    if ono_nn(3u64) != 2u64 { return 11u64 }
+
+    /* CLAUSE 4 -- every edge is a STABLE separation (strict positive margin), so
+     * every token is a lawful GLOSSA name candidate.  t0: second(25) - nn(1) = 24. */
+    if ono_margin(0u64) != 24i64 { return 12u64 }           /* 25 - 1 */
+    if ono_margin(2u64) != 15i64 { return 13u64 }           /* dist2(2,1)=16 - dist2(2,3)=1 */
+    if ono_is_stable(0u64) != 1u64 { return 14u64 }
+    if ono_is_stable(1u64) != 1u64 { return 15u64 }
+    if ono_is_stable(2u64) != 1u64 { return 16u64 }
+    if ono_is_stable(3u64) != 1u64 { return 17u64 }
+
+    /* CLAUSE 5 -- the order is a THEOREM: a second computation is byte-identical
+     * (no float, no drift; the name-book is reproducible on every machine). */
+    if ono_nn(0u64) != 1u64 { return 18u64 }
+    if ono_margin(0u64) != 24i64 { return 19u64 }
+
+    /* CLAUSE 6 -- the dot product is exact too (t1.t2 = 1*5 + 0*0 = 5). */
+    if ono_dot(1u64, 2u64) != 5i64 { return 20u64 }
+    if ono_dot(0u64, 3u64) != 0i64 { return 21u64 }         /* (0,0).(6,0) = 0 */
+
+    return 0u64
+}

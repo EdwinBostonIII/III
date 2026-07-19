@@ -54,6 +54,16 @@ extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.ii
 extern @abi(c-msvc-x64) fn eol_lawcheck() -> u64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_entails(a_addr: u64, a_len: u64, verb: u64, b_addr: u64, b_len: u64) -> u64 from "eidolos.iii"
 
+/* the nous beam-search faculty -- the certified portfolio: a landed search organ
+ * that ALREADY embodies the order-not-set law (its merge is CALM/commutative).
+ * SYMPOSION proves its own law holds there. */
+extern @abi(c-msvc-x64) fn bs_portfolio(base: u64, iters: u32, gated: u32) -> u32 from "beam_search.iii"
+extern @abi(c-msvc-x64) fn bs_portfolio_cost(base: u64, iters: u32, gated: u32) -> u32 from "beam_search.iii"
+extern @abi(c-msvc-x64) fn bs_portfolio_rev(base: u64, iters: u32, gated: u32) -> u32 from "beam_search.iii"
+extern @abi(c-msvc-x64) fn bs_singles_stuck(base: u64, iters: u32) -> u32 from "beam_search.iii"
+extern @abi(c-msvc-x64) fn vs_ok(v: u32) -> u32 from "verified_search.iii"
+extern @abi(c-msvc-x64) fn vs_cost(v: u32) -> u32 from "verified_search.iii"
+
 const SYM_MAX : u64 = 64u64
 
 var SYM_N     : u64 = 0u64
@@ -282,5 +292,47 @@ fn sym_demo_eidolos() -> u64 @export {
     if mask_blind != 13u64 { return 6u64 }
     /* the wise muse found a KNOWN query no later than the liar did */
     if fh_muse > fh_poison { return 7u64 }
+    return 0u64
+}
+
+/* ==================== THE FIRST FACULTY COUPLING (nous beam_search) ============
+ * The eidolos demo proves the law on the barometer's entailment.  This proves it
+ * on a landed SEARCH faculty -- nous/beam_search, the certified portfolio -- which
+ * already embodies the order-not-set discipline in its own commutative merge.
+ * The three teeth of a lawful coupling, read off the real organ (base/budgets are
+ * the canonical KAT's: v5 is the certified optimum cost 10, v11 the cheaper-WRONG
+ * trap cost 1):
+ *   1. MUSE-BLIND REPLAY -- reversing the seed-processing order yields the
+ *      IDENTICAL certified result (bs_portfolio == bs_portfolio_rev): the muse may
+ *      reorder the portfolio's walks and never move the answer.
+ *   2. THE VERIFIER IS LOAD-BEARING (poison) -- WITHOUT the sovereign gate the
+ *      "cheapest" candidate is the cheaper-WRONG trap v11 (cost 1, vs_ok=0); the
+ *      gated portfolio returns the certified v5 (cost 10).  A heuristic without
+ *      the verifier returns garbage -- exactly what the SYMPOSION law forbids.
+ *   3. THE GUIDED VALUE (acceleration) -- at a short budget a blind single walk is
+ *      trapped above the optimum, yet the portfolio still reaches v5: guidance
+ *      reaches what blind search misses, and the result stays certified.
+ * Returns 0 = the coupling is lawful; nonzero names the failing tooth. */
+fn sym_couple_beam() -> u64 @export {
+    let base  : u64 = 0x1357924680ABCDEFu64
+    let long  : u32 = 30000u32
+    let short : u32 = 30u32
+
+    /* TOOTH 1 -- muse-blind replay (CALM): order cannot move the certified result. */
+    let g : u32 = bs_portfolio(base, long, 1u32)
+    if bs_portfolio_rev(base, long, 1u32) != g { return 1u64 }
+    if vs_cost(g) != 10u32 { return 2u64 }            /* the certified optimum v5 */
+    if vs_ok(g) != 1u32 { return 3u64 }
+
+    /* TOOTH 2 -- the verifier is load-bearing (poison): no gate -> cheaper-WRONG. */
+    let u : u32 = bs_portfolio(base, long, 0u32)
+    if vs_cost(u) != 1u32 { return 4u64 }             /* v11, the cheap-wrong trap */
+    if vs_ok(u) != 0u32 { return 5u64 }               /* NOT certified */
+    if bs_portfolio_rev(base, long, 0u32) != u { return 6u64 }   /* even the trap is order-independent */
+
+    /* TOOTH 3 -- the guided value (acceleration): the portfolio reaches the
+     * certified optimum at a budget where >=1 single walk is trapped above it. */
+    if bs_portfolio_cost(base, short, 1u32) != 10u32 { return 7u64 }
+    if bs_singles_stuck(base, short) == 0u32 { return 8u64 }
     return 0u64
 }

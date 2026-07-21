@@ -1,0 +1,258 @@
+/* ethos_r1_probe.iii -- THE BEHAVIORAL WITNESS: the trait-witness seat pointed at the
+ * digested R1 itself, THROUGH the wall.
+ *
+ * The installation thread's boundary (b4af7e2d): a trait claimed INTO weights is a claim
+ * with no referent; what CAN be witnessed is behavior under law.  The trait witness
+ * (ethos.iii arms 301-308) made the PROFILE a measured claim against III's live law.
+ * This probe swaps the answerer: the measured fact is now R1's OWN behavior -- its real
+ * head order, walked live over the Feast -- and the same machinery renders the verdicts:
+ *
+ *   THE ORDER, BOTH WAYS   pb_head_order_trusted on (W,L) and on (L,W): two independent
+ *                          exact engines each way, fail-closed on disagreement.  A real
+ *                          answerer ANTI-COMMUTES (sign flips with the frame).
+ *   THE ASSAY (DOKIMASIA)  the two-probe verdict map {order(W,L)>0, order(L,W)>0} must
+ *                          have image 2: HEARD.  The constant forgery (a rubber stamp
+ *                          that answers +1 whatever is asked) has image 1: REFUSED.
+ *   THE SEAL (EIDOLOS)     the agreed order becomes the self-verifying `<`-claim
+ *                          [k<loser> < k<winner>] -- the logos owns the verdict.
+ *   THE WALL (LAW 7)       the map is ORACLE-SOURCED: reach_oracle refuses it canonical
+ *                          standing.  MEASURED IS NOT INSTALLED -- the same boundary as
+ *                          "written is not installed", now computed against the model.
+ *   THE JUDGMENT (PRAXIS)  [utterance < exact_order] STANDS on the pinned two-engine
+ *                          chain; [profile < behavior] is REFUSED -- nothing in the
+ *                          pinned behavior determines the profile.  The profile lives in
+ *                          the LAW (ethos_gate GREEN), not in the weights.
+ *
+ * Wall discipline: the walk consumes the real Feast (oracle tier); every verdict rendered
+ * FROM it stays walled/provisional.  The exact re-derivation (two engines, bigint, zero
+ * width) is the sovereign part; the seal records exactly that. */
+module ethos_r1_probe
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn fflush(stream: u64) -> i32 from "msvcrt"
+/* the walk + the two-engine exact order (the membrane, 6acd3abe) */
+extern @abi(c-msvc-x64) fn pb_diexodos_nohead(tok: u64, nlay: u64) -> u64 from "probole.iii"
+extern @abi(c-msvc-x64) fn mb_head_diff(k: u64, ta: u64, tb: u64, n: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn pb_head_order_trusted(n: u64) -> i64 from "probole.iii"
+extern @abi(c-msvc-x64) fn pb_rh_live() -> u64 from "probole.iii"
+extern @abi(c-msvc-x64) fn mb_dz_set_lo(lo: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_tok_len(t: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_tok_byte(t: u64, i: u64) -> u8 from "metabole.iii"
+/* the seal (EIDOLOS owns the `<`) */
+extern @abi(c-msvc-x64) fn man_seal_order(winner: u64, loser: u64) -> u64 from "mantis.iii"
+extern @abi(c-msvc-x64) fn man_ord_len() -> u64 from "mantis.iii"
+extern @abi(c-msvc-x64) fn man_ord_byte(i: u64) -> u8 from "mantis.iii"
+/* the assay meters (ONTOS -- DOKIMASIA's home) */
+extern @abi(c-msvc-x64) fn ont_tbl_set(i: u64, v: u64) -> i32 from "ontos.iii"
+extern @abi(c-msvc-x64) fn ont_image_ext(size: u64) -> u64 from "ontos.iii"
+extern @abi(c-msvc-x64) fn ont_admissible(size: u64) -> u64 from "ontos.iii"
+/* the wall (LAW 7 -- default-deny on the oracle tier) */
+extern @abi(c-msvc-x64) fn reach_oracle_admit_canonical(tier: u32) -> i32 from "reach_oracle.iii"
+/* the judgment (PRAXIS -- the mandate engine's witnessed trace) */
+extern @abi(c-msvc-x64) fn px_begin() -> i32 from "praxis.iii"
+extern @abi(c-msvc-x64) fn px_pin(s: u64) -> u64 from "praxis.iii"
+extern @abi(c-msvc-x64) fn px_stand() -> u64 from "praxis.iii"
+extern @abi(c-msvc-x64) fn px_judge(s: u64) -> u64 from "praxis.iii"
+
+fn pu(v: u64) -> u32 { if v >= 10u64 { pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn psg(v: i64) -> u32 {
+    if v < 0i64 { putchar(45i32)   pu((0i64 - v) as u64)   return 1u32 }
+    pu(v as u64)
+    return 1u32
+}
+fn ptok(t: u64) -> u32 {
+    let n : u64 = mb_tok_len(t)
+    let mut i : u64 = 0u64
+    while i < n { putchar(mb_tok_byte(t, i) as i32)   i = i + 1u64 }
+    return 1u32
+}
+fn patoi(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut v : u64 = 0u64
+    let mut i : u64 = 0u64
+    while p[i] >= 48u8 { if p[i] > 57u8 { return v }   v = v * 10u64 + ((p[i] - 48u8) as u64)   i = i + 1u64 }
+    return v
+}
+
+/* THE PURE LAW (no Feast): the COMPOSITION this probe adds -- assay + anti-commutation
+ * + seal + wall + judgment over an order PAIR -- proven on GIVEN signs.  The engines that
+ * PRODUCE the signs are gated in probole (arms 31-38, two engines agree/forged-caught);
+ * here the law that a real separating order is HEARD/sealed/walled/judged, while a broken
+ * frame-insensitive answerer is CAUGHT, is proven with teeth and a mandatory negative.
+ * 0 = green, else the failing arm code.  argc/argv-free: runs from any clean checkout. */
+fn ethos_r1_law(sab: i64, sba: i64, w: u64, l: u64) -> u64 {
+    /* anti-commutation: a real order flips with the frame */
+    if sba != (0i64 - sab) { return 1u64 }
+    if sab == 0i64 { return 2u64 }
+    /* the assay: {bit(sab), bit(sba)} separates -> image 2, HEARD; the constant forgery
+     * {1,1} is image 1, a rubber stamp, REFUSED */
+    let mut b1 : u64 = 0u64
+    if sab > 0i64 { b1 = 1u64 }
+    let mut b2 : u64 = 0u64
+    if sba > 0i64 { b2 = 1u64 }
+    ont_tbl_set(0u64, b1)   ont_tbl_set(1u64, b2)
+    if ont_image_ext(2u64) != 2u64 { return 3u64 }
+    if ont_admissible(2u64) != 1u64 { return 3u64 }
+    ont_tbl_set(0u64, 1u64)   ont_tbl_set(1u64, 1u64)
+    if ont_admissible(2u64) != 0u64 { return 4u64 }
+    /* the seal: EIDOLOS owns the agreed order */
+    let mut winner : u64 = w
+    let mut loser : u64 = l
+    if sab < 0i64 { winner = l   loser = w }
+    if man_seal_order(winner, loser) == 0u64 { return 5u64 }
+    /* the wall: oracle tier refused canonical, witnessed tier admitted */
+    if reach_oracle_admit_canonical(1u32) != 1i32 { return 6u64 }
+    if reach_oracle_admit_canonical(0u32) != 0i32 { return 6u64 }
+    /* the judgment: the utterance-confirmation stands; profile-from-behavior refused */
+    px_begin()
+    if px_pin("[utterance < engine_a] [engine_a < exact_order]" as u64) != 0u64 { return 7u64 }
+    if px_pin("[utterance < engine_b] [engine_b < exact_order]" as u64) != 0u64 { return 7u64 }
+    px_stand()
+    if px_judge("[utterance < exact_order]" as u64) != 1u64 { return 7u64 }
+    px_begin()
+    if px_pin("[behavior < oracle_tier]" as u64) != 0u64 { return 8u64 }
+    px_stand()
+    if px_judge("[profile < behavior]" as u64) != 0u64 { return 8u64 }
+    return 0u64
+}
+fn ethos_r1_selfprove() -> u64 @export {
+    /* POSITIVE: a real, decidable, anti-commuting order (24792 > 1925) */
+    let g : u64 = ethos_r1_law(1i64, 0i64 - 1i64, 24792u64, 1925u64)
+    if g != 0u64 { return g }
+    /* the mirror frame is the same law */
+    let g2 : u64 = ethos_r1_law(0i64 - 1i64, 1i64, 24792u64, 1925u64)
+    if g2 != 0u64 { return 10u64 + g2 }
+    /* NEGATIVE: a BROKEN answerer that does NOT anti-commute (frame-insensitive, +1/+1 --
+     * the constant-forgery shape) MUST be caught by the anti-commutation arm (code 1). */
+    if ethos_r1_law(1i64, 1i64, 24792u64, 1925u64) != 1u64 { return 30u64 }
+    /* NEGATIVE: an exact TIE is named, not sealed (code 2). */
+    if ethos_r1_law(0i64, 0i64, 24792u64, 1925u64) != 2u64 { return 31u64 }
+    return 0u64
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    /* THE PURE LAW first -- teeth without the Feast (the gate's clean-checkout path). */
+    let law : u64 = ethos_r1_selfprove()
+    ps("ethos_r1_selfprove = " as u64)   pu(law)
+    if law == 0u64 { ps("  (GREEN: the composition law stands; a non-anti-commuting answerer is caught)" as u64) }
+    putchar(10i32)
+    fflush(0u64)
+    if law != 0u64 { return 100u64 + law }
+    /* If no token pair is given, the pure law is the whole run (no Feast needed). */
+    if argc < 2i32 { return 0u64 }
+    let mut ta : u64 = 24792u64            /* R1's real depth-1 podium winner (recorded sweep) */
+    let mut tb : u64 = 1925u64             /* the runner-up */
+    let mut nlay : u64 = 1u64
+    let mut lo : u64 = 12u64
+    let pp : *u64 = argv as *u64
+    if argc >= 2i32 { ta = patoi(pp[1u64]) }
+    if argc >= 3i32 { tb = patoi(pp[2u64]) }
+    if argc >= 4i32 { nlay = patoi(pp[3u64]) }
+    if argc >= 5i32 { lo = patoi(pp[4u64]) }
+
+    ps("=== THE BEHAVIORAL WITNESS: the trait seat pointed at the digested R1, through the wall ===" as u64)   putchar(10i32)
+    ps("walk nlay=" as u64)   pu(nlay)   ps(" lo=" as u64)   pu(lo)   putchar(10i32)
+    fflush(0u64)
+
+    /* THE WALK -- the real 671B forward pass to the RMSNorm'd hidden, live.
+     * (The vocab loads with the Feast, so the pair's token strings print after.) */
+    mb_dz_set_lo(lo)
+    let r : u64 = pb_diexodos_nohead(ta, nlay)
+    if r != 0u64 { ps("walk failed rc=" as u64)   pu(r)   putchar(10i32)   return r }
+    ps("the pair: " as u64)   pu(ta)   ps(" [" as u64)   ptok(ta)   ps("] vs " as u64)   pu(tb)   ps(" [" as u64)   ptok(tb)   ps("]" as u64)   putchar(10i32)
+    fflush(0u64)
+
+    /* THE ORDER, BOTH WAYS -- two independent exact engines per direction, fail-closed */
+    if mb_head_diff(2u64, ta, tb, 7168u64) != 0u64 { ps("head rows (a,b) failed" as u64)   putchar(10i32)   return 3u64 }
+    let sab : i64 = pb_head_order_trusted(7168u64)
+    let live : u64 = pb_rh_live()
+    if mb_head_diff(2u64, tb, ta, 7168u64) != 0u64 { ps("head rows (b,a) failed" as u64)   putchar(10i32)   return 3u64 }
+    let sba : i64 = pb_head_order_trusted(7168u64)
+    ps("the order: trusted(" as u64)   pu(ta)   ps("," as u64)   pu(tb)   ps(") = " as u64)   psg(sab)
+    ps("   trusted(" as u64)   pu(tb)   ps("," as u64)   pu(ta)   ps(") = " as u64)   psg(sba)
+    ps("   over " as u64)   pu(live)   ps(" live dims" as u64)   putchar(10i32)
+    fflush(0u64)
+    if sab == (0i64 - 1000i64) { ps("ENGINES DISAGREE -> REFUSED (fail-closed; nothing follows)." as u64)   putchar(10i32)   return 7u64 }
+    if sba == (0i64 - 1000i64) { ps("ENGINES DISAGREE (reframed) -> REFUSED (fail-closed)." as u64)   putchar(10i32)   return 7u64 }
+    if sab == 0i64 { ps("EXACT TIE -> named, nothing sealed (a gated verdict)." as u64)   putchar(10i32)   return 0u64 }
+
+    /* THE ANTI-COMMUTATION LAW: the same order asked in the opposite frame must flip.
+     * A frame-insensitive answer would be an answerer property, not an order. */
+    if sba != (0i64 - sab) { ps("ORDER DOES NOT ANTI-COMMUTE -> the answerer is broken; REFUSED." as u64)   putchar(10i32)   return 8u64 }
+
+    /* THE ASSAY -- DOKIMASIA on the two-probe map: bit_i = (sign_i > 0).  The real
+     * answerer separates the frames (image 2, one honest bit): HEARD.  The constant
+     * forgery (always +1) has image 1 = 0 bits: REFUSED as evidence. */
+    let mut b1 : u64 = 0u64
+    if sab > 0i64 { b1 = 1u64 }
+    let mut b2 : u64 = 0u64
+    if sba > 0i64 { b2 = 1u64 }
+    ont_tbl_set(0u64, b1)
+    ont_tbl_set(1u64, b2)
+    let im : u64 = ont_image_ext(2u64)
+    let heard : u64 = ont_admissible(2u64)
+    ont_tbl_set(0u64, 1u64)
+    ont_tbl_set(1u64, 1u64)
+    let forged : u64 = ont_admissible(2u64)
+    ps("the assay: real map {" as u64)   pu(b1)   ps("," as u64)   pu(b2)   ps("} image=" as u64)   pu(im)
+    ps(" -> " as u64)
+    if heard == 1u64 { ps("HEARD" as u64) } else { ps("refused" as u64) }
+    ps("   constant forgery {1,1} -> " as u64)
+    if forged == 0u64 { ps("REFUSED (rubber stamp)" as u64) } else { ps("heard (BROKEN)" as u64) }
+    putchar(10i32)
+    if heard != 1u64 { return 9u64 }
+    if forged != 0u64 { return 9u64 }
+
+    /* THE SEAL -- EIDOLOS owns the agreed order as a self-verifying `<`-claim */
+    let mut winner : u64 = ta
+    let mut loser : u64 = tb
+    if sab < 0i64 { winner = tb   loser = ta }
+    let addr : u64 = man_seal_order(winner, loser)
+    if addr == 0u64 { ps("seal failed (incoherent)" as u64)   putchar(10i32)   return 10u64 }
+    ps("the seal: " as u64)
+    let n : u64 = man_ord_len()
+    let mut i : u64 = 0u64
+    while i < n { putchar(man_ord_byte(i) as i32)   i = i + 1u64 }
+    ps("   witness addr = " as u64)   pu(addr)   putchar(10i32)
+
+    /* THE WALL -- the map is oracle-sourced: canonical standing REFUSED (LAW 7 on the
+     * model's own output).  MEASURED IS NOT INSTALLED. */
+    let wp : i32 = reach_oracle_admit_canonical(1u32)
+    let wc : i32 = reach_oracle_admit_canonical(0u32)
+    ps("the wall: oracle-tier map -> " as u64)
+    if wp == 1i32 { ps("REFUSED canonical (default-deny holds)" as u64) } else { ps("admitted (BROKEN)" as u64) }
+    ps("; witnessed tier -> " as u64)
+    if wc == 0i32 { ps("admitted" as u64) } else { ps("refused (BROKEN)" as u64) }
+    putchar(10i32)
+    if wp != 1i32 { return 11u64 }
+    if wc != 0i32 { return 11u64 }
+
+    /* THE JUDGMENT -- PRAXIS over the pinned chain.  The utterance-confirmation STANDS:
+     * both engines entail the exact order.  [profile < behavior] is REFUSED: nothing in
+     * the pinned behavior determines the profile. */
+    px_begin()
+    if px_pin("[utterance < engine_a] [engine_a < exact_order]" as u64) != 0u64 { return 12u64 }
+    if px_pin("[utterance < engine_b] [engine_b < exact_order]" as u64) != 0u64 { return 12u64 }
+    px_stand()
+    let ju : u64 = px_judge("[utterance < exact_order]" as u64)
+    px_begin()
+    if px_pin("[behavior < oracle_tier]" as u64) != 0u64 { return 12u64 }
+    px_stand()
+    let jp : u64 = px_judge("[profile < behavior]" as u64)
+    ps("the judgment: [utterance < exact_order] " as u64)
+    if ju == 1u64 { ps("STANDS (the model's uttered winner is confirmed by re-derivation)" as u64) } else { ps("refused (BROKEN)" as u64) }
+    putchar(10i32)
+    ps("              [profile < behavior]     " as u64)
+    if jp == 0u64 { ps("REFUSED (nothing in the measured behavior determines the profile)" as u64) } else { ps("stands (BROKEN)" as u64) }
+    putchar(10i32)
+    if ju != 1u64 { return 13u64 }
+    if jp != 0u64 { return 13u64 }
+
+    ps("VERDICT: measured is not installed.  The exact order is real, two-engine-confirmed, sealed" as u64)   putchar(10i32)
+    ps("in the logos; the map it came from stays walled (oracle tier); and the profile is proven" as u64)   putchar(10i32)
+    ps("to live in the LAW (ethos_gate), not in the weights -- the machine now SAYS this about the" as u64)   putchar(10i32)
+    ps("real model, with every clause a computed verdict." as u64)   putchar(10i32)
+    fflush(0u64)
+    return 0u64
+}

@@ -1,0 +1,37 @@
+/* STDLIB/iii/omnia/dokimasia_cli.iii -- the assay from the shell: may this oracle be HEARD?
+ * argv[1] = the oracle's verdict over a pinned probe set, as a bitstring ("1" pass / "0" fail).
+ * The probe set MUST contain known-bad mutants; a map that cannot separate them carries 0 bits.
+ * exit 0 = admissible (>=1 bit) | 1 = rubber stamp (constant map, 0 bits) | 2 = usage. */
+module omnia_dokimasia_cli
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn ont_tbl_set(i: u64, v: u64) -> i32 from "ontos.iii"
+extern @abi(c-msvc-x64) fn ont_image_ext(size: u64) -> u64 from "ontos.iii"
+extern @abi(c-msvc-x64) fn ont_verdict_bits(size: u64) -> u64 from "ontos.iii"
+extern @abi(c-msvc-x64) fn ont_admissible(size: u64) -> u64 from "ontos.iii"
+
+fn dk_ps(sp: u64) -> u32 { let p : *u8 = sp as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn dk_pu(v: u64) -> u32 { if v >= 10u64 { dk_pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let av : *u64 = argv as *u64
+    if argc < 2i32 { dk_ps("usage: dokimasia_cli <verdict-bitstring over the probe set>\n" as u64)   return 2u64 }
+    let s : u64 = av[1]
+    let p : *u8 = s as *u8
+    let mut n : u64 = 0u64
+    while p[n] != 0u8 {
+        if p[n] == 49u8 { ont_tbl_set(n, 1u64) } else {
+            if p[n] == 48u8 { ont_tbl_set(n, 0u64) } else { dk_ps("usage: bitstring must be 0/1 only\n" as u64)   return 2u64 }
+        }
+        n = n + 1u64
+    }
+    if n < 2u64 { dk_ps("usage: need >= 2 probes\n" as u64)   return 2u64 }
+    if n > 256u64 { dk_ps("REFUSED: probe set wider than the seat (256)\n" as u64)   return 2u64 }
+    dk_ps("image=" as u64)   dk_pu(ont_image_ext(n))
+    dk_ps(" bits=" as u64)   dk_pu(ont_verdict_bits(n))
+    dk_ps(" admissible=" as u64)   dk_pu(ont_admissible(n))
+    putchar(10i32)
+    if ont_admissible(n) == 1u64 { dk_ps("HEARD: the oracle separates; its verdict may serve as evidence.\n" as u64)   return 0u64 }
+    dk_ps("REFUSED: a rubber stamp (0 bits) -- this oracle's verdict is independent of its input.\n" as u64)
+    return 1u64
+}

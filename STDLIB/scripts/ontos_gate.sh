@@ -51,6 +51,25 @@ cmp -s "$T/run1.txt" "$T/run2.txt" || { echo "[ontos_gate] NONDETERMINISM"; diff
 grep -q "GREEN" "$T/run1.txt" || { echo "[ontos_gate] not green"; tail "$T/run1.txt"; exit 6; }
 grep -q "ontos_dokimasia_selfprove = 0" "$T/run1.txt" || { echo "[ontos_gate] DOKIMASIA arm absent or red -- the oracle assay is not wired"; tail "$T/run1.txt"; exit 7; }
 
+# --- DOKIMASIA CLI: the assay as a compiled verb (consumers: the MCP swap, the separation rig) ---
+cc_one "$ROOT/STDLIB/iii/omnia/dokimasia_cli.iii" "$T/dokimasia_cli.o" || exit 2
+rc=1
+for try in 1 2 3 4 5; do
+    rm -f "$T/dokimasia_cli.exe"
+    gcc -o "$T/dokimasia_cli.exe" "$T/dokimasia_cli.o" "$T/ontos.o" "$T/eidolos.o" "$T/isub.o" "$T/idfold.o" "$T/bounty_attest.o" "$T/kardia.o" "$T/ptyxis.o" "$ARC" -lws2_32 -lkernel32 -Wl,--allow-multiple-definition > "$T/dk_link.log" 2>&1; rc=$?
+    [ "$rc" -eq 0 ] && [ -f "$T/dokimasia_cli.exe" ] && break
+    sleep 1
+done
+[ "$rc" -eq 0 ] || { echo "[ontos_gate] DOKIMASIA CLI LINK FAIL rc=$rc"; tail -8 "$T/dk_link.log"; exit 3; }
+DK="$T/dokimasia_cli.exe"
+"$DK" "11110000" > "$T/dk1.txt" 2>&1; [ $? -eq 0 ] || { echo "[ontos_gate] separator not HEARD"; cat "$T/dk1.txt"; exit 8; }
+"$DK" "11111111" > "$T/dk2.txt" 2>&1; [ $? -eq 1 ] || { echo "[ontos_gate] rubber stamp not REFUSED"; cat "$T/dk2.txt"; exit 8; }
+"$DK" "00000000" > "$T/dk3.txt" 2>&1; [ $? -eq 1 ] || { echo "[ontos_gate] constant refuser not REFUSED"; cat "$T/dk3.txt"; exit 8; }
+"$DK" "11110000" > "$T/dk4.txt" 2>&1
+cmp -s "$T/dk1.txt" "$T/dk4.txt" || { echo "[ontos_gate] DOKIMASIA CLI nondeterminism"; exit 8; }
+grep -q "image=2 bits=1 admissible=1" "$T/dk1.txt" || { echo "[ontos_gate] wrong assay numbers"; cat "$T/dk1.txt"; exit 8; }
+echo "[ontos_gate] DOKIMASIA CLI: separator HEARD (exit 0), both constant maps REFUSED (exit 1), deterministic."
+
 echo "[ontos_gate] THE ONE LAW JUDGES THE PRIMITIVES -- green + byte-deterministic:"
 cat "$T/run1.txt"
 exit 0

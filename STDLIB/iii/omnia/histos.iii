@@ -1,0 +1,242 @@
+/* STDLIB/iii/omnia/histos.iii -- HISTOS (ἱστός, the loom): the living proof web.
+ *
+ * III's organs each self-prove in ISOLATION.  A per-organ gate calls an organ SOUND whenever
+ * its own selfprove passes -- even if an organ it silently DEPENDS ON has broken.  HISTOS
+ * weaves the islands into ONE web: nodes are organs (each carrying a cell verdict), edges are
+ * cross-organ dependencies A->B carrying an EIDOLOS obligation `[a < b_verdict]`, and a node
+ * STANDS only if its own cell is green AND every edge discharges AND every organ it depends on
+ * (transitively) stands.
+ *
+ * NO ISLAND, NO NEW PRIMITIVE.  The edge's soundness is decided by HOROS (hr_register +
+ * hr_discharge), which composes PRAXIS/EIDOLOS -- the SAME directed-entailment that judges
+ * completion.  The loom itself is the only new thing: the recursive stand + the named root
+ * cause.  That recursion is load-bearing precisely where kardia's per-cell drift is not: if a
+ * node's OWN selfprove does not exercise its dependency at runtime, the node re-derives green
+ * while the dependency is broken -- and only the web catches it, by depending on the
+ * dependency's stand and NAMING it (histos_reddened_by).
+ *
+ * The graph is a DAG: a would-be cycle is REFUSED BY NAME at edge creation (mirroring EIDOLOS's
+ * refusal of a `<`-cycle), so the recursion terminates.  Verdicts UNKNOWN/RED both fail the
+ * stand (fail-closed: unproven is not standing).  Ring R0.  Determinism: integer-only; the weave
+ * re-derives byte-identically each run. */
+module omnia_histos
+
+extern @abi(c-msvc-x64) fn hr_register(name: u64, ob: u64) -> u64 from "horos.iii"
+extern @abi(c-msvc-x64) fn hr_discharge(i: u64, evidence: u64) -> u64 from "horos.iii"
+extern @abi(c-msvc-x64) fn hr_find(name: u64) -> i64 from "horos.iii"
+extern @abi(c-msvc-x64) fn hr_count() -> u64 from "horos.iii"
+
+const HS_CAP     : u64 = 32u64                    /* max nodes                          */
+const HS_ECAP    : u64 = 64u64                    /* max edges                          */
+const HS_GREEN   : u64 = 0u64
+const HS_RED     : u64 = 1u64
+const HS_UNKNOWN : u64 = 2u64
+const HS_REFUSE  : u64 = 0xFFFFFFFFFFFFFFFFu64    /* a NAMED refusal, never an index    */
+
+var HS_NN    : u64 = 0u64                          /* node count                         */
+var HS_NAME  : [u64; 32]                           /* node name (string addr)            */
+var HS_VERD  : [u64; 32]                           /* node cell verdict (0 g / 1 r / 2 ?) */
+var HS_EN    : u64 = 0u64                           /* edge count                         */
+var HS_EFROM : [u64; 64]                           /* edge from-node index               */
+var HS_ETO   : [u64; 64]                           /* edge to-node index                 */
+var HS_EOK   : [u64; 64]                           /* edge discharge result (1 / 0)      */
+
+fn hs_slen(s: u64) -> u64 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { i = i + 1u64 }   return i }
+fn hs_streq(a: u64, b: u64) -> u64 {
+    let p : *u8 = a as *u8
+    let q : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 {
+        if p[i] != q[i] { return 0u64 }
+        i = i + 1u64
+    }
+    if q[i] != 0u8 { return 0u64 }
+    return 1u64
+}
+
+fn hs_reset() -> i32 @export { HS_NN = 0u64   HS_EN = 0u64   return 0i32 }
+
+fn hs_find(name: u64) -> i64 @export {
+    let mut i : u64 = 0u64
+    while i < HS_NN {
+        if hs_streq(HS_NAME[i], name) == 1u64 { return i as i64 }
+        i = i + 1u64
+    }
+    return 0i64 - 1i64
+}
+/* find or add a node by name; REFUSE (sentinel) on overflow, never truncate */
+fn hs_node(name: u64) -> u64 @export {
+    let f : i64 = hs_find(name)
+    if f >= 0i64 { return f as u64 }
+    if HS_NN >= HS_CAP { return HS_REFUSE }
+    HS_NAME[HS_NN] = name
+    HS_VERD[HS_NN] = HS_UNKNOWN
+    HS_NN = HS_NN + 1u64
+    return HS_NN - 1u64
+}
+fn hs_node_count() -> u64 @export { return HS_NN }
+fn hs_edge_count() -> u64 @export { return HS_EN }
+fn hs_set_verdict(idx: u64, v: u64) -> i32 @export { if idx < HS_NN { HS_VERD[idx] = v }   return 0i32 }
+fn hs_verdict(idx: u64) -> u64 @export { if idx < HS_NN { return HS_VERD[idx] }   return HS_UNKNOWN }
+fn hs_discharged(e: u64) -> u64 @export { if e < HS_EN { return HS_EOK[e] }   return 0u64 }
+
+/* can node `a` reach node `b` following from->to edges? (DAG reachability, fueled) */
+fn hs_reaches(a: u64, b: u64, fuel: u64) -> u64 {
+    if fuel == 0u64 { return 1u64 }                /* fail-closed: treat exhaustion as reachable -> refuse */
+    if a == b { return 1u64 }
+    let mut e : u64 = 0u64
+    while e < HS_EN {
+        if HS_EFROM[e] == a { if hs_reaches(HS_ETO[e], b, fuel - 1u64) == 1u64 { return 1u64 } }
+        e = e + 1u64
+    }
+    return 0u64
+}
+/* register an edge from->to carrying `ob`, discharged by `chain` (real HOROS/EIDOLOS entailment).
+ * A cycle (to already reaches from) is REFUSED BY NAME.  HS_EOK records whether the chain
+ * DETERMINES the obligation -- an undischarged edge is a claimed-but-unproven dependency, which
+ * reddens the from-node. */
+fn hs_edge(src: u64, dst: u64, ob: u64, chain: u64) -> u64 @export {
+    if HS_EN >= HS_ECAP { return HS_REFUSE }
+    if src >= HS_NN { return HS_REFUSE }
+    if dst >= HS_NN { return HS_REFUSE }
+    if hs_reaches(dst, src, 4096u64) == 1u64 { return HS_REFUSE }   /* would close a cycle */
+    /* stone name = obligation.  Weaving is IDEMPOTENT: reuse an existing stone (HOROS refuses a
+     * duplicate name) so histos_show + histos_selfprove can both weave in one process. */
+    let found : i64 = hr_find(ob)
+    let mut sidx : u64 = 0u64
+    if found >= 0i64 { sidx = found as u64 }
+    else {
+        sidx = hr_register(ob, ob)
+        if sidx == HS_REFUSE { return HS_REFUSE }
+    }
+    let ok : u64 = hr_discharge(sidx, chain)
+    HS_EFROM[HS_EN] = src
+    HS_ETO[HS_EN] = dst
+    HS_EOK[HS_EN] = ok
+    HS_EN = HS_EN + 1u64
+    return HS_EN - 1u64
+}
+
+/* THE STAND (recursive, fueled): GREEN iff the node's own cell is green AND every out-edge
+ * discharges AND every dependency stands.  The recursion is the whole point -- a node with a
+ * green cell but a red dependency is RED. */
+fn hs_stand_rec(idx: u64, fuel: u64) -> u64 {
+    if fuel == 0u64 { return HS_RED }
+    if idx >= HS_NN { return HS_RED }
+    if HS_VERD[idx] != HS_GREEN { return HS_RED }
+    let mut e : u64 = 0u64
+    while e < HS_EN {
+        if HS_EFROM[e] == idx {
+            if HS_EOK[e] != 1u64 { return HS_RED }                          /* undischarged dependency claim */
+            if hs_stand_rec(HS_ETO[e], fuel - 1u64) != HS_GREEN { return HS_RED }
+        }
+        e = e + 1u64
+    }
+    return HS_GREEN
+}
+fn histos_stand(idx: u64) -> u64 @export { return hs_stand_rec(idx, 4096u64) }
+
+/* THE NAMED ROOT: the first node on the failing path whose OWN cell is red (or which carries an
+ * undischarged edge).  This is what per-cell drift cannot say -- WHY a green-celled node is red. */
+fn hs_root_rec(idx: u64, fuel: u64) -> u64 {
+    if fuel == 0u64 { return "fuel_exhausted" as u64 }
+    if idx >= HS_NN { return "out_of_range" as u64 }
+    if HS_VERD[idx] != HS_GREEN { return HS_NAME[idx] }        /* this node is itself the fault */
+    let mut e : u64 = 0u64
+    while e < HS_EN {
+        if HS_EFROM[e] == idx {
+            if HS_EOK[e] != 1u64 { return HS_NAME[idx] }       /* the undischarged edge sits on this node */
+            if hs_stand_rec(HS_ETO[e], 4096u64) != HS_GREEN { return hs_root_rec(HS_ETO[e], fuel - 1u64) }
+        }
+        e = e + 1u64
+    }
+    return "none" as u64
+}
+fn histos_reddened_by(idx: u64) -> u64 @export { return hs_root_rec(idx, 4096u64) }
+
+/* weave the MVP exact-order chain: behavioral_witness -> membrane -> krisis -> bigint.
+ * node indices by weave order: witness 0, membrane 1, krisis 2, bigint 3.
+ * Each edge's chain names the LIVE primitive the dependency rests on, so the obligation is
+ * discharged by transitive entailment, never by pinning the obligation itself. */
+fn histos_weave_mvp() -> u64 @export {
+    hs_reset()
+    let w : u64 = hs_node("behavioral_witness" as u64)
+    let m : u64 = hs_node("membrane" as u64)
+    let k : u64 = hs_node("krisis" as u64)
+    let b : u64 = hs_node("bigint" as u64)
+    if HS_NN != 4u64 { return 10u64 }
+    if w == HS_REFUSE { return 10u64 }
+    if b == HS_REFUSE { return 10u64 }
+    let e1 : u64 = hs_edge(w, m, "[behavioral_witness < membrane_verdict]" as u64,
+        "[behavioral_witness < pb_head_order_trusted] [pb_head_order_trusted < membrane_verdict]" as u64)
+    let e2 : u64 = hs_edge(m, k, "[membrane < krisis_verdict]" as u64,
+        "[membrane < kr_sign] [kr_sign < krisis_verdict]" as u64)
+    let e3 : u64 = hs_edge(k, b, "[krisis < bigint_verdict]" as u64,
+        "[krisis < bigint_cmp] [bigint_cmp < bigint_verdict]" as u64)
+    if e1 == HS_REFUSE { return 11u64 }
+    if e2 == HS_REFUSE { return 11u64 }
+    if e3 == HS_REFUSE { return 11u64 }
+    if HS_EN != 3u64 { return 12u64 }
+    return 0u64
+}
+
+/* THE CONDITION OF MOTION (pure, no Feast, no rebuild): the loom's logic proven with teeth.
+ * 0 = green; a nonzero code names the failing arm.  Injected verdicts test PROPAGATION -- the
+ * legitimate way to test that red flows along the web -- exactly as HOROS injects a bogus
+ * obligation to test its refusal.  The GATE's mutation arm then proves the same on real
+ * artifacts. */
+fn histos_selfprove() -> u64 @export {
+    /* ARM 1: the MVP weaves and all three edges DISCHARGE (real EIDOLOS entailment). */
+    let c : u64 = histos_weave_mvp()
+    if c != 0u64 { return c }
+    if hs_discharged(0u64) != 1u64 { return 20u64 }
+    if hs_discharged(1u64) != 1u64 { return 21u64 }
+    if hs_discharged(2u64) != 1u64 { return 22u64 }
+
+    /* ARM 2: all cells green -> the whole web stands. */
+    hs_set_verdict(0u64, HS_GREEN)
+    hs_set_verdict(1u64, HS_GREEN)
+    hs_set_verdict(2u64, HS_GREEN)
+    hs_set_verdict(3u64, HS_GREEN)
+    if histos_stand(0u64) != HS_GREEN { return 30u64 }
+    if histos_stand(1u64) != HS_GREEN { return 31u64 }
+    if histos_stand(2u64) != HS_GREEN { return 32u64 }
+    if histos_stand(3u64) != HS_GREEN { return 33u64 }
+
+    /* ARM 3: THE TEETH -- break krisis's cell.  krisis, membrane, and the witness all go RED
+     * even though the WITNESS'S OWN CELL IS STILL GREEN (its selfprove is the pure law, which
+     * never runs the engines).  bigint, independent of krisis, stays green.  This is the exact
+     * case a per-organ gate misses and the web catches. */
+    hs_set_verdict(2u64, HS_RED)
+    if histos_stand(2u64) != HS_RED { return 40u64 }
+    if histos_stand(1u64) != HS_RED { return 41u64 }
+    if histos_stand(0u64) != HS_RED { return 42u64 }
+    if histos_stand(3u64) != HS_GREEN { return 43u64 }
+    if hs_verdict(0u64) != HS_GREEN { return 44u64 }             /* witness OWN cell green -- the crux */
+    if hs_streq(histos_reddened_by(0u64), "krisis" as u64) != 1u64 { return 45u64 }
+    if hs_streq(histos_reddened_by(1u64), "krisis" as u64) != 1u64 { return 46u64 }
+
+    /* ARM 4: restore -> the web stands again (self-cleaning). */
+    hs_set_verdict(2u64, HS_GREEN)
+    if histos_stand(0u64) != HS_GREEN { return 47u64 }
+
+    /* ARM 5: a would-be cycle (bigint -> witness) is REFUSED BY NAME (the DAG invariant). */
+    let cyc : u64 = hs_edge(3u64, 0u64, "[bigint < witness_verdict]" as u64, "[bigint < z] [z < witness_verdict]" as u64)
+    if cyc != HS_REFUSE { return 50u64 }
+
+    /* ARM 6: an undischarged (non-entailing) edge reddens its from-node despite green cells --
+     * a claimed dependency you cannot prove is not a standing. */
+    hs_reset()
+    let a : u64 = hs_node("aa" as u64)
+    let bb : u64 = hs_node("bb" as u64)
+    let en : u64 = hs_edge(a, bb, "[aa < warmth]" as u64, "[aa < bytes] [bytes < machine]" as u64)
+    if en == HS_REFUSE { return 60u64 }
+    if hs_discharged(en) != 0u64 { return 61u64 }                /* warmth unreached -> not discharged */
+    hs_set_verdict(a, HS_GREEN)
+    hs_set_verdict(bb, HS_GREEN)
+    if histos_stand(a) != HS_RED { return 62u64 }                /* green cell, unsound edge -> RED */
+    if histos_stand(bb) != HS_GREEN { return 63u64 }
+    if hs_streq(histos_reddened_by(a), "aa" as u64) != 1u64 { return 64u64 }
+
+    return 0u64
+}

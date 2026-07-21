@@ -1,0 +1,52 @@
+/* STDLIB/iii/omnia/histos_cli.iii -- the loom's voice + judge.
+ *
+ * `histos_show` narrates the MVP web (the exact-order chain) and its teeth in greppable lines;
+ * `histos_selfprove` is the machine judge (exit code).  Library-organ discipline: histos.iii
+ * carries no main; this file does. */
+module omnia_histos_cli
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn histos_weave_mvp() -> u64 from "histos.iii"
+extern @abi(c-msvc-x64) fn histos_stand(idx: u64) -> u64 from "histos.iii"
+extern @abi(c-msvc-x64) fn histos_reddened_by(idx: u64) -> u64 from "histos.iii"
+extern @abi(c-msvc-x64) fn hs_set_verdict(idx: u64, v: u64) -> i32 from "histos.iii"
+extern @abi(c-msvc-x64) fn hs_verdict(idx: u64) -> u64 from "histos.iii"
+extern @abi(c-msvc-x64) fn hs_discharged(e: u64) -> u64 from "histos.iii"
+extern @abi(c-msvc-x64) fn histos_selfprove() -> u64 from "histos.iii"
+
+fn ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn pu(v: u64) -> u32 { if v >= 10u64 { pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn pz(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+
+fn histos_show() -> i32 {
+    let c : u64 = histos_weave_mvp()
+    ps("HISTOS -- the living proof web (loom). MVP: behavioral_witness -> membrane -> krisis -> bigint\n" as u64)
+    if c != 0u64 { ps("  weave FAILED code " as u64)   pu(c)   putchar(10i32)   return 1i32 }
+    /* all cells green */
+    hs_set_verdict(0u64, 0u64)   hs_set_verdict(1u64, 0u64)   hs_set_verdict(2u64, 0u64)   hs_set_verdict(3u64, 0u64)
+    ps("the web: 3 edges discharge (EIDOLOS entailment); " as u64)
+    if histos_stand(0u64) == 0u64 { ps("behavioral_witness GREEN\n" as u64) } else { ps("behavioral_witness RED\n" as u64) }
+    /* break krisis */
+    hs_set_verdict(2u64, 1u64)
+    ps("the teeth: krisis cell RED -> behavioral_witness " as u64)
+    if histos_stand(0u64) == 1u64 { ps("RED" as u64) } else { ps("GREEN" as u64) }
+    ps(", own-cell " as u64)
+    if hs_verdict(0u64) == 0u64 { ps("GREEN" as u64) } else { ps("RED" as u64) }
+    ps(", rooted-at " as u64)
+    pz(histos_reddened_by(0u64))
+    putchar(10i32)
+    /* restore */
+    hs_set_verdict(2u64, 0u64)
+    ps("the restore: krisis cell GREEN -> behavioral_witness " as u64)
+    if histos_stand(0u64) == 0u64 { ps("GREEN\n" as u64) } else { ps("RED\n" as u64) }
+    return 0i32
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let _a : i32 = argc   let _v : u64 = argv
+    histos_show()
+    let s : u64 = histos_selfprove()
+    ps("histos_selfprove = " as u64)   pu(s)   putchar(10i32)
+    if s == 0u64 { ps("GREEN: the web reddens a node whose OWN proof passes when a dependency breaks, and names the root -- what a per-organ gate cannot do.\n" as u64) }
+    return s
+}

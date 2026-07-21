@@ -29,8 +29,11 @@ process.stdin.on("data", d => s += d).on("end", () => {
       const f = (j.tool_input && j.tool_input.file_path) || "";
       if (f && fs.existsSync(f) && fs.statSync(f).isFile()) {
         const h = crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex").slice(0, 12);
-        const nm = path.basename(f).replace(/[^A-Za-z0-9]/g, "_");
-        pins.push("[edit_" + nm + " < sha_" + h + "]");
+        /* EIDOLOS idents are LOWERCASE: one uppercase scroll poisons the whole trace read
+         * (syntax refusal -> lawcheck fails -> the house collapses and every claim is refused).
+         * Proven live 07-21: [edit_MEMORY_md < ...] flipped an earned STANDS to a mass DEFECT. */
+        const nm = path.basename(f).replace(/[^A-Za-z0-9]/g, "_").toLowerCase();
+        if (nm) pins.push("[edit_" + nm + " < sha_" + h + "]");
       }
     } else if (tool === "Bash") {
       const cmd = (j.tool_input && j.tool_input.command) || "";

@@ -12,6 +12,15 @@
 > live but NOT committed — the tree's `.gitignore` line 4 deliberately excludes `.claude/`;
 > (5) the gate_green pin demands the gate's own uppercase GREEN marker AND no nonzero
 > `GATE_EXIT=` in the observed output — a RED gate cannot pin.
+>
+> **FIRST BLOOD (same day, post-arming):** the engine's first live refusal was a true mechanical
+> positive with a mis-named cause — a pin for `MEMORY.md` sanitized to `edit_MEMORY_md`, and
+> EIDOLOS idents are **lowercase-only**: one uppercase scroll fails `eol_read`, lawcheck reddens,
+> the kept house collapses to empty, and EVERY claim is refused (an earned STANDS flipped to a
+> mass DEFECT). Fixed twice over, both script-side: the pinner lowercases sanitized names (it can
+> no longer emit an unparseable scroll), and the judge grounds mechanically — only lines matching
+> `^\[[a-z0-9_]+ < [a-z0-9_]+\]$` reach the binary, so a malformed line is dropped, never allowed
+> to speak for or against anyone. Differential-proven: poisoned trace DEFECT → filtered STANDS.
 
 > **For agentic workers:** Use `superpowers:executing-plans` to implement this task-by-task.
 > **Subagent-driven execution is BARRED for this plan** — the recorded project law is *no subagents on III*.

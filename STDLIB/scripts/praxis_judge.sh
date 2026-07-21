@@ -44,7 +44,12 @@ if [ "$n" -ge 3 ]; then
   exit 0
 fi
 
-"$CLI" "$(tr '\n' ' ' < "$TRACE") [done < gate_green]" "[done < exit_zero]" > /dev/null 2>&1
+# MECHANICAL GROUNDING: only well-formed pin lines reach the judge. EIDOLOS idents are lowercase;
+# a single malformed scroll would poison the whole read and collapse the house, mass-refusing the
+# session (observed live 07-21 via an uppercase [edit_MEMORY_md ...] pin). A line that fails this
+# grammar was never a valid pin, so it is dropped, never allowed to speak for or against anyone.
+pins="$(grep -E '^\[[a-z0-9_]+ < [a-z0-9_]+\]$' "$TRACE" | tr '\n' ' ')"
+"$CLI" "$pins[done < gate_green]" "[done < exit_zero]" > /dev/null 2>&1
 rc=$?
 if [ "$rc" -eq 0 ]; then rm -f "$GUARD"; exit 0; fi   # STANDS: the earned claim passes silently
 if [ "$rc" -ne 1 ]; then rm -f "$GUARD"; exit 0; fi   # engine anomaly (not a clean DEFECT): fail-open

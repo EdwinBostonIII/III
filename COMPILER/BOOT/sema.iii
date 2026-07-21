@@ -289,8 +289,8 @@ const SEMA_K_STRUCT_DECL                : u32 = 75u32
 
 /* Caps. */
 const SEMA_NAME_CAP        : u32 = 64u32         /* per-decl name byte cap */
-const SEMA_DECL_CAP        : u32 = 1024u32
-const SEMA_ANNO_CAP        : u32 = 1024u32
+const SEMA_DECL_CAP        : u32 = 2048u32
+const SEMA_ANNO_CAP        : u32 = 2048u32
 const SEMA_STRUCT_CAP      : u32 = 256u32
 const SEMA_STRUCT_FIELD_CAP: u32 = 64u32
 const SEMA_ERR_CAP         : u32 = 256u32
@@ -312,27 +312,27 @@ var SEMA_ARENA      : [u8; 262144]
 var SEMA_ARENA_USED : u32 = 0u32
 
 /* Decl table — SoA. */
-var SEMA_DECLS_NAME_OFF : [u32; 1024]
-var SEMA_DECLS_NAME_LEN : [u32; 1024]
-var SEMA_DECLS_NODE     : [u32; 1024]
-var SEMA_DECLS_KIND     : [u32; 1024]
+var SEMA_DECLS_NAME_OFF : [u32; 2048]
+var SEMA_DECLS_NAME_LEN : [u32; 2048]
+var SEMA_DECLS_NODE     : [u32; 2048]
+var SEMA_DECLS_KIND     : [u32; 2048]
 var SEMA_DECL_COUNT     : u32 = 0u32
 /* [W6.3 G-SEMA-1] open-addressed decl-name index: entry = decl row + 1, 0 = empty.
- * 2048 = 2x SEMA_DECL_CAP (load <= 0.5, probes terminate), power of two for mask
+ * 4096 = 2x SEMA_DECL_CAP (load <= 0.5, probes terminate), power of two for mask
  * probing.  Filled at s_decl_table_add ONLY-IF-ABSENT, so each name maps to its
  * FIRST row -- byte-identical answers to the old first-match linear scan (the
  * stage1_corpus byte-equivalence gate is the proof).  FNV-1a over the interned
  * arena bytes; equality through the SAME comparators the scan used. */
-var SEMA_DECL_IDX       : [u32; 2048]
+var SEMA_DECL_IDX       : [u32; 4096]
 
 /* Anno table — SoA, one row per decl that has annotations. */
-var SEMA_ANNO_NODE      : [u32; 1024]
-var SEMA_ANNO_HEXAD     : [u32; 1024]   /* packed u16 in low 16 bits */
-var SEMA_ANNO_RING      : [u32; 1024]
-var SEMA_ANNO_TIER      : [u32; 1024]
-var SEMA_ANNO_EPOCH_LO  : [u32; 1024]
-var SEMA_ANNO_EPOCH_HI  : [u32; 1024]
-var SEMA_ANNO_ABI       : [u32; 1024]
+var SEMA_ANNO_NODE      : [u32; 2048]
+var SEMA_ANNO_HEXAD     : [u32; 2048]   /* packed u16 in low 16 bits */
+var SEMA_ANNO_RING      : [u32; 2048]
+var SEMA_ANNO_TIER      : [u32; 2048]
+var SEMA_ANNO_EPOCH_LO  : [u32; 2048]
+var SEMA_ANNO_EPOCH_HI  : [u32; 2048]
+var SEMA_ANNO_ABI       : [u32; 2048]
 var SEMA_ANNO_COUNT     : u32 = 0u32
 
 /* Struct layout table — SoA + flat field arrays.
@@ -637,7 +637,7 @@ fn s_decl_hash_cstr(cstr_addr: u64) -> u32 {
 
 fn s_decl_idx_clear() -> u32 {
     let mut i : u32 = 0u32
-    while i < 2048u32 {
+    while i < 4096u32 {
         SEMA_DECL_IDX[i] = 0u32
         i = i + 1u32
     }
@@ -649,7 +649,7 @@ fn s_decl_idx_clear() -> u32 {
  * so the answer is byte-identical to the old first-match linear scan.  The
  * equality predicate is the SAME comparator the scan used. */
 fn s_decl_table_lookup(name_off: u32, name_len: u32) -> u32 {
-    let mut k : u32 = s_decl_hash(name_off, name_len) & 2047u32
+    let mut k : u32 = s_decl_hash(name_off, name_len) & 4095u32
     let mut found : u32 = 0u32
     let mut going : u32 = 1u32
     while going == 1u32 {
@@ -660,7 +660,7 @@ fn s_decl_table_lookup(name_off: u32, name_len: u32) -> u32 {
                 found = SEMA_DECLS_NODE[e - 1u32]
                 going = 0u32
             } else {
-                k = (k + 1u32) & 2047u32
+                k = (k + 1u32) & 4095u32
             }
         }
     }
@@ -668,7 +668,7 @@ fn s_decl_table_lookup(name_off: u32, name_len: u32) -> u32 {
 }
 
 fn s_decl_table_lookup_cstr(cstr_addr: u64) -> u32 {
-    let mut k : u32 = s_decl_hash_cstr(cstr_addr) & 2047u32
+    let mut k : u32 = s_decl_hash_cstr(cstr_addr) & 4095u32
     let mut found : u32 = 0u32
     let mut going : u32 = 1u32
     while going == 1u32 {
@@ -679,7 +679,7 @@ fn s_decl_table_lookup_cstr(cstr_addr: u64) -> u32 {
                 found = SEMA_DECLS_NODE[e - 1u32]
                 going = 0u32
             } else {
-                k = (k + 1u32) & 2047u32
+                k = (k + 1u32) & 4095u32
             }
         }
     }
@@ -689,9 +689,21 @@ fn s_decl_table_lookup_cstr(cstr_addr: u64) -> u32 {
 fn s_decl_table_add(name_off: u32, name_len: u32, node: u32, kind: u32) -> u32 {
     /* THE LOUD WALL (NOMOS reseal): decl-table overflow used to drop the decl SILENTLY, so the
      * 1025th decl surfaced only as a baffling TYPE-IDENT-001 at some later call site (cg_r3 hit
-     * this at 1021+7 decls).  Refuse LOUDLY at the drop.  The cap itself stays 1024: the frozen
-     * iiis-1 binary carries it, so lifting it here alone would be false comfort -- the named
-     * rung is an iiis-1 reseal lifting both. */
+     * this at 1021+7 decls).  Refuse LOUDLY at the drop.
+     *
+     * CAP LIFTED 1024 -> 2048 (2026-07-20).  The wall did its job: cg_r3.iii reached 1025 decls at
+     * cf1e546c and iiis-2 refused it loudly (sema OOM at 4270:1 -- iii_cg_r3_emit, the codegen's
+     * own entry point), which broke build_iiis3.sh and with it the self-hosting fixpoint that
+     * bootstrap_from_clean stage 6 checks.  DECL_CAP, its four SoA columns, ANNO_CAP and its seven
+     * columns all doubled; SEMA_DECL_IDX doubled to 4096 to hold the load <= 0.5 invariant that
+     * makes probing terminate.
+     *
+     * THE CAVEAT THE OLD NOTE WAS RIGHT ABOUT, still live: the FROZEN iiis-1 binary predates this
+     * wall (built 07-15, wall added 07-17) and carries the old 1024 cap with the SILENT drop.  It
+     * therefore still drops the 1025th decl while building iiis-2 -- verified harmless only
+     * because the dropped row was the last decl, referenced from outside the module, and the
+     * symbol is still emitted (nm shows T iii_cg_r3_emit in its .o).  That is luck, not design.
+     * The full rung remains an iiis-1 reseal from iiis-0 carrying this same lift. */
     if SEMA_DECL_COUNT >= SEMA_DECL_CAP { s_emit_error(SEMA_E_OOM, node, 0u32)   return 0u32 }
     /* THE SHADOW LAW: a sealed word may be declared ONLY by the tongue (module
      * glossa, the generated organ).  Everywhere else the decl is refused
@@ -707,8 +719,13 @@ fn s_decl_table_add(name_off: u32, name_len: u32, node: u32, kind: u32) -> u32 {
     SEMA_DECL_COUNT = slot + 1u32
     /* [W6.3 G-SEMA-1] index insert, ONLY-IF-ABSENT: a duplicate name keeps its
      * FIRST row, mirroring the old scan's first-match answer exactly.  Load is
-     * <= 1024/2048 = 0.5, so an empty probe slot always exists. */
-    let mut k : u32 = s_decl_hash(name_off, name_len) & 2047u32
+     * <= 2048/4096 = 0.5, so an empty probe slot always exists.  The probe MASK
+     * is 4095 = SEMA_DECL_IDX len - 1: when the cap was lifted the index was
+     * doubled but the masks briefly stayed 2047, confining probes to half the
+     * table -- load at cap would have been 1.0 and an absent-name probe against
+     * a full table would never terminate.  Mask, clear loop, and array length
+     * move together or the invariant is prose. */
+    let mut k : u32 = s_decl_hash(name_off, name_len) & 4095u32
     let mut going : u32 = 1u32
     while going == 1u32 {
         let e : u32 = SEMA_DECL_IDX[k]
@@ -719,7 +736,7 @@ fn s_decl_table_add(name_off: u32, name_len: u32, node: u32, kind: u32) -> u32 {
             if s_arena_slice_eq(SEMA_DECLS_NAME_OFF[e - 1u32], SEMA_DECLS_NAME_LEN[e - 1u32], name_off, name_len) == 1u32 {
                 going = 0u32
             } else {
-                k = (k + 1u32) & 2047u32
+                k = (k + 1u32) & 4095u32
             }
         }
     }

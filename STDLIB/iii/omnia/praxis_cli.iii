@@ -9,6 +9,7 @@ extern @abi(c-msvc-x64) fn px_begin() -> i32 from "praxis.iii"
 extern @abi(c-msvc-x64) fn px_pin(s: u64) -> u64 from "praxis.iii"
 extern @abi(c-msvc-x64) fn px_stand() -> u64 from "praxis.iii"
 extern @abi(c-msvc-x64) fn px_judge(s: u64) -> u64 from "praxis.iii"
+extern @abi(c-msvc-x64) fn px_fresh() -> u64 from "praxis.iii"
 extern @abi(c-msvc-x64) fn praxis_selfprove() -> u64 from "praxis.iii"
 
 fn pc_ps(sp: u64) -> u32 { let p : *u8 = sp as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
@@ -26,7 +27,11 @@ fn main(argc: i32, argv: u64) -> u64 {
     px_begin()
     px_pin(trace)
     px_stand()
-    if px_judge(claim) == 1u64 { pc_ps("STANDS\n" as u64)   return 0u64 }
+    if px_judge(claim) == 1u64 {
+        if px_fresh() == 1u64 { pc_ps("STANDS\n" as u64)   return 0u64 }
+        pc_ps("STALE: an edit follows the last green gate -- the claim is not covered; REFUSED\n" as u64)
+        return 3u64
+    }
     pc_ps("DEFECT: the witnessed trace does not determine this claim -- REFUSED\n" as u64)
     return 1u64
 }

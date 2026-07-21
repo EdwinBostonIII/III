@@ -55,6 +55,10 @@ rite() {
     [ "$rc" -eq 0 ] || { echo "[praxis_gate] earned claim did not stand (rc=$rc)"; tail -4 "$out"; rm -f "$stg"; return 3; }
     "$stg" "[readme < prose]" "[done < exit_zero]" >> "$out" 2>&1; rc=$?
     [ "$rc" -eq 1 ] || { echo "[praxis_gate] naked claim was NOT refused (rc=$rc)"; tail -4 "$out"; rm -f "$stg"; return 4; }
+    "$stg" "[edit_praxis_iii < sha_aaaa] [gate_green < exit_zero] [done < gate_green]" "[done < exit_zero]" >> "$out" 2>&1; rc=$?
+    [ "$rc" -eq 0 ] || { echo "[praxis_gate] covered edit did not stand (rc=$rc)"; tail -4 "$out"; rm -f "$stg"; return 8; }
+    "$stg" "[gate_green < exit_zero] [edit_praxis_iii < sha_aaaa] [done < gate_green]" "[done < exit_zero]" >> "$out" 2>&1; rc=$?
+    [ "$rc" -eq 3 ] || { echo "[praxis_gate] STALE was NOT refused with 3 (rc=$rc)"; tail -4 "$out"; rm -f "$stg"; return 9; }
     rm -f "$stg"
     return 0
 }
@@ -65,6 +69,7 @@ cmp -s "$T/run1.txt" "$T/run2.txt" || { echo "[praxis_gate] NONDETERMINISM"; dif
 grep -q "praxis_selfprove = 0" "$T/run1.txt" || { echo "[praxis_gate] selfprove not green"; tail -8 "$T/run1.txt"; exit 7; }
 grep -q "STANDS" "$T/run1.txt" || { echo "[praxis_gate] no STANDS in transcript"; tail -8 "$T/run1.txt"; exit 7; }
 grep -q "DEFECT" "$T/run1.txt" || { echo "[praxis_gate] no DEFECT in transcript"; tail -8 "$T/run1.txt"; exit 7; }
+grep -q "STALE" "$T/run1.txt" || { echo "[praxis_gate] no STALE in transcript"; tail -8 "$T/run1.txt"; exit 7; }
 
 echo "[praxis_gate] THE MANDATE IS GREEN -- the naked claim is a DEFECT, the earned claim stands, the trace is tamper-evident, byte-deterministic:"
 cat "$T/run1.txt"

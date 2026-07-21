@@ -29,18 +29,49 @@ extern @abi(c-msvc-x64) fn xc_seal(out32: *u8) -> i32 from "exec_cert.iii"
 var PX_N : u64 = 0u64            /* how many events were pinned */
 var PX_A : [u8; 32]              /* seal A (module var: a local array's address is not FFI-valid) */
 var PX_B : [u8; 32]              /* seal B */
+var PX_OFF   : u64 = 0u64        /* absolute byte offset across all pins (order clock) */
+var PX_LASTE : u64 = 0u64        /* offset+1 of the last "[edit_"     pin seen (0 = never) */
+var PX_LASTG : u64 = 0u64        /* offset+1 of the last "[gate_green" pin seen (0 = never) */
 
 fn px_slen(s: u64) -> u64 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { i = i + 1u64 }   return i }
 
-/* open a fresh trace: empty house, fresh certificate */
-fn px_begin() -> i32 @export { PX_N = 0u64   eol_reset()   xc_begin()   return 0i32 }
+/* does s[i..] begin with the literal lit? Bounded: stops at either NUL, never reads past. */
+fn px_match(s: u64, i: u64, lit: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let q : *u8 = lit as *u8
+    let mut k : u64 = 0u64
+    while q[k] != 0u8 {
+        if p[i + k] != q[k] { return 0u64 }
+        k = k + 1u64
+    }
+    return 1u64
+}
 
-/* PIN one witnessed event: fold its bytes into the tamper-evident certificate, then read it into the house */
+/* THE FRESHNESS LAW: a claim is covered only if a green gate stands AFTER the last edit.
+ * Ties cannot occur -- the order clock strictly increases across pinned bytes. */
+fn px_fresh() -> u64 @export {
+    if PX_LASTG == 0u64 { return 0u64 }
+    if PX_LASTE == 0u64 { return 1u64 }
+    if PX_LASTE < PX_LASTG { return 1u64 }
+    return 0u64
+}
+
+/* open a fresh trace: empty house, fresh certificate */
+fn px_begin() -> i32 @export { PX_N = 0u64   PX_OFF = 0u64   PX_LASTE = 0u64   PX_LASTG = 0u64   eol_reset()   xc_begin()   return 0i32 }
+
+/* PIN one witnessed event: fold its bytes into the tamper-evident certificate, then read it into the house.
+ * The byte walk doubles as the ORDER SCAN: each "[edit_" / "[gate_green" scroll-start stamps the order clock. */
 fn px_pin(s: u64) -> u64 @export {
     let p : *u8 = s as *u8
     let mut i : u64 = 0u64
-    while p[i] != 0u8 { xc_event_byte(p[i] as u32)   i = i + 1u64 }
+    while p[i] != 0u8 {
+        xc_event_byte(p[i] as u32)
+        if px_match(s, i, "[edit_" as u64) == 1u64 { PX_LASTE = PX_OFF + i + 1u64 }
+        if px_match(s, i, "[gate_green" as u64) == 1u64 { PX_LASTG = PX_OFF + i + 1u64 }
+        i = i + 1u64
+    }
     xc_event_byte(10u32)
+    PX_OFF = PX_OFF + i + 1u64
     if eol_read(s, i) < 0i64 { return 1u64 }
     PX_N = PX_N + 1u64
     return 0u64
@@ -97,6 +128,29 @@ fn praxis_selfprove() -> u64 @export {
     px_pin("[a < b]" as u64)
     px_pin("[b < c]" as u64)
     if px_count() != 2u64 { return 5u64 }
+
+    /* ARM 6: THE STALE GREEN -- an edit AFTER the last green gate leaves the claim uncovered.
+     * Order is the point: the same two pins in the other order are ARM 7 and STAND. */
+    px_begin()
+    px_pin("[gate_green < exit_zero]" as u64)
+    px_pin("[edit_praxis_iii < sha_aaaa]" as u64)
+    if px_fresh() != 0u64 { return 6u64 }
+
+    /* ARM 7: THE COVERED EDIT -- the gate ran green AFTER the edit: fresh, covered, standing. */
+    px_begin()
+    px_pin("[edit_praxis_iii < sha_aaaa]" as u64)
+    px_pin("[gate_green < exit_zero]" as u64)
+    if px_fresh() != 1u64 { return 7u64 }
+
+    /* ARM 8: NO EDITS -- a green gate alone is fresh (there is nothing uncovered). */
+    px_begin()
+    px_pin("[gate_green < exit_zero]" as u64)
+    if px_fresh() != 1u64 { return 8u64 }
+
+    /* ARM 9: NO GATE -- edits alone are never fresh; freshness cannot be bought without a gate. */
+    px_begin()
+    px_pin("[edit_praxis_iii < sha_aaaa]" as u64)
+    if px_fresh() != 0u64 { return 9u64 }
 
     return 0u64
 }

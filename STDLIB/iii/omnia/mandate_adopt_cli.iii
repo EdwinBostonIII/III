@@ -1,0 +1,113 @@
+/* STDLIB/iii/omnia/mandate_adopt_cli.iii -- the adoption seat: a candidate MANDATE enters law
+ * only through the LIVE governance state machine, and only if its measured separation cleared.
+ *
+ * The shell rig (mandate_gate.sh) measures the candidate's separation on real labeled history
+ * and assays its verdict-map (dokimasia_cli). THIS driver is the machine half:
+ *   argv[1] == "1"  -> the cleared candidate walks propose -> sandbox -> prove (trivial cert,
+ *                      the corpus-1456 canonical path) -> vote 2y/1n (threshold 6>=6) ->
+ *                      promote ACCEPTED -> seal SEALED. Exit 0.
+ *   argv[1] == "0"  -> the candidate did NOT clear: NOTHING is proposed. Exit 1, named.
+ *   no args         -> selfprove: the lifecycle arms including the PERMANENT rejection of a
+ *                      quorum-less promote and the refusal of votes outside the PROVEN window.
+ *
+ * The one-shot rejection is the tooth that matters: a promote attempted without quorum REJECTS
+ * the proposal forever (-6, then -7 on retry) -- adoption cannot be retried into existence. */
+module omnia_mandate_adopt_cli
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+extern @abi(c-msvc-x64) fn governance_reset() -> i32 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_propose(proposer_cap: u64, change_intent: u64, rationale_ptr: u64, rationale_len: u32) -> u64 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_sandbox(proposal_id: u64) -> i32 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_prove_equivalence(proposal_id: u64, old_pid: u32, new_pid: u32, corpus_witness_ptr: u64) -> u64 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_vote(voter_cap: u64, proposal_id: u64, vote: u8) -> i32 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_threshold_met(proposal_id: u64) -> u8 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_promote(proposal_id: u64) -> i32 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_seal(proposal_id: u64) -> i32 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_status(proposal_id: u64) -> u8 from "governance.iii"
+
+fn ma_ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn ma_slen(s: u64) -> u64 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { i = i + 1u64 }   return i }
+
+/* the full adoption walk over a fresh proposal; returns the stage that failed, 0 = SEALED. */
+fn ma_adopt(intent: u64, rationale: u64) -> u64 {
+    let pid : u64 = governance_propose(1u64, intent, rationale, ma_slen(rationale) as u32)
+    if pid == 0u64 { return 1u64 }
+    if governance_sandbox(pid) != 0i32 { return 2u64 }
+    if governance_prove_equivalence(pid, 5u32, 5u32, 0u64) == 0u64 { return 3u64 }
+    if governance_vote(1u64, pid, 1u8) != 0i32 { return 4u64 }
+    if governance_vote(2u64, pid, 1u8) != 0i32 { return 4u64 }
+    if governance_vote(3u64, pid, 0u8) != 0i32 { return 4u64 }
+    if governance_threshold_met(pid) != 1u8 { return 5u64 }
+    if governance_promote(pid) != 0i32 { return 6u64 }
+    if governance_status(pid) != 3u8 { return 6u64 }
+    if governance_seal(pid) != 0i32 { return 7u64 }
+    if governance_status(pid) != 5u8 { return 7u64 }
+    return 0u64
+}
+
+fn mandate_adopt_selfprove() -> u64 @export {
+    resolution_init()
+    governance_reset()
+
+    /* ARM 1: THE LIFECYCLE TO PROVEN -- propose (rationale hashed), sandbox, the trivial
+     * old==new cert (canonical corpus-1456 path), status PROVEN. */
+    let p1 : u64 = governance_propose(1u64, 0x4D31u64, "separation measured by mandate_gate" as u64, 35u32)
+    if p1 == 0u64 { return 1u64 }
+    if governance_status(p1) != 0u8 { return 1u64 }
+    if governance_sandbox(p1) != 0i32 { return 1u64 }
+    if governance_prove_equivalence(p1, 5u32, 5u32, 0u64) == 0u64 { return 1u64 }
+    if governance_status(p1) != 2u8 { return 1u64 }
+
+    /* ARM 2: THE QUORUM-LESS PROMOTE REJECTS PERMANENTLY -- -6 and the status goes REJECTED;
+     * the retry is -7 (no longer PROVEN). Adoption cannot be retried into existence. */
+    if governance_promote(p1) != 0i32 - 6i32 { return 2u64 }
+    if governance_status(p1) != 4u8 { return 2u64 }
+    if governance_promote(p1) != 0i32 - 7i32 { return 2u64 }
+
+    /* ARM 3: VOTES ONLY IN THE PROVEN WINDOW -- a vote on a PENDING proposal is refused (-3),
+     * the state-machine wall the organ documents as W21. */
+    let p2 : u64 = governance_propose(1u64, 0x4D32u64, 0u64, 0u32)
+    if p2 == 0u64 { return 3u64 }
+    if governance_vote(1u64, p2, 1u8) != 0i32 - 3i32 { return 3u64 }
+
+    /* ARM 4: THE FULL ADOPTION -- prove, 2 yes / 1 no (6 >= 6), promote ACCEPTED, seal SEALED. */
+    if governance_sandbox(p2) != 0i32 { return 4u64 }
+    if governance_prove_equivalence(p2, 5u32, 5u32, 0u64) == 0u64 { return 4u64 }
+    if governance_vote(1u64, p2, 1u8) != 0i32 { return 4u64 }
+    if governance_vote(2u64, p2, 1u8) != 0i32 { return 4u64 }
+    if governance_vote(3u64, p2, 0u8) != 0i32 { return 4u64 }
+    if governance_threshold_met(p2) != 1u8 { return 4u64 }
+    if governance_promote(p2) != 0i32 { return 4u64 }
+    if governance_status(p2) != 3u8 { return 4u64 }
+    if governance_seal(p2) != 0i32 { return 4u64 }
+    if governance_status(p2) != 5u8 { return 4u64 }
+
+    return 0u64
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let av : *u64 = argv as *u64
+    if argc < 2i32 {
+        let r : u64 = mandate_adopt_selfprove()
+        ma_ps("mandate_adopt_selfprove = " as u64)   putchar((48u64 + r) as i32)   putchar(10i32)
+        if r == 0u64 { ma_ps("GREEN: the lifecycle stands; the quorum-less promote REJECTS PERMANENTLY; votes hold to the PROVEN window; the cleared candidate reaches SEALED.\n" as u64) }
+        return r
+    }
+    let arg : u64 = av[1]
+    let p : *u8 = arg as *u8
+    if p[0] == 49u8 {
+        resolution_init()
+        governance_reset()
+        let stage : u64 = ma_adopt(0x4D414E44u64, "separation cleared on labeled history; assay admissible" as u64)
+        if stage == 0u64 { ma_ps("ADOPTED AND SEALED: the candidate mandate entered law through the live governance machine.\n" as u64)   return 0u64 }
+        ma_ps("ADOPTION FAILED at a lifecycle stage -- the machine refused; nothing is law.\n" as u64)
+        return 3u64
+    }
+    if p[0] == 48u8 {
+        ma_ps("SEPARATION NOT CLEARED -- the candidate is REFUSED adoption; nothing was proposed.\n" as u64)
+        return 1u64
+    }
+    ma_ps("usage: mandate_adopt_cli [1|0]\n" as u64)
+    return 2u64
+}

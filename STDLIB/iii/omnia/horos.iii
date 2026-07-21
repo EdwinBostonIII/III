@@ -1,0 +1,129 @@
+/* STDLIB/iii/omnia/horos.iii -- HOROS (the boundary-stone): every export carries an OBLIGATION,
+ * and the undischarged obligation is REFUSED BY NAME.
+ *
+ * THE LAW.  An @export is a promise crossing a boundary. HOROS registers, per export, the
+ * obligation it must stand under -- an EIDOLOS scroll -- and DISCHARGES it the only honest way:
+ * the organ's evidence house must DETERMINE the obligation (the same entailment that judges
+ * completion claims; one substrate, no sibling judge). An obligation the evidence cannot reach
+ * is refused, and the refusal names the stone.
+ *
+ * DOGFOOD.  The first subject is PRAXIS itself: all eight of its exports carry stones here, and
+ * the gate greps the LIVE praxis.iii export list -- an export added without a registered stone
+ * reddens the gate. That is the RATCHET (arm-cover new exports or cut) made mechanical for the
+ * subject organ.
+ *
+ * HONEST BOUNDARY.  Enforcement rides the GATE before the link step; a true compiler-refusal
+ * (an undischarged export that does not LINK) is future work and is not claimed here. Capacity
+ * is 32 stones; a wider subject REFUSES rather than truncates (the ONTOS finitude posture). */
+module omnia_horos
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn px_begin() -> i32 from "praxis.iii"
+extern @abi(c-msvc-x64) fn px_pin(s: u64) -> u64 from "praxis.iii"
+extern @abi(c-msvc-x64) fn px_stand() -> u64 from "praxis.iii"
+extern @abi(c-msvc-x64) fn px_judge(s: u64) -> u64 from "praxis.iii"
+
+const HR_CAP : u64 = 32u64
+const HR_REFUSE : u64 = 0xFFFFFFFFFFFFFFFFu64   /* a NAMED refusal, never a slot */
+
+var HR_N  : u64 = 0u64
+var HR_NM : [u64; 32]        /* stone name (string addr)        */
+var HR_OB : [u64; 32]        /* obligation scroll (string addr) */
+
+fn hr_slen(s: u64) -> u64 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { i = i + 1u64 }   return i }
+fn hr_eq(a: u64, b: u64) -> u64 {
+    let p : *u8 = a as *u8
+    let q : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 {
+        if p[i] != q[i] { return 0u64 }
+        i = i + 1u64
+    }
+    if q[i] != 0u8 { return 0u64 }
+    return 1u64
+}
+
+/* find a stone by name: slot, or -1 (no stone -- the export is naked). */
+fn hr_find(name: u64) -> i64 @export {
+    let mut i : u64 = 0u64
+    while i < HR_N {
+        if hr_eq(HR_NM[i], name) == 1u64 { return i as i64 }
+        i = i + 1u64
+    }
+    return 0i64 - 1i64
+}
+
+/* set a stone: one name, one obligation. Duplicate and overflow are REFUSED, never overwritten. */
+fn hr_register(name: u64, ob: u64) -> u64 @export {
+    if HR_N >= HR_CAP { return HR_REFUSE }
+    if hr_find(name) >= 0i64 { return HR_REFUSE }
+    HR_NM[HR_N] = name
+    HR_OB[HR_N] = ob
+    HR_N = HR_N + 1u64
+    return HR_N - 1u64
+}
+
+fn hr_count() -> u64 @export { return HR_N }
+
+/* THE DISCHARGE: does the evidence house DETERMINE the stone's obligation? Composes PRAXIS --
+ * the same begin/pin/stand/judge that judges completion; no second judging substrate exists. */
+fn hr_discharge(i: u64, evidence: u64) -> u64 @export {
+    if i >= HR_N { return 0u64 }
+    px_begin()
+    px_pin(evidence)
+    px_stand()
+    return px_judge(HR_OB[i])
+}
+
+fn horos_selfprove() -> u64 @export {
+    /* ARM 1: THE STONES ARE SET -- all eight PRAXIS exports registered, each with a real
+     * obligation. The gate independently demands this list covers the LIVE export surface. */
+    HR_N = 0u64
+    if hr_register("px_begin" as u64,         "[px_begin < fresh_house]" as u64) != 0u64 { return 1u64 }
+    if hr_register("px_pin" as u64,           "[px_pin < tamper_evident]" as u64) != 1u64 { return 1u64 }
+    if hr_register("px_stand" as u64,         "[px_stand < kept_house]" as u64) != 2u64 { return 1u64 }
+    if hr_register("px_judge" as u64,         "[px_judge < entailment]" as u64) != 3u64 { return 1u64 }
+    if hr_register("px_count" as u64,         "[px_count < witnessed_count]" as u64) != 4u64 { return 1u64 }
+    if hr_register("px_seal" as u64,          "[px_seal < certificate]" as u64) != 5u64 { return 1u64 }
+    if hr_register("px_fresh" as u64,         "[px_fresh < order_clock]" as u64) != 6u64 { return 1u64 }
+    if hr_register("praxis_selfprove" as u64, "[praxis_selfprove < mutation_teeth]" as u64) != 7u64 { return 1u64 }
+    if hr_count() != 8u64 { return 1u64 }
+
+    /* ARM 2: EACH STONE DISCHARGED -- by a TRANSITIVE evidence chain, never by pinning the
+     * obligation itself (that would be the tautology the honesty canon forbids). */
+    if hr_discharge(0u64, "[px_begin < eol_reset] [eol_reset < fresh_house]" as u64) != 1u64 { return 2u64 }
+    if hr_discharge(1u64, "[px_pin < exec_cert] [exec_cert < sha_fold] [sha_fold < tamper_evident]" as u64) != 1u64 { return 2u64 }
+    if hr_discharge(2u64, "[px_stand < eol_keep] [eol_keep < kept_house]" as u64) != 1u64 { return 2u64 }
+    if hr_discharge(3u64, "[px_judge < eol_judge] [eol_judge < entailment]" as u64) != 1u64 { return 2u64 }
+    if hr_discharge(4u64, "[px_count < pinned_events] [pinned_events < witnessed_count]" as u64) != 1u64 { return 2u64 }
+    if hr_discharge(5u64, "[px_seal < xc_seal] [xc_seal < certificate]" as u64) != 1u64 { return 2u64 }
+    if hr_discharge(6u64, "[px_fresh < last_offsets] [last_offsets < order_clock]" as u64) != 1u64 { return 2u64 }
+    if hr_discharge(7u64, "[praxis_selfprove < negative_arms] [negative_arms < mutation_teeth]" as u64) != 1u64 { return 2u64 }
+
+    /* ARM 3: THE UNDISCHARGED IS REFUSED -- a stone whose obligation the evidence cannot reach.
+     * The obligation is well-formed; the evidence is real; the entailment simply is not there.
+     * This is the negative arm that makes ARM 2 a proof instead of a ceremony. */
+    let bogus : u64 = hr_register("bogus_export" as u64, "[bogus_export < warmth]" as u64)
+    if bogus != 8u64 { return 3u64 }
+    if hr_discharge(8u64, "[bogus_export < bytes] [bytes < machine]" as u64) != 0u64 { return 3u64 }
+
+    /* ARM 4: THE REGISTER REFUSES DUPLICATES AND THE UNKNOWN -- one name, one stone; a naked
+     * name has no slot; an out-of-range discharge is 0, never a read past the table. */
+    if hr_register("px_judge" as u64, "[px_judge < twice]" as u64) != HR_REFUSE { return 4u64 }
+    if hr_find("px_judge" as u64) != 3i64 { return 4u64 }
+    if hr_find("never_registered" as u64) >= 0i64 { return 4u64 }
+    if hr_discharge(99u64, "[a < b]" as u64) != 0u64 { return 4u64 }
+
+    return 0u64
+}
+
+fn hr_ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn hr_pu(v: u64) -> u32 { if v >= 10u64 { hr_pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let _a : i32 = argc   let _v : u64 = argv
+    let r : u64 = horos_selfprove()
+    hr_ps("horos_selfprove = " as u64)   hr_pu(r)   putchar(10i32)
+    if r == 0u64 { hr_ps("GREEN: eight stones set and discharged by transitive evidence; the unreachable obligation is REFUSED; the register holds one name to one stone.\n" as u64) }
+    return r
+}

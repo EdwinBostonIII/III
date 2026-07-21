@@ -1,0 +1,88 @@
+/* STDLIB/iii/aether/bounty_ledger.iii -- THE STANDING LEDGER: a node's accreted, membership-provable
+ * portfolio of certified findings (AUXESIS STANDING, increment 2 -- wraps the bounty_attest ATOM).
+ *
+ * A node accumulates its finding-attestations (each a 32-byte attestation root from aether/bounty_attest,
+ * ba_root) as the LEAVES of a merkle tree.  SEALING computes the merkle ROOT and signs it with the node's
+ * deterministic Ed25519 IDENTITY -- that signed root IS the node's STANDING commitment: "these are exactly
+ * the N findings I hold."  A per-finding INCLUSION PROOF then lets the node reveal ONE finding to a paying
+ * program and prove it belongs to the sealed portfolio, WITHOUT exposing the other findings -- selective
+ * disclosure over a committed set.  A verifier confirms, offline: (a) the node signed this portfolio root,
+ * and (b) the revealed finding is a member.  Tamper the portfolio -> the signature fails; claim a non-member
+ * finding -> the inclusion proof fails.
+ *
+ * This is the reputation-accumulation the STANDING pillar names: anonymous (only the revealed leaf is seen),
+ * portable (a signed merkle root + proofs, not a platform account), and platform-independent.  INCREMENT 3
+ * (hotstuff_unified + pq_quorum + fed_sybil/fed_eclipse) reaches BFT agreement on a FEDERATION of such
+ * portfolios; INCREMENT 4 (reach_core + tcp) gossips them.  Those need a live multi-node community; this
+ * solo-portfolio core is useful the moment ONE hunter accretes findings.
+ *
+ * COMPOSES (not reimplements): numera/merkle (the SAME inclusion mechanism aether/cap_zkp runs) + aether/
+ * node_identity (Ed25519 identity, sign the root) + numera/crypt_ed25519 (offline verify) + aether/capability
+ * (SEAL-gated on the ATTEST right).  The leaves are produced by aether/bounty_attest.  Hexad: kind_compose +
+ * kind_witness.  Ring: R-1.  NIH: no new crypto. */
+module aether_bounty_ledger
+
+extern @abi(c-msvc-x64) fn merkle_compute_root(leaves_ptr: u64, leaf_count: u32, leaf_size: u64, out_32: u64) -> i32 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_pack_count_index(leaf_count: u32, leaf_index: u32) -> u64 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_compute_proof(leaves_ptr: u64, leaf_size: u64, packed_count_index: u64, proof_out_ptr: u64) -> i32 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_proof_len_for(leaf_count: u32, leaf_index: u32) -> u32 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_pack_verify_meta(leaf_size: u32, leaf_index: u32, proof_steps: u32) -> u64 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_verify_proof(leaf_ptr: u64, packed_meta: u64, proof_ptr: u64, root_32_ptr: u64) -> u8 from "merkle.iii"
+extern @abi(c-msvc-x64) fn ni_identity_sign(msg: *u8, msg_len: u64, out_sig: *u8) -> i32 from "node_identity.iii"
+extern @abi(c-msvc-x64) fn ni_identity_pub(out_pub: *u8) -> i32 from "node_identity.iii"
+extern @abi(c-msvc-x64) fn ni_is_inited() -> u8 from "node_identity.iii"
+extern @abi(c-msvc-x64) fn ed25519_verify(pubkey: *u8, msg: *u8, msg_len: u64, sig: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+
+const BL_RIGHT_ATTEST : u64 = 0x800u64
+const BL_MAX     : u32 = 64u32             /* max findings per portfolio */
+const BL_LEAFSZ  : u64 = 32u64             /* an attestation root */
+const BL_ROOTB   : u64 = 32u64
+const BL_OK       : i32 = 0i32
+const BL_E_DENIED : i32 = -1i32
+const BL_E_NOID   : i32 = -2i32
+const BL_E_SIGN   : i32 = -3i32
+
+var BL_LEAVES : [u8; 2048]     /* BL_MAX * 32 -- the attestation roots */
+var BL_N      : u32 = 0u32
+
+fn bl_reset() -> i32 @export { BL_N = 0u32   return BL_OK }
+
+/* add an attestation root (from bounty_attest ba_root) as a portfolio leaf; returns its slot (or sentinel). */
+fn bl_add(attest_root_32: *u8) -> u32 @export {
+    if BL_N >= BL_MAX { return 0xFFFFFFFFu32 }
+    let idx : u32 = BL_N
+    let base : u64 = (idx as u64) * BL_LEAFSZ
+    let mut i : u64 = 0u64
+    while i < BL_LEAFSZ { BL_LEAVES[base + i] = attest_root_32[i]   i = i + 1u64 }
+    BL_N = BL_N + 1u32
+    return idx
+}
+
+/* SEAL the portfolio: cap-gated; merkle root over all leaves + the node's Ed25519 identity signature over it.
+ * The signed root is the STANDING commitment. */
+fn bl_seal(cap: u64, out_root_32: *u8, out_sig_64: *u8) -> i32 @export {
+    if cap_verify_rights(cap, BL_RIGHT_ATTEST) == 0u8 { return BL_E_DENIED }
+    if ni_is_inited() == 0u8 { return BL_E_NOID }
+    merkle_compute_root((&BL_LEAVES as u64), BL_N, BL_LEAFSZ, out_root_32 as u64)
+    if ni_identity_sign(out_root_32, BL_ROOTB, out_sig_64) != 0i32 { return BL_E_SIGN }
+    return BL_OK
+}
+fn bl_identity_pub(out_pub_32: *u8) -> i32 @export { return ni_identity_pub(out_pub_32) }
+
+/* build the merkle INCLUSION PROOF for the finding at `slot` into out_proof (selective disclosure). */
+fn bl_prove(slot: u32, out_proof: *u8) -> i32 @export {
+    let pci : u64 = merkle_pack_count_index(BL_N, slot)
+    merkle_compute_proof((&BL_LEAVES as u64), BL_LEAFSZ, pci, out_proof as u64)
+    return BL_OK
+}
+
+/* VERIFY: 1 iff (a) sig is the node's Ed25519 signature over merkle_root (the portfolio is this node's), AND
+ * (b) leaf is a MEMBER of merkle_root at `slot` (the revealed finding belongs to the sealed portfolio).
+ * count is the portfolio size (public part of the commitment). */
+fn bl_verify(pub_32: *u8, merkle_root_32: *u8, sig_64: *u8, leaf_32: *u8, slot: u32, count: u32, proof: *u8) -> u8 @export {
+    if ed25519_verify(pub_32, merkle_root_32, BL_ROOTB, sig_64) == 0u8 { return 0u8 }
+    let steps : u32 = merkle_proof_len_for(count, slot)
+    let vm : u64 = merkle_pack_verify_meta(BL_LEAFSZ as u32, slot, steps)
+    return merkle_verify_proof(leaf_32 as u64, vm, proof as u64, merkle_root_32 as u64)
+}

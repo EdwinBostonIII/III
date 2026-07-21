@@ -1,0 +1,184 @@
+/* STDLIB/iii/aether/henosis.iii -- HENOSIS (ἕνωσις, the making-one): the UNIFICATION of the two parallel
+ * STANDING mechanisms into a whole greater than their sum.
+ *
+ * Two sessions built the same layer two ways: KOINONIA (omnia/koinonia.iii) proof-gated a finding's crossing of
+ * the machine boundary (fed_tier + fed_seal witness chain) but sealed a BARE isub-witness root; bounty_attest +
+ * bounty_ledger (aether/) produced a SIGNED, anonymous, PUBLIC-ARTIFACT-BOUND attestation + a merkle-sealed,
+ * membership-provable portfolio -- but with NO proof-gated crossing discipline and NO federation seal chain.
+ * Each has what the other lacks; each carried its OWN finding-identity (two roots for one finding -- the redundancy).
+ *
+ * HENOSIS collapses them onto ONE identity: the bounty_attest ATTESTATION ROOT (cad of {target_commitment,
+ * property, witness_digest, verdict} -- public-artifact-bound, signed).  That single root is threaded through the
+ * whole flow:  PROVEN? -> ATTEST (sign, ba_attest) -> TIER-GATE + FEDERATION-SEAL the attestation root (KOINONIA's
+ * law: only proof crosses; SOVEREIGN under the PLANETARY fabric) -> PORTFOLIO (bl_add).  A false/unproven finding
+ * is HELD: HOST tier, unsigned, unsealed, not in the standing.
+ *
+ * THE EMERGENT PROPERTY (neither part had it alone, verified in one KAT): a proven finding is SIMULTANEOUSLY
+ *   (a) signed + anonymous + artifact-bound   -- ba_verify(pub, public fields, sig): a stranger confirms it
+ *                                                without the finder's identity or the secret trace;
+ *   (b) proof-gated crossing                  -- SOVEREIGN tier only because the exact engine confirmed it;
+ *   (c) federation-sealed                     -- anchored in the shared fed_seal witness chain;
+ *   (d) membership-provable standing          -- bl_verify: the SAME root is a member of the node's sealed,
+ *                                                selective-disclosure portfolio.
+ * ONE object, ONE identity, threaded proof -> wire -> federation -> standing.  This SUPERSEDES KOINONIA's
+ * bare-witness tier-gate (HENOSIS gates the real, signed, artifact-bound identity instead).
+ *
+ * COMPOSES (no new primitive, no clobber): aether/bounty_attest (ba_attest/ba_verify/ba_identity_pub) + aether/
+ * bounty_ledger (bl_reset/add/seal/prove/verify) + aether/fed_tier + aether/fed_seal + aether/capability +
+ * aether/node_identity.  Hexad: kind_compose + kind_witness.  Ring R-1. */
+module aether_henosis
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn ba_attest(cap: u64, target_32: *u8, property_id: u64, witness_32: *u8, verdict: u64, out_root_32: *u8, out_sig_64: *u8) -> i32 from "bounty_attest.iii"
+extern @abi(c-msvc-x64) fn ba_root(target_32: *u8, property_id: u64, witness_32: *u8, verdict: u64, out_32: *u8) -> i32 from "bounty_attest.iii"
+extern @abi(c-msvc-x64) fn ba_verify(pub_32: *u8, target_32: *u8, property_id: u64, witness_32: *u8, verdict: u64, sig_64: *u8) -> u8 from "bounty_attest.iii"
+extern @abi(c-msvc-x64) fn ba_identity_pub(out_pub_32: *u8) -> i32 from "bounty_attest.iii"
+extern @abi(c-msvc-x64) fn bl_reset() -> i32 from "bounty_ledger.iii"
+extern @abi(c-msvc-x64) fn bl_add(attest_root_32: *u8) -> u32 from "bounty_ledger.iii"
+extern @abi(c-msvc-x64) fn bl_seal(cap: u64, out_root_32: *u8, out_sig_64: *u8) -> i32 from "bounty_ledger.iii"
+extern @abi(c-msvc-x64) fn bl_prove(slot: u32, out_proof: *u8) -> i32 from "bounty_ledger.iii"
+extern @abi(c-msvc-x64) fn bl_verify(pub_32: *u8, merkle_root_32: *u8, sig_64: *u8, leaf_32: *u8, slot: u32, count: u32, proof: *u8) -> u8 from "bounty_ledger.iii"
+extern @abi(c-msvc-x64) fn fed_tier_register(slot: u32, tier_id: u32, peer_root_ptr: u64) -> i32 from "fed_tier.iii"
+extern @abi(c-msvc-x64) fn fed_tier_get(slot: u32) -> u32 from "fed_tier.iii"
+extern @abi(c-msvc-x64) fn fed_seal_anchor(child_tier: u32, child_root_ptr: u64, parent_tier: u32, parent_root_ptr: u64) -> i32 from "fed_seal.iii"
+extern @abi(c-msvc-x64) fn fed_seal_anchor_count() -> u32 from "fed_seal.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn ni_init(args: u64) -> i32 from "node_identity.iii"
+
+const HE_RIGHT_ATTEST : u64 = 0x800u64
+const HE_TIER_HOST   : u32 = 1u32          /* held: never crosses the machine */
+const HE_TIER_CROSS  : u32 = 4u32          /* FED_TIER_SOVEREIGN: a cross-org disclosure */
+const HE_TIER_PLANET : u32 = 5u32          /* FED_TIER_PLANETARY: the fabric a disclosure anchors under */
+const HE_PROP_UNDERCONSTRAINT : u64 = 1u64 /* the vuln class (ZK under-constraint = the fold's nullspace refutation) */
+
+var HE_TARGET  : [u8; 32]   var HE_WITNESS  : [u8; 32]
+var HE_TARGET2 : [u8; 32]   var HE_WITNESS2 : [u8; 32]
+var HE_ROOT : [u8; 32]   var HE_SIG : [u8; 64]   var HE_PUB : [u8; 32]   var HE_GENESIS : [u8; 32]
+var HE_PROOT : [u8; 32]   var HE_PSIG : [u8; 64]   var HE_PROOF : [u8; 1024]   var HE_PROVEN_ROOT : [u8; 32]
+var HE_HW : [u8; 8]   var HE_BS : [u8; 8]   var HE_NIARGS : [u8; 32]
+var HE_SLOT : u32 = 0xFFFFFFFFu32
+
+fn ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn pu(v: u64) -> u32 { if v >= 10u64 { pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn he_put_u64(base: u64, off: u64, v: u64) -> i32 { let p : *u8 = base as *u8   let mut j : u64 = 0u64   while j < 8u64 { p[off + j] = ((v >> (j * 8u64)) & 0xFFu64) as u8   j = j + 1u64 }   return 0i32 }
+fn he_fill(base: u64, n: u64, seed: u8) -> i32 { let p : *u8 = base as *u8   let mut i : u64 = 0u64   while i < n { p[i] = (seed + (i as u8)) ^ 0x5Au8   i = i + 1u64 }   return 0i32 }
+
+/* seed the deterministic node identity via the real ni_init args struct {hw_ptr, hw_len, bs_ptr, bs_len} */
+fn he_setup_identity() -> i32 {
+    he_fill((&HE_HW) as u64, 8u64, 0x11u8)   he_fill((&HE_BS) as u64, 8u64, 0x22u8)
+    he_put_u64((&HE_NIARGS) as u64, 0u64,  (&HE_HW) as u64)   he_put_u64((&HE_NIARGS) as u64, 8u64,  8u64)
+    he_put_u64((&HE_NIARGS) as u64, 16u64, (&HE_BS) as u64)   he_put_u64((&HE_NIARGS) as u64, 24u64, 8u64)
+    return ni_init((&HE_NIARGS) as u64)
+}
+
+/* THE UNIFIED LAND: one finding -> one identity threaded through all four layers.  proven = the exact engine's
+ * verdict (ELENCHOS/APORIA A*w0=0).  Returns the tier admitted at (CROSS = fully landed; HOST = held). */
+fn he_land(cap: u64, target: u64, propid: u64, witness: u64, verdict: u64, proven: u64, slot: u32) -> u32 {
+    if proven != 1u64 {
+        ba_root(target as *u8, propid, witness as *u8, verdict, (&HE_ROOT) as u64 as *u8)   /* identity only */
+        fed_tier_register(slot, HE_TIER_HOST, (&HE_ROOT) as u64)                             /* held local */
+        return HE_TIER_HOST
+    }
+    /* (a) ATTEST: sign the public-artifact-bound record -> the ONE identity (HE_ROOT) + signature (HE_SIG) */
+    if ba_attest(cap, target as *u8, propid, witness as *u8, verdict, (&HE_ROOT) as u64 as *u8, (&HE_SIG) as u64 as *u8) != 0i32 {
+        ba_root(target as *u8, propid, witness as *u8, verdict, (&HE_ROOT) as u64 as *u8)
+        fed_tier_register(slot, HE_TIER_HOST, (&HE_ROOT) as u64)                             /* cap denied -> held */
+        return HE_TIER_HOST
+    }
+    /* (b)+(c) TIER-GATE + FEDERATION-SEAL the SAME attestation root (KOINONIA's law, on the real identity) */
+    fed_tier_register(slot, HE_TIER_CROSS, (&HE_ROOT) as u64)
+    fed_seal_anchor(HE_TIER_CROSS, (&HE_ROOT) as u64, HE_TIER_PLANET, (&HE_GENESIS) as u64)
+    /* (d) PORTFOLIO: accrete the SAME root into the node's standing */
+    HE_SLOT = bl_add((&HE_ROOT) as u64 as *u8)
+    return HE_TIER_CROSS
+}
+
+/* ===== THE EXTERNAL FRONT DOOR (the loop deposits here): land a REAL driver-confirmed finding.
+ * Sets up cap + identity internally, lands via the unified he_land, returns a PACKED result:
+ *   low 32 bits  = tier admitted (4 = SOVEREIGN / staged & sealed ; 1 = HOST / held, unsigned)
+ *   high 32 bits = portfolio slot (0xFFFFFFFF = not staged).
+ * The ONE identity (the signed attestation root) is then readable via he_root_byte(0..31). ===== */
+fn he_land_ext(target: u64, propid: u64, witness: u64, verdict: u64, proven: u64, slot: u32) -> u64 @export {
+    let root_cap : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(root_cap, HE_RIGHT_ATTEST, 0u64)
+    if he_setup_identity() != 0i32 { return 0xFFFFu64 }
+    ba_identity_pub((&HE_PUB) as u64 as *u8)
+    let mut z : u64 = 0u64   while z < 32u64 { HE_GENESIS[z] = 0u8   z = z + 1u64 }
+    HE_SLOT = 0xFFFFFFFFu32
+    let tier : u32 = he_land(cap, target, propid, witness, verdict, proven, slot)
+    return (tier as u64) | ((HE_SLOT as u64) << 32u64)
+}
+
+fn he_root_byte(i: u32) -> u32 @export { let ii : u64 = i as u64   return HE_ROOT[ii] as u32 }
+
+/* ================= THE GATE: the unification, proven in one flow ================= */
+fn henosis_selfprove() -> u64 @export {
+    let root_cap : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(root_cap, HE_RIGHT_ATTEST, 0u64)      /* a cap WITH the ATTEST right */
+    if he_setup_identity() != 0i32 { return 1u64 }
+    ba_identity_pub((&HE_PUB) as u64 as *u8)
+    let mut z : u64 = 0u64   while z < 32u64 { HE_GENESIS[z] = 0u8   z = z + 1u64 }
+    he_fill((&HE_TARGET) as u64, 32u64, 0x70u8)   he_fill((&HE_WITNESS) as u64, 32u64, 0x80u8)     /* proven finding (distinct from he_show's seal) */
+    he_fill((&HE_TARGET2) as u64, 32u64, 0xC0u8)  he_fill((&HE_WITNESS2) as u64, 32u64, 0xD0u8)    /* false finding */
+    bl_reset()
+    let before : u32 = fed_seal_anchor_count()
+
+    /* ===== a PROVEN finding: threaded through ALL FOUR layers on ONE identity ===== */
+    let t1 : u32 = he_land(cap, (&HE_TARGET) as u64, HE_PROP_UNDERCONSTRAINT, (&HE_WITNESS) as u64, 1u64, 1u64, 0u32)
+    if t1 != HE_TIER_CROSS { return 2u64 }                             /* proof-gated: it crosses */
+    if ba_verify((&HE_PUB) as u64 as *u8, (&HE_TARGET) as u64 as *u8, HE_PROP_UNDERCONSTRAINT, (&HE_WITNESS) as u64 as *u8, 1u64, (&HE_SIG) as u64 as *u8) != 1u8 { return 3u64 }  /* (a) signed+artifact-bound, no trace */
+    if fed_tier_get(0u32) != HE_TIER_CROSS { return 4u64 }             /* (b) proof-gated crossing */
+    if fed_seal_anchor_count() != before + 1u32 { return 5u64 }        /* (c) federation-sealed */
+    if HE_SLOT != 0u32 { return 6u64 }                                 /* (d) portfolio member (slot 0) */
+    /* save the proven finding's identity -- the shared HE_ROOT is clobbered by the false finding's ba_root below */
+    let mut c : u64 = 0u64   while c < 32u64 { HE_PROVEN_ROOT[c] = HE_ROOT[c]   c = c + 1u64 }
+
+    /* ===== a FALSE finding (unproven): HELD -- HOST, unsigned, unsealed, NOT in the standing ===== */
+    let mid : u32 = fed_seal_anchor_count()
+    let t2 : u32 = he_land(cap, (&HE_TARGET2) as u64, HE_PROP_UNDERCONSTRAINT, (&HE_WITNESS2) as u64, 0u64, 0u64, 1u32)
+    if t2 != HE_TIER_HOST { return 7u64 }
+    if fed_tier_get(1u32) != HE_TIER_HOST { return 8u64 }
+    if fed_seal_anchor_count() != mid { return 9u64 }                  /* never sealed */
+
+    /* ===== THE STANDING: seal the portfolio (the one proven member) + prove membership (selective disclosure) ===== */
+    if bl_seal(cap, (&HE_PROOT) as u64 as *u8, (&HE_PSIG) as u64 as *u8) != 0i32 { return 10u64 }
+    bl_prove(0u32, (&HE_PROOF) as u64 as *u8)
+    if bl_verify((&HE_PUB) as u64 as *u8, (&HE_PROOT) as u64 as *u8, (&HE_PSIG) as u64 as *u8, (&HE_PROVEN_ROOT) as u64 as *u8, 0u32, 1u32, (&HE_PROOF) as u64 as *u8) != 1u8 { return 11u64 }
+
+    /* ===== TAMPER TEETH: change the PUBLIC target -> the signed attestation no longer verifies (artifact-binding) ===== */
+    HE_TARGET[0u64] = HE_TARGET[0u64] ^ 0xFFu8
+    if ba_verify((&HE_PUB) as u64 as *u8, (&HE_TARGET) as u64 as *u8, HE_PROP_UNDERCONSTRAINT, (&HE_WITNESS) as u64 as *u8, 1u64, (&HE_SIG) as u64 as *u8) != 0u8 { return 12u64 }
+    HE_TARGET[0u64] = HE_TARGET[0u64] ^ 0xFFu8
+
+    return 0u64
+}
+
+fn he_show() -> i32 @export {
+    ps("HENOSIS -- the unification: proof-gated + signed + anonymous + artifact-bound + federation-sealed + portfolio, on ONE identity.\n" as u64)
+    let root_cap : u64 = cap_env_init()   let cap : u64 = cap_attenuate(root_cap, HE_RIGHT_ATTEST, 0u64)
+    he_setup_identity()   ba_identity_pub((&HE_PUB) as u64 as *u8)
+    let mut z : u64 = 0u64   while z < 32u64 { HE_GENESIS[z] = 0u8   z = z + 1u64 }
+    he_fill((&HE_TARGET) as u64, 32u64, 0xA0u8)   he_fill((&HE_WITNESS) as u64, 32u64, 0xB0u8)
+    bl_reset()
+    let t : u32 = he_land(cap, (&HE_TARGET) as u64, HE_PROP_UNDERCONSTRAINT, (&HE_WITNESS) as u64, 1u64, 1u64, 0u32)
+    ps("  PROVEN under-constraint finding -> tier " as u64)   pu(t as u64)   ps(" (SOVEREIGN): signed, sealed, portfolio slot " as u64)   pu(HE_SLOT as u64)   putchar(10i32)
+    ps("  verifiable by a stranger (pub + public fields + sig, NO secret trace): " as u64)
+    if ba_verify((&HE_PUB) as u64 as *u8, (&HE_TARGET) as u64 as *u8, HE_PROP_UNDERCONSTRAINT, (&HE_WITNESS) as u64 as *u8, 1u64, (&HE_SIG) as u64 as *u8) == 1u8 { ps("YES\n" as u64) } else { ps("no\n" as u64) }
+    return 0i32
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let _a : i32 = argc   let _v : u64 = argv
+    he_show()
+    let r : u64 = henosis_selfprove()
+    ps("henosis_selfprove = " as u64)   pu(r)
+    if r == 0u64 { ps("  GREEN: two STANDING mechanisms unified on ONE identity -- proof gates a signed, anonymous, artifact-bound, sealed, portfolio-proven finding.\n" as u64) } else { ps("  (arm failed)\n" as u64) }
+
+    /* demonstrate THE EXTERNAL FRONT DOOR: land a distinct proven finding through the exported he_land_ext */
+    he_fill((&HE_TARGET) as u64, 32u64, 0x40u8)   he_fill((&HE_WITNESS) as u64, 32u64, 0x50u8)
+    let packed : u64 = he_land_ext((&HE_TARGET) as u64, HE_PROP_UNDERCONSTRAINT, (&HE_WITNESS) as u64, 1u64, 1u64, 7u32)
+    ps("he_land_ext(external finding) -> tier " as u64)   pu(packed & 0xFFFFFFFFu64)   ps(" slot " as u64)   pu(packed >> 32u64)
+    ps(" root[0..8]=" as u64)   let mut hi : u64 = 0u64   while hi < 8u64 { pu(he_root_byte(hi as u32) as u64)   putchar(32i32)   hi = hi + 1u64 }   putchar(10i32)
+    return r
+}

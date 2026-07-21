@@ -51,9 +51,13 @@ fi
 pins="$(grep -E '^\[[a-z0-9_]+ < [a-z0-9_]+\]$' "$TRACE" | tr '\n' ' ')"
 "$CLI" "$pins[done < gate_green]" "[done < exit_zero]" > /dev/null 2>&1
 rc=$?
-if [ "$rc" -eq 0 ]; then rm -f "$GUARD"; exit 0; fi   # STANDS: the earned claim passes silently
-if [ "$rc" -ne 1 ]; then rm -f "$GUARD"; exit 0; fi   # engine anomaly (not a clean DEFECT): fail-open
+if [ "$rc" -eq 0 ]; then rm -f "$GUARD"; exit 0; fi   # STANDS: earned AND fresh -- passes silently
+if [ "$rc" -ne 1 ] && [ "$rc" -ne 3 ]; then rm -f "$GUARD"; exit 0; fi   # engine anomaly: fail-open
 
 echo $((n + 1)) > "$GUARD"
-printf '{"decision":"block","reason":"PRAXIS REFUSES: the witnessed trace does not determine completion. MISSING PIN: [gate_green < exit_zero] -- no *_gate.sh run went GREEN in this session after your edits. Run the gate that covers what you changed (its GREEN output is pinned automatically), then finish. Refusal %s of 3; the ceiling fails open." }\n' "$((n + 1))"
+if [ "$rc" -eq 3 ]; then
+  printf '{"decision":"block","reason":"PRAXIS REFUSES (STALE): edits were pinned AFTER the last green gate -- the claim no longer covers the work. Re-run the gate that covers what you changed (its GREEN output is pinned automatically), then finish. Refusal %s of 3; the ceiling fails open."}\n' "$((n + 1))"
+else
+  printf '{"decision":"block","reason":"PRAXIS REFUSES: the witnessed trace does not determine completion. MISSING PIN: [gate_green < exit_zero] -- no *_gate.sh run went GREEN in this session after your edits. Run the gate that covers what you changed (its GREEN output is pinned automatically), then finish. Refusal %s of 3; the ceiling fails open."}\n' "$((n + 1))"
+fi
 exit 0

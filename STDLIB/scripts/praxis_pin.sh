@@ -15,6 +15,7 @@
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 export PRAXIS_DIR="$ROOT/.praxis"
+export III_TREE="$ROOT"
 node -e '
 const fs = require("fs"), path = require("path"), crypto = require("crypto");
 let s = "";
@@ -27,6 +28,11 @@ process.stdin.on("data", d => s += d).on("end", () => {
     const tool = j.tool_name || "";
     if (tool === "Edit" || tool === "Write") {
       const f = (j.tool_input && j.tool_input.file_path) || "";
+      /* only TREE edits pin: memory/scratchpad files are not tree changes and must not
+       * stale a covered claim (the freshness law judges the TREE, not the notebook). */
+      const troot = (process.env.III_TREE || "").replace(/\\/g, "/").toLowerCase();
+      const fn = f.replace(/\\/g, "/").toLowerCase();
+      if (!troot || !fn.startsWith(troot + "/")) return;
       if (f && fs.existsSync(f) && fs.statSync(f).isFile()) {
         const h = crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex").slice(0, 12);
         /* EIDOLOS idents are LOWERCASE: one uppercase scroll poisons the whole trace read

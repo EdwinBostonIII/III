@@ -1850,6 +1850,9 @@ fn mb_read_block(abs: u64, n: u64) -> u64 {
     return 0u64
 }
 
+/* cross-check surface: inject raw block bytes so an external verifier can compare its own dequant to ours */
+fn mb_blk_put(i: u64, v: u64) -> i32 @export { if i < 256u64 { MB_BLK[i] = v as u8 }   return 0i32 }
+
 /* q4_K sub-block scale/min unpack (the 6-bit law) */
 var MB_SC : u64 = 0u64
 var MB_SM : u64 = 0u64
@@ -1880,7 +1883,7 @@ var MB_D2S : u64 = 0u64
 var MB_MD : i64 = 0i64
 var MB_MDM : i64 = 0i64
 
-fn mb_dec_q4k(into_b: u64) -> u64 {
+fn mb_dec_q4k(into_b: u64) -> u64 @export {
     let dbits : u64 = (MB_BLK[0] as u64) | ((MB_BLK[1] as u64) << 8u64)
     let mbits : u64 = (MB_BLK[2] as u64) | ((MB_BLK[3] as u64) << 8u64)
     MB_IOERR = 0u8
@@ -1931,7 +1934,7 @@ fn mb_dec_q4k(into_b: u64) -> u64 {
 }
 
 /* decode one q6_K block; same contract as q4 */
-fn mb_dec_q6k(into_b: u64) -> u64 {
+fn mb_dec_q6k(into_b: u64) -> u64 @export {
     let dbits : u64 = (MB_BLK[208] as u64) | ((MB_BLK[209] as u64) << 8u64)
     MB_IOERR = 0u8
     let md : i64 = mb_f16_mant(dbits)
@@ -6258,6 +6261,63 @@ fn mb_kr_s2() -> i64 @export { return MB_KR_S2 }
 fn mb_kr_m2() -> u64 @export { return MB_KR_M2 }
 fn mb_kr_e2() -> i64 @export { return MB_KR_E2 }
 
+/* THE CONTESTED HEAD-ROW DIFFERENCE: read head rows ta and tb (the podium),
+ * and store the per-dimension weight difference d_i = W_ta,i - W_tb,i (i64
+ * mantissas at the common 2^-24 scale).  The exact head krisis dots this
+ * difference against the real hidden in UNBOUNDED bigint -- so the logit
+ * difference l_ta - l_tb is decided with ZERO truncation, no width, at R1's
+ * real head values.  The 2^-24 weight scale is common to every term and drops
+ * out of the sign, so the difference carries the whole decision. */
+var MB_HDIFF : [i64; 7168]
+var MB_HROWA : [i64; 7168]                /* the WINNER row ta, kept for engine B */
+var MB_HROWB : [i64; 7168]                /* the LOSER  row tb, kept for engine B */
+fn mb_head_diff(k: u64, ta: u64, tb: u64, n: u64) -> u64 @export {
+    if k >= 4u64 { return 2u64 }
+    if MB_SP_F[k] == 0u8 { return 3u64 }
+    if MB_DTN != n { return 1u64 }
+    if n > 7168u64 { return 2u64 }
+    let rows : u64 = MB_SP_NE[k] / n
+    if ta >= rows { return 2u64 }
+    if tb >= rows { return 2u64 }
+    mb_mkpath(MB_SP_SH[k])
+    MB_LFILE[0u64] = fopen((&MB_PATH) as u64, "rb" as u64)
+    if MB_LFILE[0u64] == 0u64 { return 1u64 }
+    if mb_dz_wrow(2u64, k, 0u64, rows, ta) != 0u64 {
+        fclose(MB_LFILE[0u64])
+        return 1u64
+    }
+    let mut i : u64 = 0u64
+    while i < n {
+        MB_HROWA[i] = MB_GW[i]
+        MB_HDIFF[i] = MB_GW[i]
+        i = i + 1u64
+    }
+    if mb_dz_wrow(2u64, k, 0u64, rows, tb) != 0u64 {
+        fclose(MB_LFILE[0u64])
+        return 1u64
+    }
+    i = 0u64
+    while i < n {
+        MB_HROWB[i] = MB_GW[i]
+        MB_HDIFF[i] = MB_HDIFF[i] - MB_GW[i]
+        i = i + 1u64
+    }
+    fclose(MB_LFILE[0u64])
+    return 0u64
+}
+fn mb_hdiff_at(i: u64) -> i64 @export {
+    if i >= 7168u64 { return 0i64 }
+    return MB_HDIFF[i]
+}
+fn mb_hrowa_at(i: u64) -> i64 @export {
+    if i >= 7168u64 { return 0i64 }
+    return MB_HROWA[i]
+}
+fn mb_hrowb_at(i: u64) -> i64 @export {
+    if i >= 7168u64 { return 0i64 }
+    return MB_HROWB[i]
+}
+
 /* the specials' norm weights (output_norm) into the standing NW arrays */
 fn mb_ld_normw_sp(k: u64, n: u64) -> u64 @export {
     if k >= 4u64 { return 1u64 }
@@ -7471,6 +7531,8 @@ fn mb_val_a(i: u64) -> i64 @export {
     if i >= MB_NVA { return 0i64 }
     return MB_VA[i]
 }
+/* raw MB_VA read (bypasses the MB_NVA validity gate) -- for an external verifier driving mb_dec_q4k directly */
+fn mb_va_raw(i: u64) -> i64 @export { if i < 256u64 { return MB_VA[i] }   return 0i64 }
 fn mb_val_b(i: u64) -> i64 @export {
     if i >= MB_NVB { return 0i64 }
     return MB_VB[i]

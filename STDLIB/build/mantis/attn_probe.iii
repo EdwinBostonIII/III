@@ -1,0 +1,64 @@
+/* attn_probe.iii -- pure verification of the faithful attention core (no Feast).
+ * Runs pb_attn_selfprove: 1-position keeps its value; EQUAL scores give EQUAL
+ * weights (exact softmax symmetry); a DOMINANT score wins; symmetric on swap.
+ * exit 0 = the multi-position mixing math is proven exact. */
+module attn_probe
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn pb_attn_selfprove() -> u64 from "probole.iii"
+extern @abi(c-msvc-x64) fn pb_fixed_cancel_sign() -> i64 from "probole.iii"
+extern @abi(c-msvc-x64) fn pb_exact_cancel_sign() -> i64 from "probole.iii"
+extern @abi(c-msvc-x64) fn pb_exact_2layer_demo() -> i64 from "probole.iii"
+extern @abi(c-msvc-x64) fn pb_fixed_2layer_demo() -> i64 from "probole.iii"
+
+fn pu(v: u64) -> u32 {
+    if v >= 10u64 { pu(v / 10u64) }
+    putchar((48u64 + (v % 10u64)) as i32)
+    return 1u32
+}
+fn ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }
+    return 1u32
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let _a : i32 = argc
+    let _v : u64 = argv
+    /* THE REFUTATION, shown explicitly: one near-cancellation, two tiers. */
+    ps("float tier  (2^100+2^30-2^100) = " as u64)
+    let fx : i64 = pb_fixed_cancel_sign()
+    if fx < 0i64 { putchar(45i32)   pu((0i64 - fx) as u64) }
+    if fx >= 0i64 { pu(fx as u64) }
+    ps("   <- 0 = FALSE TIE (how R1's argmax reads 'undecided')" as u64)   putchar(10i32)
+    ps("EXACT bigint (2^100+2^30-2^100) = " as u64)
+    let ex : i64 = pb_exact_cancel_sign()
+    if ex < 0i64 { putchar(45i32)   pu((0i64 - ex) as u64) }
+    if ex >= 0i64 { pu(ex as u64) }
+    ps("  <- +1 = DECIDED (the order truncation hid)" as u64)   putchar(10i32)
+
+    /* THE INTEGRATION: a 2-layer exact-order forward pass, end to end. */
+    ps("exact forward (2 layers) -> token " as u64)
+    let ef : i64 = pb_exact_2layer_demo()
+    if ef == 0i64 { ps("A   DECIDED (the deciding residue survived every layer)" as u64) }
+    if ef == 1i64 { ps("B" as u64) }
+    if ef < 0i64 { ps("TIE" as u64) }
+    putchar(10i32)
+    ps("fixed forward (2 layers) -> " as u64)
+    let ff : i64 = pb_fixed_2layer_demo()
+    if ff < 0i64 { ps("TIE   (the deciding residue truncated away at layer 1)" as u64) }
+    if ff >= 0i64 { ps("token " as u64)   pu(ff as u64) }
+    putchar(10i32)
+
+    let r : u64 = pb_attn_selfprove()
+    ps("pb_attn_selfprove = " as u64)   pu(r)
+    if r == 0u64 { ps("  (GREEN: 1-pos keeps value; EQUAL scores -> EQUAL weights EXACT; dominant wins; symmetric)" as u64) }
+    if r != 0u64 { ps("  (arm failed)" as u64) }
+    putchar(10i32)
+    if r == 0u64 {
+        ps("THE FAITHFUL ATTENTION MIX IS PROVEN -- the piece the single-token walk never built." as u64)
+        putchar(10i32)
+    }
+    return r
+}

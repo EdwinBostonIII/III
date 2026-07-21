@@ -1,0 +1,44 @@
+/* order_gate.iii -- THE TIEBREAKER-SEAL GATE (pure, no Feast).
+ * Runs man_order_selfprove: a coherent exact order seals as an EIDOLOS `<`-claim and
+ * self-verifies (POSITIVE); a tampered claim fails to re-derive (NEGATIVE); a cycle has
+ * no address -- EIDOLOS refuses `<` cycles (NEGATIVE); the witness address is deterministic.
+ * exit 0 = the exact order lives in the logos, owned by EIDOLOS's `<`, tamper-evident. */
+module ordgate
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn man_order_selfprove() -> u64 from "mantis.iii"
+extern @abi(c-msvc-x64) fn man_seal_order(winner: u64, loser: u64) -> u64 from "mantis.iii"
+extern @abi(c-msvc-x64) fn man_ord_len() -> u64 from "mantis.iii"
+extern @abi(c-msvc-x64) fn man_ord_byte(i: u64) -> u8 from "mantis.iii"
+
+fn pu(v: u64) -> u32 {
+    if v >= 10u64 { pu(v / 10u64) }
+    putchar((48u64 + (v % 10u64)) as i32)
+    return 1u32
+}
+fn ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }
+    return 1u32
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let _a : i32 = argc
+    let _v : u64 = argv
+    let r : u64 = man_order_selfprove()
+    ps("man_order_selfprove = " as u64)   pu(r)
+    if r == 0u64 { ps("  (GREEN: order seals+self-verifies; TAMPER rejects; CYCLE refused; addr deterministic)" as u64) }
+    if r != 0u64 { ps("  (arm failed)" as u64) }
+    putchar(10i32)
+    /* show the sealed exact-order claim, EIDOLOS-owned, with its (1,1,1) witness address */
+    let a : u64 = man_seal_order(24792u64, 1925u64)
+    ps("sealed exact order (EIDOLOS <-claim): " as u64)
+    let n : u64 = man_ord_len()
+    let mut i : u64 = 0u64
+    while i < n { putchar(man_ord_byte(i) as i32)   i = i + 1u64 }
+    ps("   witness addr = " as u64)   pu(a)
+    putchar(10i32)
+    if r == 0u64 { ps("THE TIEBREAKER OWNS THE VERDICT: the exact order is a self-verifying edge in the logos." as u64)   putchar(10i32) }
+    return r
+}

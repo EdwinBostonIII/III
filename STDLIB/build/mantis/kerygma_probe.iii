@@ -1,0 +1,62 @@
+/* kerygma_probe.iii -- confirm the ELECTRON-VARIANCE UNION runs LIVE on THIS machine.
+ * kerygma_silicon reads the substrate: STATIC (katabasis CPUID crystal + silicon census,
+ * canonical, admitted) and DYNAMIC (bfp_compute48 -- what the CPU's logic/arith/shift units
+ * ACTUALLY compute, the "electron variance", provisional, walled).  kerygma_embodied binds
+ * tree+silicon+electron-variance into ONE address = this code on this silicon this moment.
+ * exit 0 = the union is proven live here. */
+module kprobe
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn kerygma_pulse_selfprove() -> u64 from "kerygma.iii"
+extern @abi(c-msvc-x64) fn kerygma_silicon() -> u64 from "kerygma.iii"
+extern @abi(c-msvc-x64) fn kerygma_silicon_dynamic() -> u64 from "kerygma.iii"
+extern @abi(c-msvc-x64) fn kerygma_behavior() -> u64 from "kerygma.iii"
+extern @abi(c-msvc-x64) fn kerygma_silicon_admit_static() -> i32 from "kerygma.iii"
+extern @abi(c-msvc-x64) fn kerygma_silicon_admit_dynamic() -> i32 from "kerygma.iii"
+extern @abi(c-msvc-x64) fn kerygma_embodied() -> u64 from "kerygma.iii"
+extern @abi(c-msvc-x64) fn kerygma_verdict_selfprove() -> u64 from "kerygma.iii"
+extern @abi(c-msvc-x64) fn kerygma_embody_verdict(order_addr: u64) -> u64 from "kerygma.iii"
+
+fn pu(v: u64) -> u32 {
+    if v >= 10u64 { pu(v / 10u64) }
+    putchar((48u64 + (v % 10u64)) as i32)
+    return 1u32
+}
+fn ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }
+    return 1u32
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let _a : i32 = argc
+    let _v : u64 = argv
+    let pulse : u64 = kerygma_pulse_selfprove()
+    ps("kerygma_pulse_selfprove = " as u64)   pu(pulse)
+    if pulse == 0u64 { ps("  (GREEN: wall admits canonical/refuses provisional; drift is named)" as u64) }
+    putchar(10i32)
+    let sil : u64 = kerygma_silicon()
+    ps("silicon STATIC (census, canonical) addr   = " as u64)   pu(sil)   putchar(10i32)
+    ps("silicon DYNAMIC (electron variance) addr  = " as u64)   pu(kerygma_silicon_dynamic())   putchar(10i32)
+    ps("live behavioral fp (the electrons' work)  = " as u64)   pu(kerygma_behavior())   putchar(10i32)
+    ps("wall: admit static  = " as u64)   pu(kerygma_silicon_admit_static() as u64)   ps("  (0 = admitted, canonical)" as u64)   putchar(10i32)
+    ps("wall: admit dynamic = " as u64)   pu(kerygma_silicon_admit_dynamic() as u64)   ps("  (1 = REFUSED, provisional/walled)" as u64)   putchar(10i32)
+    ps("EMBODIED self addr = " as u64)   pu(kerygma_embodied())   putchar(10i32)
+    ps("(this code on this silicon this moment -- moves if code, silicon, or electron variance drifts)" as u64)   putchar(10i32)
+
+    /* THE BINDING: the exact KRISIS order [1925 < 24792] (addr 5743271528433377647) WITNESSED
+     * by the live substrate -- bound into the embodied self alongside the electron variance. */
+    putchar(10i32)
+    let vgate : u64 = kerygma_verdict_selfprove()
+    ps("kerygma_verdict_selfprove = " as u64)   pu(vgate)
+    if vgate == 0u64 { ps("  (GREEN: order binds; order-sensitive; deterministic; zero refuses)" as u64) }
+    putchar(10i32)
+    let verdict : u64 = kerygma_embody_verdict(5743271528433377647u64)
+    ps("EMBODIED VERDICT addr = " as u64)   pu(verdict)   putchar(10i32)
+    ps("  = the exact order [k1925 < k24792] WITNESSED by this organism on this measured silicon." as u64)   putchar(10i32)
+    ps("  The machine bears witness to the exact order -- bottom-up substrate, top-down logos, ONE address." as u64)   putchar(10i32)
+    let mut rc : u64 = pulse
+    if vgate != 0u64 { rc = 100u64 + vgate }
+    return rc
+}

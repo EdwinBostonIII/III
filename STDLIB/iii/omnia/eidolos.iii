@@ -521,6 +521,21 @@ fn eol_write() -> u64 @export {
 }
 fn eol_out_len() -> u64 @export { return EOL_ON }
 fn eol_out_byte(i: u64) -> u8 @export { if i < EOL_ON { return EOL_OUT[i] }   return 0u8 }
+/* serialize the current KEPT house (e.g. the reduced minimal basis) as a space-joined claim scroll into `out`;
+ * returns the byte length (null-terminated).  Lets a consumer reconstruct the delivered intent from its bytes. */
+fn eol_kept_into(out: u64) -> u64 @export {
+    let o : *u8 = out as *u8
+    let mut m : u64 = 0u64
+    let mut ci : u64 = 0u64
+    while ci < EOL_KCN {
+        if m > 0u64 { o[m] = 32u8   m = m + 1u64 }
+        let mut k : u64 = 0u64
+        while k < EOL_KSL[ci] { o[m] = EOL_KEPT[EOL_KSO[ci] + k]   m = m + 1u64   k = k + 1u64 }
+        ci = ci + 1u64
+    }
+    o[m] = 0u8
+    return m
+}
 
 /* ==================== the unraveling (rule 5) ==================== */
 fn eol_find(t: u64) -> u64 {

@@ -139,10 +139,12 @@ cc_one "$ROOT/STDLIB/iii/omnia/synesis.iii"  "$T/synesis.o" || exit 2
 cc_one "$ROOT/STDLIB/iii/omnia/metabole.iii" "$T/metabole.o" || exit 2
 cc_one "$ROOT/STDLIB/iii/omnia/peras.iii"    "$T/peras.o" || exit 2
 cc_one "$ROOT/STDLIB/iii/omnia/probole.iii"  "$T/probole.o" || exit 2
+# the krisis kernel (numera): probole's exact-order thin clients extern kr_* from it
+cc_one "$ROOT/STDLIB/iii/numera/krisis.iii"  "$T/krisis.o"  || exit 2
 cc_one "$K/hzprobe_main.iii"                 "$T/hzprobe_main.o" || exit 2
 
 gcc -o "$T/hzprobe.exe" \
-    "$T/riza.o" "$T/pyrgos.o" "$T/kyma.o" "$T/meris.o" "$T/klisi.o" "$T/summit.o" "$T/gnosis.o" "$T/noesis.o" "$T/mneme.o" "$T/katoptron.o" "$T/synesis.o" "$T/zetesis.o" "$T/eidolos.o" "$T/isub.o" "$T/metabole.o" "$T/peras.o" "$T/probole.o" \
+    "$T/riza.o" "$T/pyrgos.o" "$T/kyma.o" "$T/meris.o" "$T/klisi.o" "$T/summit.o" "$T/gnosis.o" "$T/noesis.o" "$T/mneme.o" "$T/katoptron.o" "$T/synesis.o" "$T/zetesis.o" "$T/eidolos.o" "$T/isub.o" "$T/metabole.o" "$T/peras.o" "$T/probole.o" "$T/krisis.o" \
     "$K/sqrt_sum_sign.o" "$K/kfield.o" "$K/arena.o" "$K/bigint.o" "$K/bigint_div.o" "$K/sha256.o" \
     "$T/hzprobe_main.o" \
     "$ROOT/STDLIB/build/iii/libiii_native.a" -lws2_32 -lkernel32 \

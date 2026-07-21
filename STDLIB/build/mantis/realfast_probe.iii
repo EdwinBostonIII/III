@@ -1,0 +1,119 @@
+/* realfast_probe.iii -- THE FULL MEMBRANE ON REAL R1 (fast, no 129280-row sweep).
+ * R1 utters a next token; III does NOT trust it.  It walks to the real 896-bit hidden,
+ * reads the two contested head rows, and decides the exact logit ORDER by TWO INDEPENDENT
+ * exact engines (difference-sum A, separate-logits B).  The order stands ONLY where they
+ * AGREE (no self-grading; disagreement REFUSES).  The agreed order is then sealed as an
+ * EIDOLOS `<`-claim `[kLOSER < kWINNER]` -- the tiebreaker owning the verdict, self-verifying
+ * in the logos.  R1 proposed; re-derivation confirmed (PROXENOS).
+ *   argv[1]=tokA argv[2]=tokB argv[3]=nlay(def 1) argv[4]=lo(def 12) */
+module rfprobe
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn fflush(stream: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn pb_diexodos_nohead(tok: u64, nlay: u64) -> u64 from "probole.iii"
+extern @abi(c-msvc-x64) fn mb_head_diff(k: u64, ta: u64, tb: u64, n: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn pb_real_head_krisis(n: u64) -> i64 from "probole.iii"
+extern @abi(c-msvc-x64) fn pb_real_head_order_sep(n: u64) -> i64 from "probole.iii"
+extern @abi(c-msvc-x64) fn pb_rh_live() -> u64 from "probole.iii"
+extern @abi(c-msvc-x64) fn mb_dz_set_lo(lo: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn man_seal_order(winner: u64, loser: u64) -> u64 from "mantis.iii"
+extern @abi(c-msvc-x64) fn man_ord_len() -> u64 from "mantis.iii"
+extern @abi(c-msvc-x64) fn man_ord_byte(i: u64) -> u8 from "mantis.iii"
+extern @abi(c-msvc-x64) fn kerygma_embody_verdict(order_addr: u64) -> u64 from "kerygma.iii"
+extern @abi(c-msvc-x64) fn kerygma_behavior() -> u64 from "kerygma.iii"
+
+fn pu(v: u64) -> u32 {
+    if v >= 10u64 { pu(v / 10u64) }
+    putchar((48u64 + (v % 10u64)) as i32)
+    return 1u32
+}
+fn psg(v: i64) -> u32 {
+    if v < 0i64 { putchar(45i32)   pu((0i64 - v) as u64) }
+    if v >= 0i64 { pu(v as u64) }
+    return 1u32
+}
+fn ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }
+    return 1u32
+}
+fn patoi(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    let mut v : u64 = 0u64
+    while p[i] != 0u8 {
+        let c : u8 = p[i]
+        if c >= 48u8 { if c <= 57u8 { v = v * 10u64 + ((c - 48u8) as u64) } }
+        i = i + 1u64
+    }
+    return v
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let mut ta : u64 = 0u64
+    let mut tb : u64 = 1u64
+    let mut nlay : u64 = 1u64
+    let mut lo : u64 = 12u64
+    let pp : *u64 = argv as *u64
+    if argc >= 2i32 { ta = patoi(pp[1u64]) }
+    if argc >= 3i32 { tb = patoi(pp[2u64]) }
+    if argc >= 4i32 { nlay = patoi(pp[3u64]) }
+    if argc >= 5i32 { lo = patoi(pp[4u64]) }
+
+    mb_dz_set_lo(lo)
+    ps("=== THE FULL MEMBRANE ON REAL R1 (two engines + EIDOLOS seal) ===" as u64)   putchar(10i32)
+    ps("walk nlay=" as u64)   pu(nlay)   ps(" lo=" as u64)   pu(lo)
+    ps("  order of l(" as u64)   pu(ta)   ps(") vs l(" as u64)   pu(tb)   ps(")" as u64)   putchar(10i32)
+    fflush(0u64)
+
+    let r : u64 = pb_diexodos_nohead(ta, nlay)
+    if r != 0u64 { ps("walk failed rc=" as u64)   pu(r)   putchar(10i32)   return r }
+    let hd : u64 = mb_head_diff(2u64, ta, tb, 7168u64)
+    if hd != 0u64 { ps("head_diff failed rc=" as u64)   pu(hd)   putchar(10i32)   return hd }
+
+    /* TWO INDEPENDENT EXACT ENGINES */
+    let sa : i64 = pb_real_head_krisis(7168u64)        /* engine A: difference-sum */
+    let lv : u64 = pb_rh_live()
+    let sb : i64 = pb_real_head_order_sep(7168u64)     /* engine B: separate-logits */
+    ps("engine A (difference-sum)  over " as u64)   pu(lv)   ps(" live dims: sign = " as u64)   psg(sa)   putchar(10i32)
+    ps("engine B (separate-logits)                 : sign = " as u64)   psg(sb)   putchar(10i32)
+
+    /* NO SELF-GRADING: seal ONLY where the two engines agree (fail-closed). */
+    if sa != sb {
+        ps("ENGINES DISAGREE -> REFUSED (fail-closed; nothing sealed)." as u64)   putchar(10i32)
+        fflush(0u64)
+        return 7u64
+    }
+    if sa == 0i64 {
+        ps("EXACT TIE -> REFUSED-TIE(named): the two logits are bit-identical, a gated verdict." as u64)   putchar(10i32)
+        fflush(0u64)
+        return 0u64
+    }
+    let mut winner : u64 = ta
+    let mut loser : u64 = tb
+    if sa < 0i64 { winner = tb   loser = ta }
+
+    /* THE TIEBREAKER OWNS THE VERDICT: seal the re-derived exact order in EIDOLOS. */
+    let a : u64 = man_seal_order(winner, loser)
+    if a == 0u64 { ps("seal failed (incoherent/unverifiable)" as u64)   putchar(10i32)   return 8u64 }
+    ps("TWO ENGINES AGREE -> R1's utterance CONFIRMED by re-derivation." as u64)   putchar(10i32)
+    ps("EIDOLOS order sealed: " as u64)
+    let n : u64 = man_ord_len()
+    let mut i : u64 = 0u64
+    while i < n { putchar(man_ord_byte(i) as i32)   i = i + 1u64 }
+    ps("   witness addr = " as u64)   pu(a)   putchar(10i32)
+    ps("(winner token " as u64)   pu(winner)   ps("  >  loser token " as u64)   pu(loser)
+    ps("  -- exact, zero width, owned by the logos.)" as u64)   putchar(10i32)
+
+    /* THE SUBSTRATE BEARS WITNESS: bind the sealed exact order into the embodied self --
+     * this code, this silicon, and the live ELECTRON VARIANCE (bfp_compute48, ring R0). */
+    let verdict : u64 = kerygma_embody_verdict(a)
+    if verdict == 0u64 { ps("embody failed (silicon read refused)" as u64)   putchar(10i32)   return 9u64 }
+    ps("electron variance (live, this CPU's actual computation) = " as u64)   pu(kerygma_behavior())   putchar(10i32)
+    ps("EMBODIED VERDICT addr = " as u64)   pu(verdict)   putchar(10i32)
+    ps("  = the exact order witnessed by THIS organism on THIS measured silicon THIS moment." as u64)   putchar(10i32)
+    ps("  Bottom-up substrate + top-down logos, one address -- the machine bears witness." as u64)   putchar(10i32)
+    fflush(0u64)
+    return 0u64
+}

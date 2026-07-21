@@ -85,6 +85,7 @@ extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_keep() -> u64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_verify(base: u64, len: u64, expect: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
 
 const MAN_TIER_CANON : u32 = 0u32
 const MAN_TIER_PROV  : u32 = 1u32
@@ -184,6 +185,92 @@ fn man_seal_oracle() -> u64 {
     if eol_read((&MAN_SCROLL) as u64, MAN_SN) < 0i64 { eol_reset()   MAN_ORA = 0u64   return 0u64 }
     MAN_ORA = eol_keep()
     return MAN_ORA
+}
+
+/* ============ THE TIEBREAKER OWNS THE VERDICT: the exact order as an EIDOLOS <-claim ==
+ * The exact head krisis decides sign(l_W - l_L) in unbounded bigint (two engines, agreed).
+ * That decision is not a bare +1 -- it is EIDOLOS's `<` verb: the loser is-less-than the
+ * winner in logit order.  This seals `[k<loser> < k<winner>]` as a coherent, self-verifying
+ * order edge in the logos.  R1 UTTERED the winner; the re-derived exact order CONFIRMS it
+ * (PROXENOS: generation is utterance, re-derivation is sovereign).  A cycle has no name
+ * (EIDOLOS refuses `<` cycles); a tampered claim no longer re-derives its address. */
+var MAN_ORDBUF : [u8; 512]
+var MAN_ORDN : u64 = 0u64
+var MAN_ORD_ADDR : u64 = 0u64
+fn man_ord_put(c: u8) -> i32 { if MAN_ORDN < 512u64 { MAN_ORDBUF[MAN_ORDN] = c   MAN_ORDN = MAN_ORDN + 1u64 }   return 0i32 }
+fn man_ord_putz(s: u64) -> i32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { man_ord_put(p[i])   i = i + 1u64 }
+    return 0i32
+}
+fn man_ord_hex16(v: u64) -> i32 {
+    let mut sh : u64 = 60u64
+    let mut go : u64 = 1u64
+    while go == 1u64 {
+        man_ord_put(MAN_HEX[(v >> sh) & 15u64])
+        if sh == 0u64 { go = 0u64 }
+        if sh != 0u64 { sh = sh - 4u64 }
+    }
+    return 0i32
+}
+fn man_build_order(winner: u64, loser: u64) -> u64 {
+    MAN_ORDN = 0u64
+    man_ord_putz("[k" as u64)
+    man_ord_hex16(loser)
+    man_ord_putz(" < k" as u64)
+    man_ord_hex16(winner)
+    man_ord_put(93u8)
+    return MAN_ORDN
+}
+fn man_seal_order(winner: u64, loser: u64) -> u64 @export {
+    man_hex_init()
+    man_build_order(winner, loser)
+    eol_reset()
+    if eol_read((&MAN_ORDBUF) as u64, MAN_ORDN) < 0i64 { eol_reset()   MAN_ORD_ADDR = 0u64   return 0u64 }
+    let a : u64 = eol_addr()
+    eol_reset()
+    if a == 0u64 { MAN_ORD_ADDR = 0u64   return 0u64 }
+    if eol_verify((&MAN_ORDBUF) as u64, MAN_ORDN, a) != 1u64 { MAN_ORD_ADDR = 0u64   return 0u64 }
+    MAN_ORD_ADDR = a
+    return a
+}
+fn man_ord_addr() -> u64 @export { return MAN_ORD_ADDR }
+fn man_ord_len() -> u64 @export { return MAN_ORDN }
+fn man_ord_byte(i: u64) -> u8 @export { if i < MAN_ORDN { return MAN_ORDBUF[i] }   return 0u8 }
+/* the cycle: two opposed order edges -- EIDOLOS refuses it (no name) */
+fn man_build_cycle(winner: u64, loser: u64) -> u64 {
+    MAN_ORDN = 0u64
+    man_ord_putz("[k" as u64)   man_ord_hex16(loser)   man_ord_putz(" < k" as u64)   man_ord_hex16(winner)   man_ord_put(93u8)
+    man_ord_put(32u8)
+    man_ord_putz("[k" as u64)   man_ord_hex16(winner)  man_ord_putz(" < k" as u64)   man_ord_hex16(loser)    man_ord_put(93u8)
+    return MAN_ORDN
+}
+/* THE ORDER-SEAL GATE (pure, RED->GREEN, mandatory negatives): a coherent order seals
+ * and self-verifies; a TAMPERED claim fails to re-derive; a CYCLE has no address; the
+ * address is DETERMINISTIC.  Returns 0 green, else the failing arm code. */
+fn man_order_selfprove() -> u64 @export {
+    man_hex_init()
+    let a : u64 = man_seal_order(24792u64, 1925u64)
+    if a == 0u64 { return 1u64 }                        /* POSITIVE: seals + verifies */
+    man_build_order(24792u64, 1925u64)
+    let sv : u8 = MAN_ORDBUF[3u64]
+    let mut nb : u8 = sv
+    if sv >= 48u8 { if sv <= 56u8 { nb = sv + 1u8 } }   /* 0-8 -> 1-9 (stay a hex digit) */
+    if sv == 57u8 { nb = 48u8 }                          /* 9 -> 0 */
+    if sv >= 97u8 { if sv <= 101u8 { nb = sv + 1u8 } }  /* a-e -> b-f */
+    if sv == 102u8 { nb = 97u8 }                         /* f -> a */
+    MAN_ORDBUF[3u64] = nb
+    if eol_verify((&MAN_ORDBUF) as u64, MAN_ORDN, a) != 0u64 { return 2u64 }   /* tamper MUST reject */
+    man_build_cycle(24792u64, 1925u64)
+    eol_reset()
+    let mut ca : u64 = 0u64
+    if eol_read((&MAN_ORDBUF) as u64, MAN_ORDN) >= 0i64 { ca = eol_addr() }
+    eol_reset()
+    if ca != 0u64 { return 3u64 }                        /* cycle MUST have no name */
+    let a2 : u64 = man_seal_order(24792u64, 1925u64)
+    if a2 != a { return 4u64 }                           /* same order -> same witness (determinism) */
+    return 0u64
 }
 
 /* THE CONSULT: ask the oracle "given <tok> as the whole context, what next?"

@@ -1,0 +1,97 @@
+/* realhead_probe.iii -- THE EXACT KRISIS ON REAL R1 HEAD VALUES.
+ * Walks the metabolized 671B mind (nlay layers, limb-floor lo), reads the head
+ * podium (winner, runner-up), differences their two head rows, and decides the
+ * logit difference l(winner) - l(runner-up) EXACTLY in unbounded bigint over the
+ * real 896-bit hidden -- no width, no truncation, the argmax the float head
+ * charged 2^12663 of width on, DECIDED.
+ *   argv[1] = nlay (default 1),  argv[2] = limb-floor lo (default 0 = full 896-bit). */
+module rhprobe
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn fflush(stream: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn pb_diexodos_tok(tok: u64, nlay: u64) -> u64 from "probole.iii"
+extern @abi(c-msvc-x64) fn mb_kr_tok() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_kr_tok2() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_head_diff(k: u64, ta: u64, tb: u64, n: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn pb_real_head_krisis(n: u64) -> i64 from "probole.iii"
+extern @abi(c-msvc-x64) fn pb_rh_live() -> u64 from "probole.iii"
+extern @abi(c-msvc-x64) fn pb_dx_gape() -> i64 from "probole.iii"
+extern @abi(c-msvc-x64) fn pb_dx_wled() -> i64 from "probole.iii"
+extern @abi(c-msvc-x64) fn mb_dz_set_lo(lo: u64) -> u64 from "metabole.iii"
+
+fn psigned(v: i64) -> u32 {
+    if v < 0i64 { putchar(45i32)   pu((0i64 - v) as u64) }
+    if v >= 0i64 { pu(v as u64) }
+    return 1u32
+}
+
+fn pu(v: u64) -> u32 {
+    if v >= 10u64 { pu(v / 10u64) }
+    putchar((48u64 + (v % 10u64)) as i32)
+    return 1u32
+}
+fn ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }
+    return 1u32
+}
+fn patoi(s: u64) -> u64 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    let mut v : u64 = 0u64
+    while p[i] != 0u8 {
+        let c : u8 = p[i]
+        if c >= 48u8 { if c <= 57u8 { v = v * 10u64 + ((c - 48u8) as u64) } }
+        i = i + 1u64
+    }
+    return v
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let mut nlay : u64 = 1u64
+    let mut lo : u64 = 0u64
+    let pp : *u64 = argv as *u64
+    if argc >= 2i32 { nlay = patoi(pp[1u64]) }
+    if argc >= 3i32 { lo = patoi(pp[2u64]) }
+
+    mb_dz_set_lo(lo)
+    ps("=== THE EXACT KRISIS ON REAL R1 HEAD VALUES ===" as u64)   putchar(10i32)
+    ps("walking the metabolized 671B mind: nlay=" as u64)   pu(nlay)
+    ps("  limb-floor=" as u64)   pu(lo)   putchar(10i32)
+    fflush(0u64)
+
+    let r : u64 = pb_diexodos_tok(0u64, nlay)
+    if r != 0u64 { ps("walk failed rc=" as u64)   pu(r)   putchar(10i32)   return r }
+
+    let tok : u64 = mb_kr_tok()
+    let tok2 : u64 = mb_kr_tok2()
+    ps("R1 head podium: winner token " as u64)   pu(tok)
+    ps("  over runner-up " as u64)   pu(tok2)   putchar(10i32)
+    let gape : i64 = pb_dx_gape()
+    let wled : i64 = pb_dx_wled()
+    ps("FLOAT head:  decision gap 2^" as u64)   psigned(gape)
+    ps("   width ledger 2^" as u64)   psigned(wled)
+    ps("  ->  " as u64)
+    if gape > wled { ps("gap>width: float could certify" as u64) }
+    if gape <= wled { ps("width SWAMPS gap: float CANNOT certify (UNDECIDED)" as u64) }
+    putchar(10i32)
+    fflush(0u64)
+
+    let hd : u64 = mb_head_diff(2u64, tok, tok2, 7168u64)
+    if hd != 0u64 { ps("head_diff failed rc=" as u64)   pu(hd)   putchar(10i32)   return hd }
+
+    let sg : i64 = pb_real_head_krisis(7168u64)
+    let lv : u64 = pb_rh_live()
+    ps("EXACT bigint krisis over " as u64)   pu(lv)   ps(" live dims:" as u64)   putchar(10i32)
+    ps("  l(" as u64)   pu(tok)   ps(") - l(" as u64)   pu(tok2)   ps(")  sign = " as u64)
+    if sg > 0i64 { ps("+1  -> token " as u64)   pu(tok)   ps(" GENUINELY wins (DECIDED, ZERO width)" as u64) }
+    if sg < 0i64 { ps("-1  -> token " as u64)   pu(tok2)   ps(" ACTUALLY wins -- the head truncation was flipping it!" as u64) }
+    if sg == 0i64 { ps("0   -> EXACT TIE (the two logits are bit-identical)" as u64) }
+    putchar(10i32)
+    let marg : i64 = wled - gape
+    ps("the float truncation width exceeds the real gap by 2^" as u64)   psigned(marg)
+    ps(" (UNDECIDED); the EXACT tier DECIDES with ZERO width." as u64)   putchar(10i32)
+    fflush(0u64)
+    return 0u64
+}

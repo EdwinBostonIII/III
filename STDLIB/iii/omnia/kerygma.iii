@@ -671,6 +671,52 @@ fn kerygma_embodied() -> u64 @export {
     return KER_EMBODIED
 }
 fn kerygma_behavior() -> u64 @export { return KER_SIL_FP }
+
+/* THE EMBODIED VERDICT: bind an exact-order edge (a canonical KRISIS `<`-claim address,
+ * decided by two independent engines and owned by EIDOLOS) INTO the embodied self -- so
+ * the exact order is WITNESSED by the organism that derived it: this code, this silicon,
+ * and the live ELECTRON VARIANCE (what the CPU's logic/arith/shift gates actually compute,
+ * bfp_compute48, ring R0).  The verdict address MOVES if the code, the silicon, the electron
+ * variance, OR the order changes.  This closes the loop the logos opened top-down with the
+ * substrate bottom-up: the machine bears witness to the exact order.  The order stays
+ * canonical; the electron variance rides in as the provisional witness of THIS moment
+ * (walled by reach_oracle via kerygma_silicon), exactly as the embodied self composes them. */
+var KER_VERDICT : u64 = 0u64
+fn kerygma_embody_verdict(order_addr: u64) -> u64 @export {
+    if order_addr == 0u64 { return 0u64 }
+    let tree : u64 = kerygma_build()          /* the code self (v2 merkle root) */
+    let sil : u64 = kerygma_silicon()         /* silicon static (+ sets KER_SIL_DYN = electron variance) */
+    if sil == 0u64 { return 0u64 }
+    KER_BN = 0u64
+    ker_emit_shard_pin("tree" as u64, 4u64, tree)
+    ker_emit_shard_pin("silicon" as u64, 7u64, sil)
+    ker_emit_shard_pin("behavior" as u64, 8u64, KER_SIL_DYN)
+    ker_emit_shard_pin("order" as u64, 5u64, order_addr)
+    ker_bputz("[iii < rederivation] " as u64)
+    ker_bputz("[embodied = iii]" as u64)
+    eol_reset()
+    if eol_read((&KER_BLD) as u64, KER_BN) < 0i64 { eol_reset()   KER_VERDICT = 0u64   return 0u64 }
+    KER_VERDICT = eol_keep()
+    return KER_VERDICT
+}
+fn kerygma_verdict_addr() -> u64 @export { return KER_VERDICT }
+/* THE BINDING GATE (RED->GREEN + negatives, deterministic on this host): an order edge binds
+ * into the embodied self and DIFFERS from the bare self (the order is truly in); a DIFFERENT
+ * order gives a DIFFERENT verdict (the substrate witness is order-sensitive); the same order
+ * re-derives the same verdict; a zero order refuses. */
+fn kerygma_verdict_selfprove() -> u64 @export {
+    let v1 : u64 = kerygma_embody_verdict(5743271528433377647u64)   /* the real [1925<24792] order addr */
+    if v1 == 0u64 { return 1u64 }                                    /* POSITIVE: binds */
+    let emb : u64 = kerygma_embodied()
+    if v1 == emb { return 2u64 }                                     /* the order is truly bound in */
+    let v2 : u64 = kerygma_embody_verdict(9223372036854775783u64)    /* a DIFFERENT order */
+    if v2 == 0u64 { return 3u64 }
+    if v2 == v1 { return 4u64 }                                      /* NEG: different order -> different witness */
+    let v3 : u64 = kerygma_embody_verdict(5743271528433377647u64)
+    if v3 != v1 { return 5u64 }                                      /* deterministic on this host */
+    if kerygma_embody_verdict(0u64) != 0u64 { return 6u64 }          /* NEG: zero order refuses */
+    return 0u64
+}
 /* THE WALL: the static silicon self is ADMISSIBLE into the determined self;
  * the dynamic (behavioral) self is REFUSED (0 = admit, 1 = refused). */
 fn kerygma_silicon_admit_static() -> i32 @export { return reach_oracle_admit_canonical(KER_SIL_STIER) }

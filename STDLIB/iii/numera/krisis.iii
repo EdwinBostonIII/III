@@ -1,0 +1,395 @@
+/* STDLIB/iii/numera/krisis.iii -- THE KRISIS KERNEL: one separation-bound-certified
+ * exact sign of a structured sum, homed in numera.
+ *
+ * THE ONE LAW: sign( sum_i  s_i * m_i * scal_i * 2^(e_i) * sqrt(b_i) )
+ *   s_i    in {-1, 0, +1}
+ *   m_i    a magnitude of up to 14 little-endian u64 limbs (the 896-bit hidden width)
+ *   scal_i a u64 scalar multiplier (a weight mantissa; 1 when unused)
+ *   e_i    a signed dyadic exponent
+ *   b_i    an integer radicand >= 0 (b=1 -> the term is rational/dyadic; b=0 -> zero term)
+ *
+ * TWO PATHS, ONE VERDICT (-1 / 0 / +1, or -2 = NAMED REFUSAL):
+ *   ALL b_i <= 1  ->  THE EXACT DYADIC PATH: align every term to the least exponent,
+ *     accumulate positives and negatives in UNBOUNDED bigint, compare.  ZERO truncation,
+ *     zero width, exact zeros certified.  This is the path that refutes the fixed-tier
+ *     UNDECIDED: a residue 2^-1000 below the leading terms SURVIVES.
+ *   ANY b_i > 1  ->  THE SEPARATION-BOUND PATH (rigorous): E' = E / 2^emin has integer
+ *     coefficients c_i = m_i*scal_i*2^(e_i-emin); E' is an algebraic integer of degree
+ *     d <= 2^n, so if E' != 0 then |E'| >= 1/M^(2^n - 1) =: 1/T with
+ *     M = sum c_i*(floor(sqrt b_i)+1) >= product bound on every conjugate.  Approximate
+ *     E'*2^p with r_i = floor(sqrt(b_i << 2p)) (error < A = sum c_i); pick p with
+ *     2^p > 2*A*T; then |~E| > A -> sign(~E), else |E'| < 1/T -> E' is EXACTLY 0.
+ *     The exponent 2^n - 1 is inherent (sum-of-roots sign is not known polynomial-bit),
+ *     so this path REFUSES BY NAME above KR_SURD_MAX terms -- never a guess.
+ *
+ * THE CLIENTS (four organs, one algorithm): probole pb_exact_dot_sign /
+ * pb_exact_dot14_sign / pb_real_head_krisis (the R1 head order on real values);
+ * sqrt_sum_sign ui_sqrt_sum_sign (the general n-surd sign, and through it the pyrgos
+ * cross-oracle at arm 183 and every ladder consumer); riza / pyrgos verify the kernel
+ * differentially in the krisis gate (two independent engines, no self-grading).
+ * Handle-frugal: every intermediate bigint dropped; the 64-slot table never fills. */
+module krisis
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(arena: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_sub(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul_u64(arena: u64, a: u64, scalar: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_shl_bits(arena: u64, a: u64, bits: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_is_zero(id: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_len_limbs(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_get_limb(id: u64, i: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_isqrt(ar: u64, N: u64) -> u64 from "sqrt_sum_sign.iii"
+
+/* ==================== the term store ==================== */
+const KR_CAP : u64 = 7168u64              /* terms (the full R1 head width)      */
+const KR_SURD_MAX : u64 = 20u64           /* separation path: 2^n-1 muls; above this, REFUSE BY NAME */
+
+var KR_S : [i64; 7168]                    /* sign per term                        */
+var KR_E : [i64; 7168]                    /* dyadic exponent per term             */
+var KR_B : [i64; 7168]                    /* radicand per term (>= 0)             */
+var KR_SC : [u64; 7168]                   /* u64 scalar multiplier per term       */
+var KR_NL : [u64; 7168]                   /* live limb count per term (1..14)     */
+var KR_M : [u64; 100352]                  /* limbs, little-endian, base = i*14    */
+var KR_N : u64 = 0u64                     /* term count                           */
+
+fn kr_begin() -> i32 @export { KR_N = 0u64   return 0i32 }
+fn kr_n() -> u64 @export { return KR_N }
+
+/* one-limb term: s * m * 2^e * sqrt(b) */
+fn kr_term(s: i64, m: u64, e: i64, b: i64) -> i32 @export {
+    if KR_N >= KR_CAP { return 1i32 }
+    let i : u64 = KR_N
+    KR_S[i] = s
+    if m == 0u64 { KR_S[i] = 0i64 }
+    if b < 0i64 { return 2i32 }
+    if b == 0i64 { KR_S[i] = 0i64 }
+    KR_M[i * 14u64] = m
+    KR_NL[i] = 1u64
+    KR_SC[i] = 1u64
+    KR_E[i] = e
+    KR_B[i] = b
+    KR_N = KR_N + 1u64
+    return 0i32
+}
+/* one-limb term with a scalar multiplier: s * m * scal * 2^e (rational, b=1) --
+ * the dot-product shape: mantissa x mantissa without the client multiplying */
+fn kr_term_prod(s: i64, m: u64, scal: u64, e: i64) -> i32 @export {
+    let rc : i32 = kr_term(s, m, e, 1i64)
+    if rc != 0i32 { return rc }
+    if scal == 0u64 { KR_S[KR_N - 1u64] = 0i64 }
+    KR_SC[KR_N - 1u64] = scal
+    return 0i32
+}
+/* multi-limb term: open it, fill limbs, close it.  s * (limbs) * scal * 2^e (b=1) */
+fn kr_term_open(s: i64, scal: u64, e: i64) -> i32 @export {
+    if KR_N >= KR_CAP { return 1i32 }
+    let i : u64 = KR_N
+    KR_S[i] = s
+    if scal == 0u64 { KR_S[i] = 0i64 }
+    KR_SC[i] = scal
+    KR_E[i] = e
+    KR_B[i] = 1i64
+    KR_NL[i] = 14u64
+    let mut k : u64 = 0u64
+    while k < 14u64 { KR_M[i * 14u64 + k] = 0u64   k = k + 1u64 }
+    KR_N = KR_N + 1u64
+    return 0i32
+}
+fn kr_term_limb(k: u64, v: u64) -> i32 @export {
+    if KR_N == 0u64 { return 1i32 }
+    if k >= 14u64 { return 1i32 }
+    KR_M[(KR_N - 1u64) * 14u64 + k] = v
+    return 0i32
+}
+
+/* the term's magnitude as a fresh bigint: (limbs as LE bigint) * scal.
+ * Trims leading zero limbs so a mostly-empty 14-limb term costs one limb. */
+fn kr_mag(ar: u64, i: u64) -> u64 {
+    let base : u64 = i * 14u64
+    let mut top : u64 = KR_NL[i]
+    while top > 1u64 {
+        if KR_M[base + top - 1u64] != 0u64 { return kr_mag2(ar, i, top) }
+        top = top - 1u64
+    }
+    return kr_mag2(ar, i, 1u64)
+}
+fn kr_mag2(ar: u64, i: u64, top: u64) -> u64 {
+    let base : u64 = i * 14u64
+    let mut acc : u64 = bigint_from_u64(ar, KR_M[base + top - 1u64])
+    let mut k : u64 = top - 1u64
+    while k > 0u64 {
+        k = k - 1u64
+        let sh : u64 = bigint_shl_bits(ar, acc, 64u64)
+        bigint_drop(acc)
+        let lb : u64 = bigint_from_u64(ar, KR_M[base + k])
+        let na : u64 = bigint_add(ar, sh, lb)
+        bigint_drop(sh)   bigint_drop(lb)
+        acc = na
+    }
+    if KR_SC[i] != 1u64 {
+        let pr : u64 = bigint_mul_u64(ar, acc, KR_SC[i])
+        bigint_drop(acc)
+        return pr
+    }
+    return acc
+}
+
+/* bit length of a bigint (the separation path's p selection) */
+fn kr_bitlen(N: u64) -> u64 {
+    let len : u64 = bigint_len_limbs(N)
+    let mut i : u64 = len
+    while i > 0u64 {
+        let limb : u64 = bigint_get_limb(N, i - 1u64)
+        if limb != 0u64 {
+            let mut bl : u64 = 0u64
+            let mut t : u64 = limb
+            while t > 0u64 { t = t >> 1u64   bl = bl + 1u64 }
+            return ((i - 1u64) * 64u64) + bl
+        }
+        i = i - 1u64
+    }
+    return 0u64
+}
+
+/* ==================== THE VERDICT ==================== */
+var KR_LIVE : u64 = 0u64                  /* live (nonzero) terms in the last decision */
+fn kr_live() -> u64 @export { return KR_LIVE }
+
+/* the exact dyadic path: all b <= 1.  sign = cmp(pos, neg) at emin alignment. */
+fn kr_sign_dyadic() -> i64 {
+    let mut emin : i64 = 0i64
+    let mut seen : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < KR_N {
+        if KR_S[i] != 0i64 {
+            if seen == 0u64 { emin = KR_E[i]   seen = 1u64 }
+            if KR_E[i] < emin { emin = KR_E[i] }
+        }
+        i = i + 1u64
+    }
+    KR_LIVE = 0u64
+    if seen == 0u64 { return 0i64 }
+    let mut bytes : u64 = 1048576u64
+    if KR_N > 192u64 { bytes = 134217728u64 }
+    let ar : u64 = arena_new(bytes)
+    if ar == 0u64 { return 0i64 - 2i64 }
+    let mut pos : u64 = bigint_from_u64(ar, 0u64)
+    let mut neg : u64 = bigint_from_u64(ar, 0u64)
+    i = 0u64
+    while i < KR_N {
+        if KR_S[i] != 0i64 {
+            KR_LIVE = KR_LIVE + 1u64
+            let mg : u64 = kr_mag(ar, i)
+            let sh : u64 = (KR_E[i] - emin) as u64
+            let shifted : u64 = bigint_shl_bits(ar, mg, sh)
+            if KR_S[i] > 0i64 { let np : u64 = bigint_add(ar, pos, shifted)   bigint_drop(pos)   pos = np }
+            if KR_S[i] < 0i64 { let nn : u64 = bigint_add(ar, neg, shifted)   bigint_drop(neg)   neg = nn }
+            bigint_drop(shifted)   bigint_drop(mg)
+        }
+        i = i + 1u64
+    }
+    let c : i32 = bigint_cmp(pos, neg)
+    bigint_drop_arena(ar)    /* sweep the slot table (pos/neg + any live) BEFORE the memory
+                              * is released -- else stale-live slots fill the 64-slot table
+                              * and a later dot silently reads freed state (bigint.iii:186). */
+    arena_drop(ar)
+    if c > 0i32 { return 1i64 }
+    if c < 0i32 { return 0i64 - 1i64 }
+    return 0i64
+}
+
+/* the separation-bound path: any b > 1.  Integer coefficients c_i at emin. */
+fn kr_sign_surd() -> i64 {
+    if KR_N > KR_SURD_MAX { return 0i64 - 2i64 }        /* NAMED REFUSAL: 2^n-1 wall */
+    let mut emin : i64 = 0i64
+    let mut seen : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < KR_N {
+        if KR_S[i] != 0i64 {
+            if seen == 0u64 { emin = KR_E[i]   seen = 1u64 }
+            if KR_E[i] < emin { emin = KR_E[i] }
+        }
+        i = i + 1u64
+    }
+    KR_LIVE = 0u64
+    if seen == 0u64 { return 0i64 }
+    let ar : u64 = arena_new(16777216u64)
+    if ar == 0u64 { return 0i64 - 2i64 }
+    let one : u64 = bigint_from_u64(ar, 1u64)
+    /* c_i = mag_i << (e_i - emin);  A = sum c_i;  M = sum c_i*(isqrt(b_i)+1) */
+    let mut A : u64 = bigint_from_u64(ar, 0u64)
+    let mut M : u64 = bigint_from_u64(ar, 0u64)
+    i = 0u64
+    while i < KR_N {
+        if KR_S[i] != 0i64 {
+            KR_LIVE = KR_LIVE + 1u64
+            let mg : u64 = kr_mag(ar, i)
+            let ci : u64 = bigint_shl_bits(ar, mg, (KR_E[i] - emin) as u64)
+            bigint_drop(mg)
+            let nA : u64 = bigint_add(ar, A, ci)
+            bigint_drop(A)   A = nA
+            let bb : u64 = bigint_from_u64(ar, KR_B[i] as u64)
+            let si : u64 = bigint_isqrt(ar, bb)
+            bigint_drop(bb)
+            let si1 : u64 = bigint_add(ar, si, one)
+            bigint_drop(si)
+            let term : u64 = bigint_mul(ar, ci, si1)
+            bigint_drop(si1)   bigint_drop(ci)
+            let nM : u64 = bigint_add(ar, M, term)
+            bigint_drop(M)   bigint_drop(term)   M = nM
+        }
+        i = i + 1u64
+    }
+    /* T = M^(2^n - 1);  p with 2^p > 2*A*T */
+    let e : u64 = (1u64 << KR_N) - 1u64
+    let mut T : u64 = bigint_from_u64(ar, 1u64)
+    let mut j : u64 = 0u64
+    while j < e {
+        let nT : u64 = bigint_mul(ar, T, M)
+        bigint_drop(T)   T = nT
+        j = j + 1u64
+    }
+    let AT : u64 = bigint_mul(ar, A, T)
+    let thresh : u64 = bigint_add(ar, AT, AT)
+    bigint_drop(AT)   bigint_drop(T)   bigint_drop(M)
+    let p : u64 = kr_bitlen(thresh) + 1u64
+    bigint_drop(thresh)
+    let twop : u64 = 2u64 * p
+    /* psum/nsum of c_i * floor(sqrt(b_i << 2p)) */
+    let mut psum : u64 = bigint_from_u64(ar, 0u64)
+    let mut nsum : u64 = bigint_from_u64(ar, 0u64)
+    i = 0u64
+    while i < KR_N {
+        if KR_S[i] != 0i64 {
+            let bb : u64 = bigint_from_u64(ar, KR_B[i] as u64)
+            let bsh : u64 = bigint_shl_bits(ar, bb, twop)
+            bigint_drop(bb)
+            let ri : u64 = bigint_isqrt(ar, bsh)
+            bigint_drop(bsh)
+            let mg : u64 = kr_mag(ar, i)
+            let ci : u64 = bigint_shl_bits(ar, mg, (KR_E[i] - emin) as u64)
+            bigint_drop(mg)
+            let term : u64 = bigint_mul(ar, ci, ri)
+            bigint_drop(ci)   bigint_drop(ri)
+            if KR_S[i] > 0i64 { let np : u64 = bigint_add(ar, psum, term)   bigint_drop(psum)   psum = np }
+            if KR_S[i] < 0i64 { let nn : u64 = bigint_add(ar, nsum, term)   bigint_drop(nsum)   nsum = nn }
+            bigint_drop(term)
+        }
+        i = i + 1u64
+    }
+    /* |psum-nsum| > A -> the sign;  else EXACTLY 0 (below the separation) */
+    let cs : i32 = bigint_cmp(psum, nsum)
+    let mut result : i64 = 0i64
+    if cs > 0i32 {
+        let diff : u64 = bigint_sub(ar, psum, nsum)
+        if bigint_cmp(diff, A) > 0i32 { result = 1i64 }
+        bigint_drop(diff)
+    }
+    if cs < 0i32 {
+        let diff : u64 = bigint_sub(ar, nsum, psum)
+        if bigint_cmp(diff, A) > 0i32 { result = 0i64 - 1i64 }
+        bigint_drop(diff)
+    }
+    bigint_drop(psum)   bigint_drop(nsum)   bigint_drop(A)   bigint_drop(one)
+    bigint_drop_arena(ar)
+    arena_drop(ar)
+    return result
+}
+
+/* THE SIGN: -1 / 0 / +1, or -2 = named refusal (surd count above the wall /
+ * arena exhausted).  Never a guess: every verdict is exact or refused. */
+fn kr_sign() -> i64 @export {
+    let mut surd : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < KR_N {
+        if KR_S[i] != 0i64 { if KR_B[i] > 1i64 { surd = 1u64 } }
+        i = i + 1u64
+    }
+    if surd == 0u64 { return kr_sign_dyadic() }
+    return kr_sign_surd()
+}
+
+/* ==================== THE CONDITION OF MOTION (pure self-proof) ==============
+ * 0 = green; a nonzero code names the failed arm.  Positive AND negative arms. */
+fn kr_selfprove() -> u64 @export {
+    /* arm 1: THE TRUNCATION REFUTATION -- (2^100 + 2^30) - 2^100 = 2^30 > 0.
+     * The fixed float tier ties here (the +2^30 is below the ulp); the kernel
+     * DECIDES +1 with zero truncation. */
+    kr_begin()
+    kr_term(1i64, 1u64, 100i64, 1i64)
+    kr_term(1i64, 1u64, 30i64, 1i64)
+    kr_term(0i64 - 1i64, 1u64, 100i64, 1i64)
+    if kr_sign() != 1i64 { return 1u64 }
+    if kr_live() != 3u64 { return 2u64 }
+
+    /* arm 2 (NEGATIVE): the perturbed twin -- subtract the residue too: EXACT 0. */
+    kr_term(0i64 - 1i64, 1u64, 30i64, 1i64)
+    if kr_sign() != 0i64 { return 3u64 }
+    /* and one grain more: the sign FLIPS to -1 (a perturbed term is detectable). */
+    kr_term(0i64 - 1i64, 1u64, 0i64, 1i64)
+    if kr_sign() != (0i64 - 1i64) { return 4u64 }
+
+    /* arm 3: the dot shape -- 2*3 - 5*1 = +1 through kr_term_prod. */
+    kr_begin()
+    kr_term_prod(1i64, 2u64, 3u64, 0i64)
+    kr_term_prod(0i64 - 1i64, 5u64, 1u64, 0i64)
+    if kr_sign() != 1i64 { return 5u64 }
+
+    /* arm 4: the 896-bit head shape -- hidden [2^1000, 1, -2^1000] as 14-limb
+     * terms, weights 1: the +1 sits 1000 bits down and SURVIVES -> +1. */
+    kr_begin()
+    kr_term_open(1i64, 1u64, 105i64)
+    kr_term_limb(13u64, 1u64 << 63u64)
+    kr_term_open(1i64, 1u64, 0i64 - 895i64)
+    kr_term_limb(13u64, 1u64 << 63u64)
+    kr_term_open(0i64 - 1i64, 1u64, 105i64)
+    kr_term_limb(13u64, 1u64 << 63u64)
+    if kr_sign() != 1i64 { return 6u64 }
+
+    /* arm 5: THE SURD PATH -- sqrt2 + sqrt3 - sqrt5 > 0. */
+    kr_begin()
+    kr_term(1i64, 1u64, 0i64, 2i64)
+    kr_term(1i64, 1u64, 0i64, 3i64)
+    kr_term(0i64 - 1i64, 1u64, 0i64, 5i64)
+    if kr_sign() != 1i64 { return 7u64 }
+
+    /* arm 6: the EXACT SURD ZERO float cancels -- 2*sqrt2 - sqrt8 = 0, certified. */
+    kr_begin()
+    kr_term(1i64, 2u64, 0i64, 2i64)
+    kr_term(0i64 - 1i64, 1u64, 0i64, 8i64)
+    if kr_sign() != 0i64 { return 8u64 }
+
+    /* arm 7 (NEGATIVE): the perturbed surd zero flips -- 2*sqrt2 - sqrt8 - 2^-20 < 0. */
+    kr_term(0i64 - 1i64, 1u64, 0i64 - 20i64, 1i64)
+    if kr_sign() != (0i64 - 1i64) { return 9u64 }
+
+    /* arm 8: dyadic exponents in the surd path -- (1/4)*sqrt(32) - sqrt(2) > 0
+     * (= sqrt2 * (sqrt(32)/4/sqrt(2) - 1) ... exactly: sqrt(32)/4 = sqrt(2) -> 0!).
+     * (2^-2)*sqrt(32) - sqrt(2) = 0 EXACTLY: the emin factoring is sound. */
+    kr_begin()
+    kr_term(1i64, 1u64, 0i64 - 2i64, 32i64)
+    kr_term(0i64 - 1i64, 1u64, 0i64, 2i64)
+    if kr_sign() != 0i64 { return 10u64 }
+
+    /* arm 9 (NEGATIVE, the wall): above KR_SURD_MAX surd terms the kernel
+     * REFUSES BY NAME (-2) -- never a guess.  MUST reject. */
+    kr_begin()
+    let mut t : u64 = 0u64
+    while t < 21u64 { kr_term(1i64, 1u64, 0i64, 2i64)   t = t + 1u64 }
+    if kr_sign() != (0i64 - 2i64) { return 11u64 }
+
+    /* arm 10: the empty sum is 0; sign-0 and mag-0 terms are dead. */
+    kr_begin()
+    if kr_sign() != 0i64 { return 12u64 }
+    kr_term(1i64, 0u64, 5i64, 1i64)
+    kr_term(0i64, 7u64, 5i64, 1i64)
+    if kr_sign() != 0i64 { return 13u64 }
+    if kr_live() != 0u64 { return 14u64 }
+    return 0u64
+}

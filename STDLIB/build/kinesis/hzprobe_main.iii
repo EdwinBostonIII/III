@@ -1,0 +1,510 @@
+/* hzprobe_main.iii -- untracked probe: the Heisenberg-and-beyond batteries.
+ * cmds: py (pyrgos 180..195) | riza (210..217) | kyma (230..241) |
+ *       meris (250..254) | klisi (260..266) | summit (280..285) |
+ *       gnosis (290..299) | noesis (300..306) | mneme (310..314) |
+ *       katoptron (320..324) | synesis (330..339, the knowing-together) |
+ *       preflight <src> (the mirror meter on a real
+ *       source file) | all (every battery in sequence) */
+module hzprobe_main
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fread(buf: u64, sz: u64, n: u64, stream: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fclose(stream: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn py_selfprove() -> u64 from "pyrgos.iii"
+extern @abi(c-msvc-x64) fn ky_selfprove() -> u64 from "kyma.iii"
+extern @abi(c-msvc-x64) fn rz_selfprove() -> u64 from "riza.iii"
+extern @abi(c-msvc-x64) fn ms_selfprove() -> u64 from "meris.iii"
+extern @abi(c-msvc-x64) fn kl_selfprove() -> u64 from "klisi.iii"
+extern @abi(c-msvc-x64) fn su_selfprove() -> u64 from "summit.iii"
+extern @abi(c-msvc-x64) fn su_addr_gravity() -> u64 from "summit.iii"
+extern @abi(c-msvc-x64) fn su_addr_born() -> u64 from "summit.iii"
+extern @abi(c-msvc-x64) fn gn_selfprove() -> u64 from "gnosis.iii"
+extern @abi(c-msvc-x64) fn gn_addr() -> u64 from "gnosis.iii"
+extern @abi(c-msvc-x64) fn no_selfprove() -> u64 from "noesis.iii"
+extern @abi(c-msvc-x64) fn no_addr() -> u64 from "noesis.iii"
+extern @abi(c-msvc-x64) fn no_worlds() -> u64 from "noesis.iii"
+extern @abi(c-msvc-x64) fn mn_selfprove() -> u64 from "mneme.iii"
+extern @abi(c-msvc-x64) fn mn_addr() -> u64 from "mneme.iii"
+extern @abi(c-msvc-x64) fn kt_selfprove() -> u64 from "katoptron.iii"
+extern @abi(c-msvc-x64) fn kt_addr() -> u64 from "katoptron.iii"
+extern @abi(c-msvc-x64) fn kt_meter(buf: u64, len: u64) -> i32 from "katoptron.iii"
+extern @abi(c-msvc-x64) fn kt_m_decls() -> u64 from "katoptron.iii"
+extern @abi(c-msvc-x64) fn kt_m_fns() -> u64 from "katoptron.iii"
+extern @abi(c-msvc-x64) fn kt_m_slots() -> u64 from "katoptron.iii"
+extern @abi(c-msvc-x64) fn kt_preflight(wall: u64, ceiling: u64) -> u64 from "katoptron.iii"
+extern @abi(c-msvc-x64) fn syn_selfprove() -> u64 from "synesis.iii"
+extern @abi(c-msvc-x64) fn syn_addr() -> u64 from "synesis.iii"
+extern @abi(c-msvc-x64) fn syn_union_addr() -> u64 from "synesis.iii"
+extern @abi(c-msvc-x64) fn syn_surplus_count() -> u64 from "synesis.iii"
+extern @abi(c-msvc-x64) fn syn_shared_count() -> u64 from "synesis.iii"
+extern @abi(c-msvc-x64) fn syn_frontier_count() -> u64 from "synesis.iii"
+extern @abi(c-msvc-x64) fn syn_bridge_len() -> u64 from "synesis.iii"
+extern @abi(c-msvc-x64) fn syn_bridge_byte(i: u64) -> u8 from "synesis.iii"
+extern @abi(c-msvc-x64) fn syn_spoke() -> u64 from "synesis.iii"
+extern @abi(c-msvc-x64) fn syn_refuted() -> u64 from "synesis.iii"
+extern @abi(c-msvc-x64) fn syn_undecided() -> u64 from "synesis.iii"
+extern @abi(c-msvc-x64) fn syn_residue() -> u64 from "synesis.iii"
+extern @abi(c-msvc-x64) fn syn_dialectic_addr() -> u64 from "synesis.iii"
+extern @abi(c-msvc-x64) fn syn_dialectic_scroll() -> u64 from "synesis.iii"
+extern @abi(c-msvc-x64) fn zt_selfprove() -> u64 from "zetesis.iii"
+extern @abi(c-msvc-x64) fn zt_addr() -> u64 from "zetesis.iii"
+extern @abi(c-msvc-x64) fn zt_epoch() -> u64 from "zetesis.iii"
+extern @abi(c-msvc-x64) fn zt_yield() -> u64 from "zetesis.iii"
+extern @abi(c-msvc-x64) fn zt_question_len() -> u64 from "zetesis.iii"
+extern @abi(c-msvc-x64) fn zt_question_byte(i: u64) -> u8 from "zetesis.iii"
+extern @abi(c-msvc-x64) fn zt_ans_len() -> u64 from "zetesis.iii"
+extern @abi(c-msvc-x64) fn zt_ans_byte(i: u64) -> u8 from "zetesis.iii"
+extern @abi(c-msvc-x64) fn zt_realized() -> u64 from "zetesis.iii"
+extern @abi(c-msvc-x64) fn zt_epoch2() -> u64 from "zetesis.iii"
+extern @abi(c-msvc-x64) fn zt_undecided() -> u64 from "zetesis.iii"
+extern @abi(c-msvc-x64) fn zt_discerned() -> u64 from "zetesis.iii"
+extern @abi(c-msvc-x64) fn zt_witness_len() -> u64 from "zetesis.iii"
+extern @abi(c-msvc-x64) fn zt_witness_byte(i: u64) -> u8 from "zetesis.iii"
+extern @abi(c-msvc-x64) fn zt_epoch3() -> u64 from "zetesis.iii"
+extern @abi(c-msvc-x64) fn zt_canon() -> u64 from "zetesis.iii"
+extern @abi(c-msvc-x64) fn eol_selfprove() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn syn_cayley_addr() -> u64 from "synesis.iii"
+extern @abi(c-msvc-x64) fn syn_cayley_classes() -> u64 from "synesis.iii"
+extern @abi(c-msvc-x64) fn syn_cayley_words() -> u64 from "synesis.iii"
+extern @abi(c-msvc-x64) fn syn_sweep_addr() -> u64 from "synesis.iii"
+extern @abi(c-msvc-x64) fn mb_selfprove() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_addr() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_report_len() -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_report_byte(i: u64) -> u8 from "metabole.iii"
+extern @abi(c-msvc-x64) fn pr_selfprove() -> u64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_addr() -> u64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_report_len() -> u64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_report_byte(i: u64) -> u8 from "peras.iii"
+extern @abi(c-msvc-x64) fn pb_selfprove() -> u64 from "probole.iii"
+extern @abi(c-msvc-x64) fn pb_addr() -> u64 from "probole.iii"
+extern @abi(c-msvc-x64) fn pb_addr2() -> u64 from "probole.iii"
+extern @abi(c-msvc-x64) fn pb_report_len() -> u64 from "probole.iii"
+extern @abi(c-msvc-x64) fn pb_report_byte(i: u64) -> u8 from "probole.iii"
+extern @abi(c-msvc-x64) fn pb_diexodos(nlay: u64) -> u64 from "probole.iii"
+extern @abi(c-msvc-x64) fn mb_dz_set_lo(lo: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_tok_len(t: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_tok_byte(t: u64, i: u64) -> u8 from "metabole.iii"
+extern @abi(c-msvc-x64) fn pb_dx_tok() -> u64 from "probole.iii"
+extern @abi(c-msvc-x64) fn pb_dx_tok2() -> u64 from "probole.iii"
+extern @abi(c-msvc-x64) fn pb_dx_gape() -> i64 from "probole.iii"
+extern @abi(c-msvc-x64) fn pb_dx_wled() -> i64 from "probole.iii"
+
+var HB_FBUF : [u8; 131072]
+
+fn pu(v: u64) -> u32 {
+    if v >= 10u64 { pu(v / 10u64) }
+    putchar((48u64 + (v % 10u64)) as i32)
+    return 1u32
+}
+fn ps(s: u64) -> u32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }
+    return 1u32
+}
+fn streq(a: u64, b: u64) -> u32 {
+    let pa : *u8 = a as *u8   let pb : *u8 = b as *u8   let mut i : u64 = 0u64
+    while pa[i] != 0u8 { if pa[i] != pb[i] { return 0u32 }   i = i + 1u64 }
+    if pb[i] != 0u8 { return 0u32 }
+    return 1u32
+}
+fn run(name: u64, r: u64) -> u64 {
+    ps(name)
+    ps(" arm result = " as u64)
+    pu(r)
+    putchar(10i32)
+    return r
+}
+fn main(argc: i32, argv: u64) -> u64 {
+    let av : *u64 = argv as *u64
+    if argc < 2i32 { ps("usage: hzprobe py|riza|meris|klisi|mneme|katoptron|synesis|metabole|preflight|all\n" as u64)   return 3u64 }
+    let cmd : u64 = av[1u64]
+    if streq(cmd, "py" as u64) == 1u32 { return run("pyrgos" as u64, py_selfprove()) }
+    if streq(cmd, "riza" as u64) == 1u32 { return run("riza" as u64, rz_selfprove()) }
+    if streq(cmd, "kyma" as u64) == 1u32 { return run("kyma" as u64, ky_selfprove()) }
+    if streq(cmd, "meris" as u64) == 1u32 { return run("meris" as u64, ms_selfprove()) }
+    if streq(cmd, "klisi" as u64) == 1u32 { return run("klisi" as u64, kl_selfprove()) }
+    if streq(cmd, "gnosis" as u64) == 1u32 {
+        let g : u64 = run("gnosis" as u64, gn_selfprove())
+        if g != 0u64 { return g }
+        ps("scroll gnosis  = " as u64)   pu(gn_addr())   putchar(10i32)
+        return 0u64
+    }
+    if streq(cmd, "noesis" as u64) == 1u32 {
+        let n2 : u64 = run("noesis" as u64, no_selfprove())
+        if n2 != 0u64 { return n2 }
+        ps("scroll noesis  = " as u64)   pu(no_addr())   putchar(10i32)
+        ps("scroll worlds  = " as u64)   pu(no_worlds())   putchar(10i32)
+        return 0u64
+    }
+    if streq(cmd, "mneme" as u64) == 1u32 {
+        /* the live wire needs the sealed scrolls standing: run the producers */
+        let m0 : u64 = run("summit" as u64, su_selfprove())
+        if m0 != 0u64 { return m0 }
+        let m1 : u64 = run("gnosis" as u64, gn_selfprove())
+        if m1 != 0u64 { return m1 }
+        let m2 : u64 = run("noesis" as u64, no_selfprove())
+        if m2 != 0u64 { return m2 }
+        let m4 : u64 = run("synesis" as u64, syn_selfprove())
+        if m4 != 0u64 { return m4 }
+        let m3 : u64 = run("mneme" as u64, mn_selfprove())
+        if m3 != 0u64 { return m3 }
+        ps("scroll mneme   = " as u64)   pu(mn_addr())   putchar(10i32)
+        return 0u64
+    }
+    if streq(cmd, "katoptron" as u64) == 1u32 {
+        let k1 : u64 = run("katoptron" as u64, kt_selfprove())
+        if k1 != 0u64 { return k1 }
+        ps("scroll mirror  = " as u64)   pu(kt_addr())   putchar(10i32)
+        return 0u64
+    }
+    if streq(cmd, "metabole" as u64) == 1u32 {
+        let mb0 : u64 = run("metabole" as u64, mb_selfprove())
+        if mb0 != 0u64 { return mb0 }
+        let mrn0 : u64 = mb_report_len()
+        let mut mri0 : u64 = 0u64
+        while mri0 < mrn0 { putchar(mb_report_byte(mri0) as i32)   mri0 = mri0 + 1u64 }
+        ps("scroll metabole = " as u64)   pu(mb_addr())   putchar(10i32)
+        return 0u64
+    }
+    if streq(cmd, "diexodos" as u64) == 1u32 {
+        /* THE WAY THROUGH: the deep anchor walked end to end; second arg
+         * (optional) = layer count for partial ascents */
+        let mut nl : u64 = 61u64
+        if argc >= 3i32 {
+            let a2p : *u8 = av[2u64] as *u8
+            let mut vv : u64 = 0u64
+            let mut ii : u64 = 0u64
+            while a2p[ii] != 0u8 {
+                let cch : u64 = a2p[ii] as u64
+                if cch >= 48u64 {
+                    if cch <= 57u64 { vv = vv * 10u64 + (cch - 48u64) }
+                }
+                ii = ii + 1u64
+            }
+            if vv > 0u64 { nl = vv }
+            if nl > 61u64 { nl = 61u64 }
+        }
+        let mut lo : u64 = 0u64
+        if argc >= 4i32 {
+            let a3p : *u8 = av[3u64] as *u8
+            let mut vv3 : u64 = 0u64
+            let mut i3 : u64 = 0u64
+            while a3p[i3] != 0u8 {
+                let c3 : u64 = a3p[i3] as u64
+                if c3 >= 48u64 {
+                    if c3 <= 57u64 { vv3 = vv3 * 10u64 + (c3 - 48u64) }
+                }
+                i3 = i3 + 1u64
+            }
+            if vv3 < 14u64 { lo = vv3 }
+        }
+        mb_dz_set_lo(lo)
+        ps("the diexodos: walking " as u64)
+        pu(nl)
+        ps(" layers on the deep anchor (limb-floor=" as u64)
+        pu(lo)
+        ps(", 0=certified 896-bit)" as u64)
+        putchar(10i32)
+        let dxr : u64 = pb_diexodos(nl)
+        ps("diexodos result = " as u64)
+        pu(dxr)
+        putchar(10i32)
+        if dxr != 0u64 { return dxr }
+        ps("the krisis: token " as u64)
+        pu(pb_dx_tok())
+        ps(" [" as u64)
+        let tkw : u64 = pb_dx_tok()
+        let tkl : u64 = mb_tok_len(tkw)
+        let mut tki : u64 = 0u64
+        while tki < tkl {
+            putchar(mb_tok_byte(tkw, tki) as i32)
+            tki = tki + 1u64
+        }
+        ps("] over runner-up " as u64)
+        pu(pb_dx_tok2())
+        ps(" [" as u64)
+        let tkw2 : u64 = pb_dx_tok2()
+        let tkl2 : u64 = mb_tok_len(tkw2)
+        let mut tkj : u64 = 0u64
+        while tkj < tkl2 {
+            putchar(mb_tok_byte(tkw2, tkj) as i32)
+            tkj = tkj + 1u64
+        }
+        ps("] gap-exp2=" as u64)
+        let ge : i64 = pb_dx_gape()
+        if ge < 0i64 {
+            putchar(45i32)
+            pu((0i64 - ge) as u64)
+        }
+        if ge >= 0i64 { pu(ge as u64) }
+        ps(" width-ledger-exp2=" as u64)
+        let wl : i64 = pb_dx_wled()
+        if wl < 0i64 {
+            putchar(45i32)
+            pu((0i64 - wl) as u64)
+        }
+        if wl >= 0i64 { pu(wl as u64) }
+        putchar(10i32)
+        /* THE VERDICT: the elected token is PROVEN iff the certified gap
+         * magnitude towers over the width ledger -- gap-exp2 > ledger-exp2.
+         * Otherwise the election is UNDECIDED at this precision (the fast
+         * tier is expected to be undecided; certify at limb-floor 0). */
+        ps("the verdict: " as u64)
+        let ge2 : i64 = pb_dx_gape()
+        if ge2 == (0i64 - 1000000i64) {
+            ps("UNDECIDED (no runner-up separation)" as u64)
+        }
+        if ge2 != (0i64 - 1000000i64) {
+            if ge2 > wl {
+                ps("PROVEN -- token " as u64)
+                pu(pb_dx_tok())
+                ps(" elected, gap 2^" as u64)
+                if ge2 < 0i64 { putchar(45i32)   pu((0i64 - ge2) as u64) }
+                if ge2 >= 0i64 { pu(ge2 as u64) }
+                ps(" towers over width 2^" as u64)
+                if wl < 0i64 { putchar(45i32)   pu((0i64 - wl) as u64) }
+                if wl >= 0i64 { pu(wl as u64) }
+            }
+            if ge2 <= wl {
+                ps("UNDECIDED at this precision -- gap 2^" as u64)
+                if ge2 < 0i64 { putchar(45i32)   pu((0i64 - ge2) as u64) }
+                if ge2 >= 0i64 { pu(ge2 as u64) }
+                ps(" within width 2^" as u64)
+                if wl < 0i64 { putchar(45i32)   pu((0i64 - wl) as u64) }
+                if wl >= 0i64 { pu(wl as u64) }
+                ps(" (raise the limb floor to certify)" as u64)
+            }
+        }
+        putchar(10i32)
+        return 0u64
+    }
+    if streq(cmd, "peras" as u64) == 1u32 {
+        /* the limit eats from the metabolizer's table: run the producer */
+        let pp0 : u64 = run("metabole" as u64, mb_selfprove())
+        if pp0 != 0u64 { return pp0 }
+        let pp1 : u64 = run("peras" as u64, pr_selfprove())
+        if pp1 != 0u64 { return pp1 }
+        let prn0 : u64 = pr_report_len()
+        let mut pri0 : u64 = 0u64
+        while pri0 < prn0 { putchar(pr_report_byte(pri0) as i32)   pri0 = pri0 + 1u64 }
+        ps("scroll peras = " as u64)   pu(pr_addr())   putchar(10i32)
+        return 0u64
+    }
+    if streq(cmd, "probole" as u64) == 1u32 {
+        /* the projection consumes the choir's deposited thought */
+        let pj0 : u64 = run("metabole" as u64, mb_selfprove())
+        if pj0 != 0u64 { return pj0 }
+        let pj1 : u64 = run("peras" as u64, pr_selfprove())
+        if pj1 != 0u64 { return pj1 }
+        let pj2 : u64 = run("probole" as u64, pb_selfprove())
+        if pj2 != 0u64 { return pj2 }
+        let pjn : u64 = pb_report_len()
+        let mut pji : u64 = 0u64
+        while pji < pjn { putchar(pb_report_byte(pji) as i32)   pji = pji + 1u64 }
+        ps("scroll probole = " as u64)   pu(pb_addr())   putchar(10i32)
+        ps("scroll threpsis = " as u64)   pu(pb_addr2())   putchar(10i32)
+        return 0u64
+    }
+    if streq(cmd, "zetesis" as u64) == 1u32 {
+        /* the seeking needs the union standing: run the producers */
+        let z0 : u64 = run("summit" as u64, su_selfprove())
+        if z0 != 0u64 { return z0 }
+        let z1 : u64 = run("gnosis" as u64, gn_selfprove())
+        if z1 != 0u64 { return z1 }
+        let z2 : u64 = run("noesis" as u64, no_selfprove())
+        if z2 != 0u64 { return z2 }
+        let z3 : u64 = run("synesis" as u64, syn_selfprove())
+        if z3 != 0u64 { return z3 }
+        let z4 : u64 = run("zetesis" as u64, zt_selfprove())
+        if z4 != 0u64 { return z4 }
+        ps("scroll zetesis = " as u64)   pu(zt_addr())   putchar(10i32)
+        ps("the question: " as u64)
+        let qn : u64 = zt_question_len()
+        let mut qi : u64 = 0u64
+        while qi < qn { putchar(zt_question_byte(qi) as i32)   qi = qi + 1u64 }
+        ps(" yield=" as u64)   pu(zt_yield())
+        ps(" epoch=" as u64)   pu(zt_epoch())
+        putchar(10i32)
+        ps("the answer: " as u64)
+        qi = 0u64
+        while qi < qn { putchar(zt_question_byte(qi) as i32)   qi = qi + 1u64 }
+        if zt_undecided() == 1u64 { ps(" undecided" as u64) } else { ps(" decided" as u64) }
+        putchar(10i32)
+        ps("the spoken: " as u64)
+        let an : u64 = zt_ans_len()
+        let mut ai : u64 = 0u64
+        while ai < an { putchar(zt_ans_byte(ai) as i32)   ai = ai + 1u64 }
+        ps(" realized=" as u64)   pu(zt_realized())
+        ps(" epoch=" as u64)   pu(zt_epoch2())
+        putchar(10i32)
+        ps("the discernment: " as u64)
+        qi = 0u64
+        while qi < qn { putchar(zt_question_byte(qi) as i32)   qi = qi + 1u64 }
+        if zt_discerned() == 1u64 { ps(" refused witness=" as u64) } else { ps(" open witness=" as u64) }
+        let wn : u64 = zt_witness_len()
+        let mut wi : u64 = 0u64
+        while wi < wn { putchar(zt_witness_byte(wi) as i32)   wi = wi + 1u64 }
+        ps(" epoch=" as u64)   pu(zt_epoch3())
+        putchar(10i32)
+        ps("the nameless union = " as u64)   pu(zt_canon())   putchar(10i32)
+        return 0u64
+    }
+    if streq(cmd, "synesis" as u64) == 1u32 {
+        let sy : u64 = run("synesis" as u64, syn_selfprove())
+        if sy != 0u64 { return sy }
+        ps("scroll synesis = " as u64)   pu(syn_addr())   putchar(10i32)
+        ps("scroll union   = " as u64)   pu(syn_union_addr())   putchar(10i32)
+        ps("scroll dialect = " as u64)   pu(syn_dialectic_scroll())   putchar(10i32)
+        ps("the dialectic: spoke=" as u64)   pu(syn_spoke())
+        ps(" refuted=" as u64)   pu(syn_refuted())
+        ps(" undecided=" as u64)   pu(syn_undecided())
+        ps(" residue=" as u64)   pu(syn_residue())
+        ps(" grown=" as u64)   pu(syn_dialectic_addr())
+        putchar(10i32)
+        ps("the cayley chart: words=" as u64)   pu(syn_cayley_words())
+        ps(" classes=" as u64)   pu(syn_cayley_classes())
+        ps(" addr=" as u64)   pu(syn_cayley_addr())
+        putchar(10i32)
+        ps("scroll sweep   = " as u64)   pu(syn_sweep_addr())   putchar(10i32)
+        return 0u64
+    }
+    if streq(cmd, "preflight" as u64) == 1u32 {
+        if argc < 3i32 { ps("preflight: missing source path\n" as u64)   return 3u64 }
+        let path : u64 = av[2u64]
+        let fh : u64 = fopen(path, "rb" as u64)
+        if fh == 0u64 { ps("preflight: open failed\n" as u64)   return 4u64 }
+        let n : u64 = fread((&HB_FBUF) as u64, 1u64, 131072u64, fh)
+        fclose(fh)
+        if n == 0u64 { ps("preflight: empty read\n" as u64)   return 4u64 }
+        if n >= 131072u64 { ps("preflight: source exceeds the probe buffer\n" as u64)   return 4u64 }
+        kt_meter((&HB_FBUF) as u64, n)
+        let vd : u64 = kt_preflight(1024u64, 64u64)
+        ps("preflight decls=" as u64)   pu(kt_m_decls())
+        ps(" fns=" as u64)   pu(kt_m_fns())
+        ps(" maxslots=" as u64)   pu(kt_m_slots())
+        ps(" verdict=" as u64)   pu(vd)
+        putchar(10i32)
+        if vd != 0u64 { return 5u64 }
+        return 0u64
+    }
+    if streq(cmd, "summit" as u64) == 1u32 {
+        let s : u64 = run("summit" as u64, su_selfprove())
+        if s != 0u64 { return s }
+        ps("scroll gravity = " as u64)   pu(su_addr_gravity())   putchar(10i32)
+        ps("scroll born    = " as u64)   pu(su_addr_born())   putchar(10i32)
+        return 0u64
+    }
+    if streq(cmd, "all" as u64) == 1u32 {
+        let a : u64 = run("pyrgos" as u64, py_selfprove())
+        if a != 0u64 { return a }
+        let b : u64 = run("riza" as u64, rz_selfprove())
+        if b != 0u64 { return b }
+        let b2 : u64 = run("kyma" as u64, ky_selfprove())
+        if b2 != 0u64 { return b2 }
+        let c : u64 = run("meris" as u64, ms_selfprove())
+        if c != 0u64 { return c }
+        let d : u64 = run("klisi" as u64, kl_selfprove())
+        if d != 0u64 { return d }
+        let e9 : u64 = run("eidolos" as u64, eol_selfprove())
+        if e9 != 0u64 { return e9 }
+        let e : u64 = run("summit" as u64, su_selfprove())
+        if e != 0u64 { return e }
+        let f : u64 = run("gnosis" as u64, gn_selfprove())
+        if f != 0u64 { return f }
+        let f2 : u64 = run("noesis" as u64, no_selfprove())
+        if f2 != 0u64 { return f2 }
+        let f5 : u64 = run("synesis" as u64, syn_selfprove())
+        if f5 != 0u64 { return f5 }
+        let f3 : u64 = run("mneme" as u64, mn_selfprove())
+        if f3 != 0u64 { return f3 }
+        let f4 : u64 = run("katoptron" as u64, kt_selfprove())
+        if f4 != 0u64 { return f4 }
+        let f6 : u64 = run("zetesis" as u64, zt_selfprove())
+        if f6 != 0u64 { return f6 }
+        ps("scroll gravity = " as u64)   pu(su_addr_gravity())   putchar(10i32)
+        ps("scroll born    = " as u64)   pu(su_addr_born())   putchar(10i32)
+        ps("scroll gnosis  = " as u64)   pu(gn_addr())   putchar(10i32)
+        ps("scroll noesis  = " as u64)   pu(no_addr())   putchar(10i32)
+        ps("scroll worlds  = " as u64)   pu(no_worlds())   putchar(10i32)
+        ps("scroll mneme   = " as u64)   pu(mn_addr())   putchar(10i32)
+        ps("scroll mirror  = " as u64)   pu(kt_addr())   putchar(10i32)
+        ps("scroll synesis = " as u64)   pu(syn_addr())   putchar(10i32)
+        ps("scroll union   = " as u64)   pu(syn_union_addr())   putchar(10i32)
+        ps("scroll dialect = " as u64)   pu(syn_dialectic_scroll())   putchar(10i32)
+        ps("the union knows: surplus=" as u64)   pu(syn_surplus_count())
+        ps(" shared=" as u64)   pu(syn_shared_count())
+        ps(" frontier=" as u64)   pu(syn_frontier_count())
+        ps(" bridge=" as u64)
+        let bn : u64 = syn_bridge_len()
+        let mut bi : u64 = 0u64
+        while bi < bn { putchar(syn_bridge_byte(bi) as i32)   bi = bi + 1u64 }
+        putchar(10i32)
+        ps("the dialectic: spoke=" as u64)   pu(syn_spoke())
+        ps(" refuted=" as u64)   pu(syn_refuted())
+        ps(" undecided=" as u64)   pu(syn_undecided())
+        ps(" residue=" as u64)   pu(syn_residue())
+        ps(" grown=" as u64)   pu(syn_dialectic_addr())
+        putchar(10i32)
+        ps("the cayley chart: words=" as u64)   pu(syn_cayley_words())
+        ps(" classes=" as u64)   pu(syn_cayley_classes())
+        ps(" addr=" as u64)   pu(syn_cayley_addr())
+        putchar(10i32)
+        ps("scroll cayley  = " as u64)   pu(syn_cayley_addr())   putchar(10i32)
+        ps("scroll sweep   = " as u64)   pu(syn_sweep_addr())   putchar(10i32)
+        ps("scroll zetesis = " as u64)   pu(zt_addr())   putchar(10i32)
+        ps("the question: " as u64)
+        let qn2 : u64 = zt_question_len()
+        let mut qi2 : u64 = 0u64
+        while qi2 < qn2 { putchar(zt_question_byte(qi2) as i32)   qi2 = qi2 + 1u64 }
+        ps(" yield=" as u64)   pu(zt_yield())
+        ps(" epoch=" as u64)   pu(zt_epoch())
+        putchar(10i32)
+        ps("the answer: " as u64)
+        qi2 = 0u64
+        while qi2 < qn2 { putchar(zt_question_byte(qi2) as i32)   qi2 = qi2 + 1u64 }
+        if zt_undecided() == 1u64 { ps(" undecided" as u64) } else { ps(" decided" as u64) }
+        putchar(10i32)
+        ps("the spoken: " as u64)
+        let an2 : u64 = zt_ans_len()
+        let mut ai2 : u64 = 0u64
+        while ai2 < an2 { putchar(zt_ans_byte(ai2) as i32)   ai2 = ai2 + 1u64 }
+        ps(" realized=" as u64)   pu(zt_realized())
+        ps(" epoch=" as u64)   pu(zt_epoch2())
+        putchar(10i32)
+        ps("the discernment: " as u64)
+        qi2 = 0u64
+        while qi2 < qn2 { putchar(zt_question_byte(qi2) as i32)   qi2 = qi2 + 1u64 }
+        if zt_discerned() == 1u64 { ps(" refused witness=" as u64) } else { ps(" open witness=" as u64) }
+        let wn2 : u64 = zt_witness_len()
+        let mut wi2 : u64 = 0u64
+        while wi2 < wn2 { putchar(zt_witness_byte(wi2) as i32)   wi2 = wi2 + 1u64 }
+        ps(" epoch=" as u64)   pu(zt_epoch3())
+        putchar(10i32)
+        ps("the nameless union = " as u64)   pu(zt_canon())   putchar(10i32)
+        let mba : u64 = run("metabole" as u64, mb_selfprove())
+        if mba != 0u64 { return mba }
+        let mrna : u64 = mb_report_len()
+        let mut mria : u64 = 0u64
+        while mria < mrna { putchar(mb_report_byte(mria) as i32)   mria = mria + 1u64 }
+        ps("scroll metabole = " as u64)   pu(mb_addr())   putchar(10i32)
+        let pra : u64 = run("peras" as u64, pr_selfprove())
+        if pra != 0u64 { return pra }
+        let prna : u64 = pr_report_len()
+        let mut pria : u64 = 0u64
+        while pria < prna { putchar(pr_report_byte(pria) as i32)   pria = pria + 1u64 }
+        ps("scroll peras = " as u64)   pu(pr_addr())   putchar(10i32)
+        let pba : u64 = run("probole" as u64, pb_selfprove())
+        if pba != 0u64 { return pba }
+        let pbna : u64 = pb_report_len()
+        let mut pbia : u64 = 0u64
+        while pbia < pbna { putchar(pb_report_byte(pbia) as i32)   pbia = pbia + 1u64 }
+        ps("scroll probole = " as u64)   pu(pb_addr())   putchar(10i32)
+        ps("scroll threpsis = " as u64)   pu(pb_addr2())   putchar(10i32)
+        ps("ALL BATTERIES GREEN\n" as u64)
+        return 0u64
+    }
+    ps("unknown cmd\n" as u64)
+    return 3u64
+}

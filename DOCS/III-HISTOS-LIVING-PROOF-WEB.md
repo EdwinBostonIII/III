@@ -1,8 +1,8 @@
 # HISTOS — the living proof web
 
-*Status: STAGES 1 + 2 LANDED + GATED (`STDLIB/scripts/histos_gate.sh`, exit 0, byte-deterministic).
-Stage 3 (kardia cross-session permanence) follows. Built on the resealed compiler `ec0ad523`.
-Spec: `DOCS/superpowers/specs/2026-07-21-living-proof-web-design.md`.*
+*Status: STAGES 1 + 2 + 3 LANDED + GATED (`STDLIB/scripts/histos_gate.sh`, exit 0,
+byte-deterministic). Built on the resealed compiler `ec0ad523`. Spec:
+`DOCS/superpowers/specs/2026-07-21-living-proof-web-design.md`.*
 
 ## What it is
 
@@ -92,15 +92,43 @@ witness, naming the DEEPEST red (`krisis`) as the origin. Real artifacts, real m
 root-cause. `histos_reddened_by` seeks the deepest red on the failing path, so it names the
 origin even when intermediate nodes (membrane) are red in their own right.
 
-## Stage 3 (next): permanence, reverification-gated
+## Stage 3 (landed): unification with PARATHEKE — one standing, two axes
 
-Register each node as a kardia class-2 cell (reach-pin folds the transitive closure) and persist
-the web via kardia's append-only ledger. A later session reloads, re-pins against the live tree,
-KEEPS the standing of every unchanged node, and reddens exactly the subtree whose source drifted
-— permanence-under-reverification, never a frozen golden.
+Stage 3 was going to bolt kardia cross-session persistence onto HISTOS. That would have
+duplicated **PARATHEKE** — the concurrently-built standing-deposit ledger, which is already
+kardia's reverification law across time. Instead the two are unified: they are the SAME
+reverification-gated standing on two axes — PARATHEKE the **temporal** ledger (deposits
+re-earned each read by re-sealing, `man_seal_order`), HISTOS the **spatial** web (organs
+re-derived by the exact engines, `kr_sign`).
+
+The seam is the R1-order claim `24792 > 1925`, which both already hold. The ontological move:
+the deposit does not *call* the web — it **becomes a node in it** (`histos_paratheke_probe.iii`,
+externing both organs read-only, modifying neither). The node `r1_order_standing` has:
+
+- **its own cell** = PARATHEKE's `pk_std_line` re-derivation (the seal) — the temporal axis;
+- **an edge** `[r1_order_standing < membrane_verdict]` onto the exact `witness→membrane→krisis`
+  chain — the spatial axis.
+
+`histos_stand(r1_order_standing)` is then `(seal re-derives) ∧ (exact substrate stands)`,
+emergent from the web's recursive law — no coordinator, no new machinery.
+
+**Why load-bearing (the gate asserts it):** the R1 deposit is ORDER-kind — `man_seal_order`
+does NOT run `kr_sign`. So a mutated `kr_sign` leaves **PARATHEKE's seal STILL STANDING**, while
+HISTOS's exact chain reddens:
+
+```
+true:  seal STANDS + web GREEN
+mut :  seal STILL STANDS (the ledger's logos-seal alone misses the substrate break)
+       web (histos, spatial): r1_order_standing RED (seal-cell GREEN) rooted-at krisis
+```
+
+Only the two axes TOGETHER catch the substrate break behind a valid seal — III's own
+two-engine / no-self-grading law, lifted to whole organs. And the deposit gives the web-node
+its PERMANENCE (a ledger entry, re-earned every session) without duplicating kardia. One
+standing, two axes.
 
 ## Reproduce
 
 ```
-bash STDLIB/scripts/histos_gate.sh     # stage 1: exit 0, byte-deterministic, the crux asserted
+bash STDLIB/scripts/histos_gate.sh     # stages 1 + 2 + 3: exit 0, byte-deterministic
 ```

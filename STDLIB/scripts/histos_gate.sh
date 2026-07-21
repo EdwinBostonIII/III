@@ -154,5 +154,63 @@ echo "              krisis + membrane from their REAL runs, the witness's REAL c
 echo "              and the web reddens the witness rooted at krisis:"
 echo "  true:  $(grep '^web:' "$T/web_true.out")"
 echo "  mut :  $(grep '^web:' "$T/web_mut.out")"
-echo "[histos_gate] THE LIVING PROOF WEB STANDS (stages 1 + 2)."
+echo "[histos_gate] STAGE 2 (real artifacts) GREEN."
+
+# ============================================================================
+# STAGE 3: UNIFICATION WITH PARATHEKE -- one standing, two axes. The R1-order
+# deposit (PARATHEKE, temporal: re-earned by man_seal_order) becomes a NODE in
+# HISTOS's web (spatial: resting on the exact kr_sign chain). Its standing is the
+# conjunction, emergent from the web's recursive law -- no coordinator. The
+# load-bearing assertion: a mutated kr_sign leaves PARATHEKE's ORDER-seal STILL
+# STANDING (man_seal_order does not run kr_sign), yet the unified web reddens the
+# deposit rooted krisis. Only the two axes together catch the substrate break.
+# ============================================================================
+UPROBE="$ROOT/STDLIB/build/mantis/histos_paratheke_probe.iii"
+[ -f "$UPROBE" ] || { echo "[histos_gate] no stage-3 probe: $UPROBE"; exit 14; }
+clo3="$(closure histos_paratheke_probe)"
+for m in $clo3; do compile_one "$m" || exit 3; done
+compile_one histos_paratheke_probe || exit 3
+build_u() {   # $1 = krisis object ; $2 = output exe
+  local krobj="$1" out="$2"
+  local objs=("$CLO/histos_paratheke_probe.o" "$CLO/histos.o")
+  local m
+  for m in $clo3; do
+    [ "$m" = histos_paratheke_probe ] && continue
+    [ "$m" = histos ] && continue
+    [ "$m" = krisis ] && continue
+    [ -f "$CLO/$m.o" ] && objs+=("$CLO/$m.o")
+  done
+  objs+=("$krobj")
+  local try
+  for try in 1 2 3 4 5; do
+    rm -f "$out"
+    gcc -o "$out" "${objs[@]}" "$ARC" -lws2_32 -lkernel32 -Wl,--allow-multiple-definition > "$out.link" 2>&1 && [ -f "$out" ] && return 0
+    sleep 1
+  done
+  echo "[histos_gate] stage3 LINK FAIL ($out):"; grep -oE "undefined reference to .[a-z_0-9]+." "$out.link" | sort -u | head; return 1
+}
+
+# (a) the true unified standing: seal stands + web green
+build_u "$CLO/krisis.o" "$T/u_true.exe" || exit 15
+"$T/u_true.exe" > "$T/u_true.out" 2>&1; ut=$?
+grep -q "^seal (paratheke, temporal): STANDS" "$T/u_true.out" || { echo "[histos_gate] STAGE 3 TRUE: seal not standing"; cat "$T/u_true.out"; exit 16; }
+grep -q "^web (histos, spatial): r1_order_standing GREEN" "$T/u_true.out" || { echo "[histos_gate] STAGE 3 TRUE: web not green"; cat "$T/u_true.out"; exit 16; }
+[ "$ut" -eq 0 ] || { echo "[histos_gate] STAGE 3 TRUE: exit $ut"; cat "$T/u_true.out"; exit 16; }
+
+# (b) mutant kr_sign (reuse the stage-2 mutant object): seal STILL STANDS, web RED rooted krisis
+[ -f "$T/krisis_mut.o" ] || { echo "[histos_gate] stage-2 mutant object missing"; exit 17; }
+build_u "$T/krisis_mut.o" "$T/u_mut.exe" || exit 17
+"$T/u_mut.exe" > "$T/u_mut.out" 2>&1; um=$?
+grep -q "^seal (paratheke, temporal): STANDS" "$T/u_mut.out" \
+  || { echo "[histos_gate] STAGE 3 MUT: the seal was expected to STILL stand (the load-bearing point -- man_seal_order does not run kr_sign)"; cat "$T/u_mut.out"; exit 18; }
+grep -q "^web (histos, spatial): r1_order_standing RED (seal-cell GREEN) rooted-at krisis" "$T/u_mut.out" \
+  || { echo "[histos_gate] STAGE 3 MUT: the unified web did not catch the substrate break behind the valid seal"; cat "$T/u_mut.out"; exit 18; }
+[ "$um" -eq 2 ] || { echo "[histos_gate] STAGE 3 MUT: expected web-red exit 2, got $um"; cat "$T/u_mut.out"; exit 18; }
+
+echo "[histos_gate] STAGE 3 (unification with PARATHEKE) GREEN -- one standing, two axes:"
+echo "  true:  seal STANDS + web GREEN  ($(grep '^web ' "$T/u_true.out"))"
+echo "  mut :  seal STILL STANDS (the ledger's logos-seal alone misses the substrate break) BUT"
+echo "         $(grep '^web ' "$T/u_mut.out")"
+echo "         -- only PARATHEKE (time) and HISTOS (space) TOGETHER catch it, and name krisis."
+echo "[histos_gate] THE LIVING PROOF WEB STANDS (stages 1 + 2 + 3)."
 exit 0

@@ -1,0 +1,32 @@
+/* STDLIB/iii/omnia/praxis_cli.iii -- the carrier: PRAXIS has no main (library organ); this does.
+ * argv[1] = the pinned trace (scrolls, space-separated, authored by the HOOK not the agent)
+ * argv[2] = the claim under judgment
+ * exit 0 = the trace DETERMINES the claim (stands) | exit 1 = DEFECT (refused) | 2 = usage */
+module omnia_praxis_cli
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn px_begin() -> i32 from "praxis.iii"
+extern @abi(c-msvc-x64) fn px_pin(s: u64) -> u64 from "praxis.iii"
+extern @abi(c-msvc-x64) fn px_stand() -> u64 from "praxis.iii"
+extern @abi(c-msvc-x64) fn px_judge(s: u64) -> u64 from "praxis.iii"
+extern @abi(c-msvc-x64) fn praxis_selfprove() -> u64 from "praxis.iii"
+
+fn pc_ps(sp: u64) -> u32 { let p : *u8 = sp as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let av : *u64 = argv as *u64
+    if argc < 3i32 {
+        let r : u64 = praxis_selfprove()
+        pc_ps("praxis_selfprove = " as u64)   putchar((48u64 + r) as i32)   putchar(10i32)
+        if r == 0u64 { pc_ps("GREEN: the naked claim is refused; the earned claim stands; the trace is tamper-evident.\n" as u64) }
+        return r
+    }
+    let trace : u64 = av[1]
+    let claim : u64 = av[2]
+    px_begin()
+    px_pin(trace)
+    px_stand()
+    if px_judge(claim) == 1u64 { pc_ps("STANDS\n" as u64)   return 0u64 }
+    pc_ps("DEFECT: the witnessed trace does not determine this claim -- REFUSED\n" as u64)
+    return 1u64
+}

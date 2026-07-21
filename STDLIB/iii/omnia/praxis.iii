@@ -1,0 +1,102 @@
+/* STDLIB/iii/omnia/praxis.iii -- PRAXIS (the deed): the WITNESSED TRACE, and the one law over it.
+ *
+ * THE LAW.  A claim stands only if the witnessed trace DETERMINES it. This is KANON's theorem
+ * (x IN Fold(G) <=> membership) taken on its EIDOLOS twin rather than its rank meter -- because a
+ * process trace is DIRECTED (RED before GREEN is a '<' relation) and the GF(2)/matroid closure is
+ * UNDIRECTED. Applying rank here is the recorded SYMPLOKE category error; ANAMNESIS re-founded the
+ * fold event-primary for exactly this reason, and PRAXIS inherits that correction.
+ *
+ * So: pinned events are READ into EIDOLOS and SEALED (eol_keep) -- they become the kept house, the Fold.
+ * A claim is then judged by eol_judge_claim: 1 = derivable from the trace (STANDS), 0 = DEFECT (the
+ * unearned assertion) -> REFUSED. The defect IS the lie, and it is measured, not suspected.
+ *
+ * TAMPER-EVIDENCE.  Every pinned byte is folded into omnia/exec_cert's incremental sha256 (O(1) per
+ * event, O(32) memo). The same event stream seals bit-identically; one perturbed byte changes the seal.
+ *
+ * THE BOUNDARY THAT MAKES IT REAL.  The agent may append CLAIMS; only the harness may append PINS.
+ * A pin is a thing no model can author -- a content digest, an exit code, a git object hash. A mandate
+ * whose leaves are agent-authored strings is theatre. Ring R0. */
+module omnia_praxis
+
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_keep() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_judge_claim(base: u64, len: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn xc_begin() -> i32 from "exec_cert.iii"
+extern @abi(c-msvc-x64) fn xc_event_byte(b: u32) -> i32 from "exec_cert.iii"
+extern @abi(c-msvc-x64) fn xc_seal(out32: *u8) -> i32 from "exec_cert.iii"
+
+var PX_N : u64 = 0u64            /* how many events were pinned */
+var PX_A : [u8; 32]              /* seal A (module var: a local array's address is not FFI-valid) */
+var PX_B : [u8; 32]              /* seal B */
+
+fn px_slen(s: u64) -> u64 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { i = i + 1u64 }   return i }
+
+/* open a fresh trace: empty house, fresh certificate */
+fn px_begin() -> i32 @export { PX_N = 0u64   eol_reset()   xc_begin()   return 0i32 }
+
+/* PIN one witnessed event: fold its bytes into the tamper-evident certificate, then read it into the house */
+fn px_pin(s: u64) -> u64 @export {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { xc_event_byte(p[i] as u32)   i = i + 1u64 }
+    xc_event_byte(10u32)
+    if eol_read(s, i) < 0i64 { return 1u64 }
+    PX_N = PX_N + 1u64
+    return 0u64
+}
+
+/* SEAL the house: the pinned events become the Fold against which every claim is judged */
+fn px_stand() -> u64 @export { return eol_keep() }
+
+/* THE MANDATE: does the witnessed trace DETERMINE this claim? 1 = stands, 0 = DEFECT (refused) */
+fn px_judge(s: u64) -> u64 @export { return eol_judge_claim(s, px_slen(s)) }
+
+fn px_count() -> u64 @export { return PX_N }
+fn px_seal(out32: *u8) -> i32 @export { return xc_seal(out32) }
+
+fn praxis_selfprove() -> u64 @export {
+    /* ARM 1: THE NAKED CLAIM -- an EMPTY trace does not determine completion. This is the whole point:
+     * "it is done" with nothing witnessed is a DEFECT, and the seat refuses it. */
+    px_begin()
+    px_stand()
+    if px_judge("[done < gate_green]" as u64) != 0u64 { return 1u64 }
+
+    /* ARM 2: THE EARNED CLAIM -- pin the gate evidence, and the same claim now STANDS. */
+    px_begin()
+    if px_pin("[gate_green < exit_zero]" as u64) != 0u64 { return 2u64 }
+    if px_pin("[done < gate_green]" as u64) != 0u64 { return 2u64 }
+    px_stand()
+    if px_judge("[done < exit_zero]" as u64) != 1u64 { return 2u64 }
+
+    /* ARM 3: NO FREE LUNCH -- an UNRELATED pin does not buy the claim. Evidence must actually reach it. */
+    px_begin()
+    if px_pin("[readme < prose]" as u64) != 0u64 { return 3u64 }
+    px_stand()
+    if px_judge("[done < exit_zero]" as u64) != 0u64 { return 3u64 }
+
+    /* ARM 4: TAMPER-EVIDENCE -- the same event stream seals bit-identically; a perturbed one does not. */
+    px_begin()
+    px_pin("[gate_green < exit_zero]" as u64)
+    px_seal((&PX_A) as u64 as *u8)
+    px_begin()
+    px_pin("[gate_green < exit_zero]" as u64)
+    px_seal((&PX_B) as u64 as *u8)
+    let mut i : u64 = 0u64
+    while i < 32u64 { if PX_A[i] != PX_B[i] { return 4u64 }   i = i + 1u64 }
+    px_begin()
+    px_pin("[gate_green < exit_one]" as u64)
+    px_seal((&PX_B) as u64 as *u8)
+    let mut d : u64 = 0u64
+    let mut j : u64 = 0u64
+    while j < 32u64 { if PX_A[j] != PX_B[j] { d = 1u64 }   j = j + 1u64 }
+    if d != 1u64 { return 4u64 }
+
+    /* ARM 5: the count is the witnessed count -- no phantom events. */
+    px_begin()
+    px_pin("[a < b]" as u64)
+    px_pin("[b < c]" as u64)
+    if px_count() != 2u64 { return 5u64 }
+
+    return 0u64
+}

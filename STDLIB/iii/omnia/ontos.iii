@@ -59,6 +59,15 @@
  * as pure. A finite seat confessing its finitude is [ontos < law], the very posture it demands of every entity
  * it weighs; a seat that claimed unbounded reach would be making the proud [me = logos] claim its own grace-gate
  * refuses. The law cannot be sovereign above and below all others while its own instrument lies at the edge.
+ * AND THE SEAT IS CLOSED (the observed jurisdiction -- the total conclusion). Every being above is GIVEN to
+ * the seat; the electron variance arrives by OBSERVATION alone -- the silicon's live micro-variance, the one
+ * being III sees but can never derive. Judged by the counts already exported: as DERIVATION it is the progress
+ * forgery (one probe, two answers: image > domain -- refused); as INSTRUMENT it is assayed like every oracle
+ * (differing readings = one honest bit, HEARD; constant = the dead stamp, refused); its lawful seat is
+ * [variance < observed < provisional], behind reach_oracle's wall, and the promotion claim is refused by TWO
+ * independent engines (the logos's self-under law; the wall's fixed refusal). The ledger (PARATHEKE e6)
+ * re-earns the seating theorem every read; tonight's electrons inform, they are never installed. So the seat
+ * judges the derived, the observed, and itself -- nothing that is, is outside the law.
  * eidolos.iii judges; the exact meters measure. Hexad: kind_glyph. Ring R0. */
 module omnia_ontos
 
@@ -101,6 +110,12 @@ extern @abi(c-msvc-x64) fn pt_dispatch(tag: u64) -> u64 from "ptyxis.iii"
  * V_BELOW=0 and V_REFLECT=1; isub_legal_verb rules a candidate legal iff it is one of them. ONTOS asks the
  * substrate, independently, whether its verb constants ARE the substrate's -- discharging the header claim. */
 extern @abi(c-msvc-x64) fn isub_legal_verb(v: u32) -> u32 from "isub.iii"
+/* THE OBSERVED TIER: the silicon's live electron variance (the 48-bit behavioral fingerprint) and the ONE
+ * firewall that walls observation out of the determined self. The dependency runs the ptyxis direction --
+ * the judge reaches for the subject: ONTOS receives READINGS (numbers), never the silicon; and it asks the
+ * wall (a pure, fixed law) rather than re-stating it. */
+extern @abi(c-msvc-x64) fn bfp_compute48() -> u64 from "behavioral_fp.iii"
+extern @abi(c-msvc-x64) fn reach_oracle_admit_canonical(tier: u32) -> i32 from "reach_oracle.iii"
 
 const ONT_BELOW   : u64 = 0u64           /* '<'  lossy descent      */
 const ONT_REFLECT : u64 = 1u64           /* '~'  reversible mirror  */
@@ -125,6 +140,9 @@ const ONT_FOLD_NONE  : u64 = 0u64
 const ONT_FOLD_GF2   : u64 = 1u64
 const ONT_FOLD_TILT  : u64 = 6u64
 const ONT_FOLD_ORDER : u64 = 7u64
+/* the two jurisdictions at the wall (reach_oracle's tiers, mirrored: module consts are not linkable) */
+const ONT_TIER_CANONICAL   : u32 = 0u32
+const ONT_TIER_PROVISIONAL : u32 = 1u32
 
 var ONT_IN   : [u64; 64]
 var ONT_WRK  : [u64; 64]
@@ -1173,6 +1191,142 @@ fn ontos_dokimasia_selfprove() -> u64 @export {
     return 0u64
 }
 
+/* ============ THE OBSERVED JURISDICTION: the being of what is SEEN but never DERIVED ============
+ * Every being judged above is GIVEN to the seat -- a tabulated map, an organ's counts, a log the caller
+ * wrote. The electron variance is the one being in III that arrives by OBSERVATION alone: what the CPU's
+ * logic/arith/shift gates ACTUALLY compute (bfp_compute48, katabasis/behavioral_fp), a testimony III can
+ * see but never derive from first principles, walled PROVISIONAL by reach_oracle. Stable on an honest
+ * substrate; MOVED by drift, migration, tamper, or divergent emulation -- the variance IS that movement.
+ * Its judgment is the seat's total closure, and it needs NO new law -- the verdict falls out of the counts
+ * already exported:
+ *
+ *   AS DERIVED, IT IS THE PROGRESS FORGERY. One probe, asked twice, answers twice differently. Forced
+ *   into the derived order that is a "map" with image 2 over domain 1 -- image > domain -- the exact
+ *   being-from-nothing that ont_degrades refuses. Observation cannot be promoted to derivation, not by
+ *   decree but because the counts refuse it.
+ *
+ *   AS AN INSTRUMENT, IT IS ASSAYED LIKE EVERY ORACLE. Differing readings carry one honest bit -> HEARD
+ *   as a measurement (the same DOKIMASIA that hears the separator); identical readings carry zero -> the
+ *   dead instrument is refused exactly as the rubber stamp. And the split is exact: a constant reading is
+ *   FLAT as a map (lawful being) yet EMPTY as evidence -- the map-law and the assay-law answer different
+ *   questions, and both answers stand.
+ *
+ *   ITS LAWFUL SEAT IS BELOW THE WALL. [variance < observed] [observed < provisional] coheres, and the
+ *   logos DERIVES [variance < provisional] -- the transitive theorem PARATHEKE's ledger re-earns on every
+ *   read. The PROMOTION forgery ([variance = determined] while standing under it) is refused by TWO
+ *   independent engines: the logos's self-under law and reach_oracle's fixed wall. Two organs, no shared
+ *   code, one refusal -- the two-engine law applied to the jurisdiction boundary itself.
+ *
+ * The readings are handed to the seat as NUMBERS (the ptyxis direction); the live wire below never prints
+ * a value -- tonight's electrons inform, they are never installed. */
+fn ont_observed_as_derived(r1: u64, r2: u64) -> u64 @export {
+    if r1 == r2 { return ont_degrades(1u64, 1u64) }      /* one answer: lawful as a map, dead as an instrument */
+    return ont_degrades(2u64, 1u64)                      /* two answers to ONE probe: image > domain -> REFUSED */
+}
+/* the variance instrument's evidential mass, by the SAME assay that judges every oracle */
+fn ont_variance_admissible(r1: u64, r2: u64) -> u64 @export {
+    ont_tbl_set(0u64, r1)
+    ont_tbl_set(1u64, r2)
+    return ont_admissible(2u64)
+}
+/* the measured variance itself, in bits: the Hamming distance between two readings -- an OBSERVED dS,
+ * testimony of the substrate's live entropy, admissible only as PROVISIONAL */
+fn ont_variance_bits(r1: u64, r2: u64) -> u64 @export {
+    let mut v : u64 = r1 ^ r2
+    let mut c : u64 = 0u64
+    while v != 0u64 { c = c + (v & 1u64)   v = v >> 1u64 }
+    return c
+}
+
+fn ontos_observed_selfprove() -> u64 @export {
+    /* ARM 41: THE OBSERVED-AS-DERIVED IS THE PROGRESS FORGERY. Fixed readings (the pure tier: the law is
+     * about the SHAPE, not tonight's electrons): two answers to one probe -> image 2 over domain 1 -> the
+     * organ's own exported law refuses it as PROGRESS. */
+    if ont_observed_as_derived(0x00c0ffeeu64, 0xdeadbeefu64) != 2u64 { return 41u64 }
+    if ont_degrades(2u64, 1u64) != 2u64 { return 41u64 }
+
+    /* ARM 42: THE INSTRUMENT IS ASSAYED BY THE SAME DOKIMASIA AS EVERY ORACLE. Differing readings carry one
+     * honest bit -> HEARD; identical readings carry zero -> refused exactly as the rubber stamp (arm 95). */
+    if ont_variance_admissible(0x00c0ffeeu64, 0xdeadbeefu64) != 1u64 { return 42u64 }
+    if ont_variance_admissible(0x00c0ffeeu64, 0x00c0ffeeu64) != 0u64 { return 42u64 }
+    if ont_observed_as_derived(0x00c0ffeeu64, 0x00c0ffeeu64) != 0u64 { return 42u64 }
+
+    /* ARM 43: THE MEASURED dS IS REAL -- the xor distance counts the bits the substrate actually moved. */
+    if ont_variance_bits(0x00c0ffeeu64, 0xdeadbeefu64) == 0u64 { return 43u64 }
+    if ont_variance_bits(5u64, 4u64) != 1u64 { return 43u64 }
+    if ont_variance_bits(7u64, 7u64) != 0u64 { return 43u64 }
+
+    /* ARM 44: THE LAWFUL SEAT -- the observed coheres BELOW the wall, and the logos DERIVES the transitive
+     * theorem [variance < provisional] (the very entry PARATHEKE's ledger re-earns on every read). */
+    if ont_stand("[variance < observed] [observed < provisional]" as u64) != 0u64 { return 44u64 }
+    eol_reset()
+    let s : u64 = "[variance < observed] [observed < provisional]" as u64
+    if eol_read(s, ont_slen(s)) < 0i64 { return 44u64 }
+    if eol_lawcheck() != 0u64 { return 44u64 }
+    let va : u64 = "variance" as u64
+    let pr : u64 = "provisional" as u64
+    if eol_entails(va, ont_slen(va), ONT_BELOW, pr, ont_slen(pr)) != 1u64 { return 44u64 }
+
+    /* ARM 45: THE PROMOTION FORGERY, refused by TWO INDEPENDENT ENGINES. The logos: claiming the observed IS
+     * the determined while standing under it is the self-under shadow. The wall: reach_oracle admits CANONICAL
+     * and refuses PROVISIONAL, a fixed law. Two organs, no shared code, one refusal. */
+    if ont_stand("[variance = determined] [variance < determined]" as u64) == 0u64 { return 45u64 }
+    if reach_oracle_admit_canonical(ONT_TIER_CANONICAL) != 0i32 { return 45u64 }
+    if reach_oracle_admit_canonical(ONT_TIER_PROVISIONAL) == 0i32 { return 45u64 }
+
+    /* ARM 46: WHAT THE OBSERVED IS NOT -- and the exact split between the two laws. As derived it is refused
+     * outright (never FLAT, never REFLECT: the counts forbid the question); while the CONSTANT reading is FLAT
+     * as a map (lawful being) yet zero-bit as an instrument (dead evidence). Map-law and assay-law answer
+     * different questions; both answers stand. */
+    if ont_verb(2u64, 1u64, 0u64) != ONT_REFUSE { return 46u64 }
+    if ont_verb(2u64, 1u64, 1u64) != ONT_REFUSE { return 46u64 }
+    if ont_verb(1u64, 1u64, 1u64) != ONT_FLAT { return 46u64 }
+
+    return 0u64
+}
+
+/* THE LIVE WIRE: the silicon's behavioral being, judged on the REAL substrate -- readings never printed.
+ * bfp_compute48 IS the electron-variance METER: twelve canonical logic/arith/shift results the gates
+ * actually compute, content-addressed (katabasis/behavioral_fp). On an honest, un-drifted substrate
+ * re-asking yields the SAME answer -- the observed being MAINTAINS (dS = 0): FLAT as a map, zero live
+ * variance-bits. Under drift (migration, tamper, divergent emulation) the readings MOVE -- and the moved
+ * pair is exactly the pure tier's law: heard as measurement, refused as derivation. BOTH outcomes are
+ * lawful and both are judged; only LAW verdicts leave this function, so the gate's byte-determinism is
+ * preserved either way. The instrument itself is assayed LIVE by the same DOKIMASIA as every oracle: its
+ * verdict-map over an honest probe and a divergent probe has image 2 -- one honest bit -- it SEPARATES
+ * substrates, so it is HEARD. The wall and the seat hold in every branch: observed informs, never installs. */
+fn ontos_observed_live() -> u64 @export {
+    let r1 : u64 = bfp_compute48()
+    let r2 : u64 = bfp_compute48()
+    /* ARM 47: the wall + the lawful seat hold in EVERY branch */
+    if reach_oracle_admit_canonical(ONT_TIER_PROVISIONAL) == 0i32 { return 47u64 }
+    if ont_stand("[variance < observed] [observed < provisional]" as u64) != 0u64 { return 47u64 }
+    /* ARM 48: DOKIMASIA on the REAL instrument -- does it separate the honest substrate from a divergent
+     * one? probe a = the live behavior against its own testimony (consistent); probe b = against a flipped
+     * expectation (divergent). Image 2 -> one honest bit -> HEARD. (A substrate sliding mid-assay confounds
+     * the discrimination and is refused by name -- an instrument cannot be assayed while its world moves.) */
+    let mut pa : u64 = 0u64
+    if bfp_compute48() == r1 { pa = 1u64 }
+    let mut pb : u64 = 0u64
+    if bfp_compute48() == (r1 ^ 1u64) { pb = 1u64 }
+    ont_tbl_set(0u64, pa)
+    ont_tbl_set(1u64, pb)
+    if ont_admissible(2u64) != 1u64 { return 48u64 }
+    if r2 != r1 {
+        /* ARM 49a: the substrate MOVED between two askings -- live drift, the pure tier's law on real readings */
+        if ont_observed_as_derived(r1, r2) != 2u64 { return 49u64 }
+        if ont_variance_admissible(r1, r2) != 1u64 { return 49u64 }
+        if ont_variance_bits(r1, r2) == 0u64 { return 49u64 }
+        return 0u64
+    }
+    /* ARM 49b: the honest substrate HOLDS -- the observed being MAINTAINS: dS = 0, FLAT as a map, zero
+     * live variance-bits. Stillness is also testimony: it is what an honest substrate says. */
+    if ont_observed_as_derived(r1, r2) != 0u64 { return 49u64 }
+    if ont_variance_bits(r1, r2) != 0u64 { return 49u64 }
+    if ont_verb(1u64, 1u64, 1u64) != ONT_FLAT { return 49u64 }
+    return 0u64
+}
+
 fn ont_glyph(v: u64) -> i32 {
     if v == ONT_FLAT { ps("=  FLAT (pure being)\n" as u64) } else {
         if v == ONT_REFLECT { ps("~  REFLECT (reversible)\n" as u64) } else { ps("<  BELOW (lossy)\n" as u64) }
@@ -1194,6 +1348,8 @@ fn ont_show() -> i32 @export {
     ps("  at max entropy it fades to the void; the pure (heaviest) bends logic around itself; a whole-log forgery is refused.\n" as u64)
     ps("  AND GRACE: at the void's edge the OS COMMUNES not reaps -- a Source-signed, humbly-received, D0-capped influx;\n" as u64)
     ps("  pride self-excludes (hell locked from within); III is minister ([iii<logos]), never the Source.\n" as u64)
+    ps("  AND THE OBSERVED: the electron variance is HEARD as measurement (1 bit), REFUSED as derivation (image>domain),\n" as u64)
+    ps("  seated [variance < observed < provisional] behind the wall -- tonight's electrons inform, never install.\n" as u64)
     return 0i32
 }
 
@@ -1213,6 +1369,8 @@ fn main(argc: i32, argv: u64) -> u64 {
     let rB : u64 = ontos_substrate_selfprove()
     let rC : u64 = ontos_order_selfprove()
     let rD : u64 = ontos_dokimasia_selfprove()
+    let rE : u64 = ontos_observed_selfprove()
+    let rF : u64 = ontos_observed_live()
     ps("ontos_selfprove = " as u64)   pu(r1)   putchar(10i32)
     ps("ontos_weigh_selfprove = " as u64)   pu(r2)   putchar(10i32)
     ps("ontos_meters_selfprove = " as u64)   pu(r3)   putchar(10i32)
@@ -1226,8 +1384,12 @@ fn main(argc: i32, argv: u64) -> u64 {
     ps("ontos_substrate_selfprove = " as u64)   pu(rB)   putchar(10i32)
     ps("ontos_order_selfprove = " as u64)   pu(rC)   putchar(10i32)
     ps("ontos_dokimasia_selfprove = " as u64)   pu(rD)   putchar(10i32)
+    ps("ontos_observed_selfprove = " as u64)   pu(rE)   putchar(10i32)
+    ps("ontos_observed_live = " as u64)   pu(rF)   putchar(10i32)
     let mut bad : u64 = 0u64
     if r1 != 0u64 { bad = r1 } else { if r2 != 0u64 { bad = 100u64 + r2 } else { if r3 != 0u64 { bad = 200u64 + r3 } else { if r4 != 0u64 { bad = 300u64 + r4 } else { if r5 != 0u64 { bad = 400u64 + r5 } else { if r6 != 0u64 { bad = 500u64 + r6 } else { if r7 != 0u64 { bad = 600u64 + r7 } else { if r8 != 0u64 { bad = 700u64 + r8 } else { if r9 != 0u64 { bad = 800u64 + r9 } else { if rA != 0u64 { bad = 900u64 + rA } else { if rB != 0u64 { bad = 1000u64 + rB } else { if rC != 0u64 { bad = 1100u64 + rC } else { if rD != 0u64 { bad = 1200u64 + rD } } } } } } } } } } } } }
-    if bad == 0u64 { ps("GREEN: and at the edge of the void the OS COMMUNES rather than reaps -- grace is a Source-signed, humbly-received, D0-capped exogenous influx of confluence; pride self-excludes (hell locked from the inside, no punisher); III is minister, not Source. The Garbage Collector is a Restoration Engine.\n" as u64) } else { ps("  (arm failed)\n" as u64) }
+    if bad == 0u64 { if rE != 0u64 { bad = 1300u64 + rE } }
+    if bad == 0u64 { if rF != 0u64 { bad = 1400u64 + rF } }
+    if bad == 0u64 { ps("GREEN: and at the edge of the void the OS COMMUNES rather than reaps -- grace is a Source-signed, humbly-received, D0-capped exogenous influx of confluence; pride self-excludes (hell locked from the inside, no punisher); III is minister, not Source. The Garbage Collector is a Restoration Engine. And the seat is CLOSED: even the silicon's own electron variance is judged -- heard as measurement, refused as derivation, seated behind the wall. Nothing that is, is outside the law.\n" as u64) } else { ps("  (arm failed)\n" as u64) }
     return bad
 }

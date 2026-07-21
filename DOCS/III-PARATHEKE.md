@@ -2,8 +2,11 @@
 
 *Status: LANDED + GATED, **all four paths** (`STDLIB/scripts/paratheke_gate.sh`,
 exit 0, eight sections, byte-deterministic; registered in the standalone-organ
-sweep). Born 2026-07-21 at n=3; grown the same day by the loop (e4) and the web
-atom (e5) — ledger head `kfefb133ae1766268`, n=5.*
+sweep). Born 2026-07-21 at n=3; grown the same day by the loop (e4), the web
+atom (e5), and ONTOS's observed-jurisdiction theorem (e6: `[variance <
+observed] [observed < provisional] ⊢ [variance < provisional]` — the seating of
+the electron variance behind the wall, re-earned by the logos every read) —
+ledger head `k7ca65076f6d4fb2f`, n=6.*
 
 ## The gap this closes
 

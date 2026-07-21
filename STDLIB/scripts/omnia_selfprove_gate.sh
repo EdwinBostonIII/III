@@ -28,10 +28,11 @@ mkdir -p "$CLO"
 [ -f "$ARC" ]  || { echo "[omnia_sp] no archive: $ARC"; exit 2; }
 
 # organ -> selfprove export (pure: linked with a driver that calls it)
-PURE_ORGANS="anamnesis aporia axioma gfp kanon kquant leimma phos rhoe router_krisis symphysis symploke syrroe zonos zonos_walk zygos"
+PURE_ORGANS="anamnesis aporia axioma gfp kanon kquant leimma paratheke phos rhoe router_krisis symphysis symploke syrroe zonos zonos_walk zygos"
 declare -A SP=(
   [anamnesis]=anamnesis_selfprove [aporia]=aporia_selfprove [axioma]=axioma_selfprove
   [gfp]=gfp_selfprove [kanon]=kanon_selfprove [kquant]=kquant_selfprove [leimma]=leimma_selfprove
+  [paratheke]=paratheke_selfprove
   [phos]=phos_selfprove [rhoe]=rhoe_selfprove [router_krisis]=rk_selfprove [symphysis]=symphysis_selfprove
   [symploke]=symploke_selfprove [syrroe]=syrroe_selfprove [zonos]=zn_selfprove [zonos_walk]=zw_selfprove
   [zygos]=zygos_selfprove )

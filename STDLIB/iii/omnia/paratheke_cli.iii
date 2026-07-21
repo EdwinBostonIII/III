@@ -1,0 +1,351 @@
+/* STDLIB/iii/omnia/paratheke_cli.iii -- the carrier: PARATHEKE has no main (library
+ * organ); this does.  The organ owns the LAW; this carries the file I/O and the
+ * live pins (sha256 heads of the deciding sources, hashed HERE, never trusted
+ * from the caller).
+ *
+ *   (no args)                                  -> paratheke_selfprove (pure law)
+ *   genesis <krisis-src> <probe-src>           -> print the canonical birth lines
+ *   stand   <ledger> <krisis-src> <probe-src>  -> re-earn every entry; verdict prose
+ *   reearn  <ledger> <krisis-src> <probe-src>  -> print ONLY the superseding lines
+ *                                                 for DUE entries (bash appends them)
+ * exit 0 = every entry STANDS | 1 = REFUSED (named) | 2 = usage/io | 4 = DUE
+ *
+ * The ledger file is read whole (<= 64 KiB, loud refusal past it), split on LF
+ * (a trailing CR is stripped -- the msvcrt text-mode pen writes CRLF; the law
+ * judges the CR-stripped bytes, so the address is newline-convention-free). */
+module omnia_paratheke_cli
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn fs_open(cap_id: u64, path: u64, mode: u32) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_read(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_size(h: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_close(h: u64) -> i32 from "fs.iii"
+
+extern @abi(c-msvc-x64) fn sha256_init() -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_update_byte(b: u32) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_finalize_internal() -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_digest_byte(i: u32) -> u32 from "sha256.iii"
+
+extern @abi(c-msvc-x64) fn paratheke_selfprove() -> u64 from "paratheke.iii"
+extern @abi(c-msvc-x64) fn pk_parse_line(base: u64, len: u64) -> u64 from "paratheke.iii"
+extern @abi(c-msvc-x64) fn pk_parsed_seq() -> u64 from "paratheke.iii"
+extern @abi(c-msvc-x64) fn pk_parsed_of() -> u64 from "paratheke.iii"
+extern @abi(c-msvc-x64) fn pk_parsed_kind() -> u64 from "paratheke.iii"
+extern @abi(c-msvc-x64) fn pk_std_begin() -> i32 from "paratheke.iii"
+extern @abi(c-msvc-x64) fn pk_std_line(base: u64, len: u64, pin_krisis: u64, pin_order: u64, waive: u64) -> u64 from "paratheke.iii"
+extern @abi(c-msvc-x64) fn pk_std_head() -> u64 from "paratheke.iii"
+extern @abi(c-msvc-x64) fn pk_mint_begin(seq: u64, prev: u64, kind: u64, of_seq: u64) -> i32 from "paratheke.iii"
+extern @abi(c-msvc-x64) fn pk_mint_term(s: i64, m: u64, e: i64, b: u64) -> i32 from "paratheke.iii"
+extern @abi(c-msvc-x64) fn pk_mint_pair(win: u64, los: u64) -> i32 from "paratheke.iii"
+extern @abi(c-msvc-x64) fn pk_mint_close(pin: u64) -> u64 from "paratheke.iii"
+extern @abi(c-msvc-x64) fn pk_mint_addr() -> u64 from "paratheke.iii"
+extern @abi(c-msvc-x64) fn pk_mint_from_parse(newseq: u64, prev: u64, pin: u64) -> u64 from "paratheke.iii"
+extern @abi(c-msvc-x64) fn pk_out_len() -> u64 from "paratheke.iii"
+extern @abi(c-msvc-x64) fn pk_out_byte(i: u64) -> u8 from "paratheke.iii"
+
+const C_FCAP : u64 = 65536u64
+const C_LMAX : u64 = 256u64
+const C_DMAX : u64 = 64u64
+
+var C_CAP  : u64 = 0u64
+var C_BUF  : [u8; 65536]
+var C_N    : u64 = 0u64
+var C_SBUF : [u8; 4096]
+var C_PIN  : u64 = 0u64
+var C_PINK : u64 = 0u64
+var C_PINP : u64 = 0u64
+var C_LOFF : [u64; 256]
+var C_LLEN : [u64; 256]
+var C_NL   : u64 = 0u64
+var C_SUP  : [u64; 4]
+var C_DUE  : [u64; 64]
+var C_HEXT : [u8; 16]
+
+fn cs_ps(s: u64) -> i32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }
+    return 0i32
+}
+
+fn cs_hex_init() -> i32 {
+    C_HEXT[0u64]=48u8  C_HEXT[1u64]=49u8  C_HEXT[2u64]=50u8  C_HEXT[3u64]=51u8
+    C_HEXT[4u64]=52u8  C_HEXT[5u64]=53u8  C_HEXT[6u64]=54u8  C_HEXT[7u64]=55u8
+    C_HEXT[8u64]=56u8  C_HEXT[9u64]=57u8  C_HEXT[10u64]=97u8 C_HEXT[11u64]=98u8
+    C_HEXT[12u64]=99u8 C_HEXT[13u64]=100u8 C_HEXT[14u64]=101u8 C_HEXT[15u64]=102u8
+    return 0i32
+}
+
+fn cs_hex16(v: u64) -> i32 {
+    let mut sh : u64 = 60u64
+    let mut go : u64 = 1u64
+    while go == 1u64 {
+        putchar(C_HEXT[(v >> sh) & 15u64] as i32)
+        if sh == 0u64 { go = 0u64 }
+        if sh != 0u64 { sh = sh - 4u64 }
+    }
+    return 0i32
+}
+
+fn cs_hexmin(v: u64) -> i32 {
+    if v == 0u64 { putchar(48i32)   return 0i32 }
+    let mut sh : u64 = 60u64
+    let mut on : u64 = 0u64
+    let mut go : u64 = 1u64
+    while go == 1u64 {
+        let nyb : u64 = (v >> sh) & 15u64
+        if nyb != 0u64 { on = 1u64 }
+        if on == 1u64 { putchar(C_HEXT[nyb] as i32) }
+        if sh == 0u64 { go = 0u64 }
+        if sh != 0u64 { sh = sh - 4u64 }
+    }
+    return 0i32
+}
+
+/* print the just-minted canonical line + newline */
+fn cs_pline() -> i32 {
+    let n : u64 = pk_out_len()
+    let mut i : u64 = 0u64
+    while i < n { putchar(pk_out_byte(i) as i32)   i = i + 1u64 }
+    putchar(10i32)
+    return 0i32
+}
+
+/* read a whole file into C_BUF; 0 ok | 1 open | 2 oversized | 3 short read */
+fn c_read_file(path: u64) -> u64 {
+    let h : u64 = fs_open(C_CAP, path, 1u32)
+    if h == 0u64 { return 1u64 }
+    let sz : u64 = fs_size(h)
+    if sz > C_FCAP { fs_close(h)   return 2u64 }
+    let mut got : u64 = 0u64
+    let mut go : u64 = 1u64
+    while go == 1u64 {
+        if got >= sz { go = 0u64 }
+        if go == 1u64 {
+            let r : u64 = fs_read(h, ((&C_BUF) as u64) + got, sz - got)
+            if r == 0u64 { go = 0u64 }
+            got = got + r
+        }
+    }
+    fs_close(h)
+    if got != sz { return 3u64 }
+    C_N = got
+    return 0u64
+}
+
+/* the live pin of a source file: the first 8 bytes of its sha256, big-endian; 0 ok */
+fn c_sha8(path: u64) -> u64 {
+    let h : u64 = fs_open(C_CAP, path, 1u32)
+    if h == 0u64 { return 1u64 }
+    sha256_init()
+    let mut go : u64 = 1u64
+    while go == 1u64 {
+        let r : u64 = fs_read(h, (&C_SBUF) as u64, 4096u64)
+        if r == 0u64 { go = 0u64 }
+        let mut i : u64 = 0u64
+        while i < r { sha256_update_byte(C_SBUF[i] as u32)   i = i + 1u64 }
+    }
+    fs_close(h)
+    sha256_finalize_internal()
+    let mut pin : u64 = 0u64
+    let mut k : u32 = 0u32
+    while k < 8u32 { pin = (pin << 8u64) | (sha256_digest_byte(k) as u64)   k = k + 1u32 }
+    C_PIN = pin
+    return 0u64
+}
+
+/* split C_BUF into the line table (strip trailing CR, skip empty); 0 ok | 1 too many */
+fn c_lines() -> u64 {
+    C_NL = 0u64
+    let mut start : u64 = 0u64
+    let mut i : u64 = 0u64
+    let mut go : u64 = 1u64
+    while go == 1u64 {
+        let mut atend : u64 = 0u64
+        if i >= C_N { atend = 1u64 }
+        let mut nl : u64 = 0u64
+        if atend == 0u64 { let c : u8 = C_BUF[i]   if c == 10u8 { nl = 1u64 } }
+        if atend == 1u64 { nl = 1u64 }
+        if nl == 1u64 {
+            let mut len : u64 = i - start
+            if len > 0u64 { let lc : u8 = C_BUF[start + len - 1u64]   if lc == 13u8 { len = len - 1u64 } }
+            if len > 0u64 {
+                if C_NL >= C_LMAX { return 1u64 }
+                C_LOFF[C_NL] = start
+                C_LLEN[C_NL] = len
+                C_NL = C_NL + 1u64
+            }
+            start = i + 1u64
+        }
+        if atend == 1u64 { go = 0u64 }
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+fn c_sup_set(seq: u64) -> i32 { C_SUP[seq >> 6u64] = C_SUP[seq >> 6u64] | (1u64 << (seq & 63u64))   return 0i32 }
+fn c_sup_get(seq: u64) -> u64 { return (C_SUP[seq >> 6u64] >> (seq & 63u64)) & 1u64 }
+
+/* the stand sweep over the loaded ledger.  quiet=1 prints nothing (reearn mode).
+ * returns 0 STANDS | 1 REFUSED | 2 structural | 4 DUE.  Fills C_DUE/C_NDUE. */
+var C_NDUE : u64 = 0u64
+var C_MAXSEQ : u64 = 0u64
+fn c_sweep(quiet: u64) -> u64 {
+    if c_lines() != 0u64 { return 2u64 }
+    C_SUP[0u64] = 0u64   C_SUP[1u64] = 0u64   C_SUP[2u64] = 0u64   C_SUP[3u64] = 0u64
+    /* pass 1: collect the of_ supersessions */
+    let mut k : u64 = 0u64
+    while k < C_NL {
+        let rc : u64 = pk_parse_line(((&C_BUF) as u64) + C_LOFF[k], C_LLEN[k])
+        if rc == 0u64 {
+            let of : u64 = pk_parsed_of()
+            if of != 0u64 {
+                if of >= C_LMAX { return 2u64 }
+                c_sup_set(of)
+            }
+        }
+        k = k + 1u64
+    }
+    /* pass 2: re-earn every entry in chain order */
+    pk_std_begin()
+    C_NDUE = 0u64
+    C_MAXSEQ = 0u64
+    k = 0u64
+    while k < C_NL {
+        let base : u64 = ((&C_BUF) as u64) + C_LOFF[k]
+        let len : u64 = C_LLEN[k]
+        let mut waive : u64 = 0u64
+        let mut seq : u64 = 0u64
+        if pk_parse_line(base, len) == 0u64 {
+            seq = pk_parsed_seq()
+            if seq > C_MAXSEQ { C_MAXSEQ = seq }
+            waive = c_sup_get(seq)
+        }
+        let rc : u64 = pk_std_line(base, len, C_PINK, C_PINP, waive)
+        if quiet == 0u64 {
+            cs_ps("e" as u64)   cs_hexmin(seq)
+            if rc == 0u64 { cs_ps(" STANDS" as u64) }
+            if rc == 4u64 { cs_ps(" DUE pin-drift" as u64) }
+            if rc == 1u64 { cs_ps(" REFUSED unlawful-scroll" as u64) }
+            if rc == 2u64 { cs_ps(" REFUSED chain-bent-at-this-link" as u64) }
+            if rc == 3u64 { cs_ps(" REFUSED contradiction-with-live-body" as u64) }
+            if rc == 5u64 { cs_ps(" REFUSED malformed" as u64) }
+            if rc == 6u64 { cs_ps(" REFUSED engine-refusal" as u64) }
+            if waive == 1u64 { if rc == 0u64 { cs_ps(" superseded" as u64) } }
+            putchar(10i32)
+        }
+        if rc != 0u64 { if rc != 4u64 { return 1u64 } }
+        if rc == 4u64 {
+            if C_NDUE >= C_DMAX { return 2u64 }
+            C_DUE[C_NDUE] = k
+            C_NDUE = C_NDUE + 1u64
+        }
+        k = k + 1u64
+    }
+    if C_NDUE != 0u64 { return 4u64 }
+    return 0u64
+}
+
+/* stand mode: prose + summary; exit 0 / 1 / 4 */
+fn c_stand() -> u64 {
+    let rc : u64 = c_sweep(0u64)
+    if rc == 1u64 { cs_ps("PARATHEKE REFUSED\n" as u64)   return 1u64 }
+    if rc == 2u64 { cs_ps("PARATHEKE REFUSED structural\n" as u64)   return 1u64 }
+    cs_ps("PARATHEKE " as u64)
+    if rc == 0u64 { cs_ps("STANDS" as u64) }
+    if rc == 4u64 { cs_ps("DUE" as u64) }
+    cs_ps(" n=" as u64)   cs_hexmin(C_NL)
+    cs_ps(" head=k" as u64)   cs_hex16(pk_std_head())
+    putchar(10i32)
+    return rc
+}
+
+/* reearn mode: print ONLY the superseding canonical lines for the DUE entries */
+fn c_reearn() -> u64 {
+    let rc : u64 = c_sweep(1u64)
+    if rc == 1u64 { return 1u64 }
+    if rc == 2u64 { return 1u64 }
+    if rc == 0u64 { return 0u64 }
+    let mut head : u64 = pk_std_head()
+    let mut ns : u64 = C_MAXSEQ
+    let mut d : u64 = 0u64
+    while d < C_NDUE {
+        let k : u64 = C_DUE[d]
+        if pk_parse_line(((&C_BUF) as u64) + C_LOFF[k], C_LLEN[k]) != 0u64 { return 1u64 }
+        ns = ns + 1u64
+        let mut pin : u64 = C_PINK
+        if pk_parsed_kind() == 2u64 { pin = C_PINP }
+        if pk_mint_from_parse(ns, head, pin) != 0u64 { return 1u64 }
+        cs_pline()
+        head = pk_mint_addr()
+        d = d + 1u64
+    }
+    return 4u64
+}
+
+/* genesis: the three birth deposits, re-derived live and printed */
+fn c_genesis() -> u64 {
+    pk_mint_begin(1u64, 0u64, 1u64, 0u64)
+    pk_mint_term(1i64, 1u64, 100i64, 1u64)
+    pk_mint_term(1i64, 1u64, 30i64, 1u64)
+    pk_mint_term(0i64 - 1i64, 1u64, 100i64, 1u64)
+    if pk_mint_close(C_PINK) != 0u64 { return 1u64 }
+    cs_pline()
+    let a1 : u64 = pk_mint_addr()
+    pk_mint_begin(2u64, a1, 1u64, 0u64)
+    pk_mint_term(1i64, 2u64, 0i64, 2u64)
+    pk_mint_term(0i64 - 1i64, 1u64, 0i64, 8u64)
+    if pk_mint_close(C_PINK) != 0u64 { return 1u64 }
+    cs_pline()
+    let a2 : u64 = pk_mint_addr()
+    pk_mint_begin(3u64, a2, 2u64, 0u64)
+    pk_mint_pair(24792u64, 1925u64)
+    if pk_mint_close(C_PINP) != 0u64 { return 1u64 }
+    cs_pline()
+    return 0u64
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    cs_hex_init()
+    let av : *u64 = argv as *u64
+    if argc < 2i32 {
+        let r : u64 = paratheke_selfprove()
+        cs_ps("paratheke_selfprove = " as u64)   cs_hexmin(r)   putchar(10i32)
+        if r == 0u64 { cs_ps("the deposit law holds: minted only by re-derivation, chained by address, re-earned on every read\n" as u64) }
+        return r
+    }
+    let m : u64 = av[1u64]
+    let mp : *u8 = m as *u8
+    let mc : u8 = mp[0u64]
+    C_CAP = cap_env_init()
+    if mc == 103u8 {                                          /* genesis */
+        if argc < 4i32 { cs_ps("usage: genesis <krisis-src> <probe-src>\n" as u64)   return 2u64 }
+        if c_sha8(av[2u64]) != 0u64 { cs_ps("cannot hash krisis source\n" as u64)   return 2u64 }
+        C_PINK = C_PIN
+        if c_sha8(av[3u64]) != 0u64 { cs_ps("cannot hash probe source\n" as u64)   return 2u64 }
+        C_PINP = C_PIN
+        return c_genesis()
+    }
+    if mc == 115u8 { if argc < 5i32 { cs_ps("usage: stand <ledger> <krisis-src> <probe-src>\n" as u64)   return 2u64 } }
+    if mc == 114u8 { if argc < 5i32 { cs_ps("usage: reearn <ledger> <krisis-src> <probe-src>\n" as u64)   return 2u64 } }
+    if mc == 115u8 {
+        if c_read_file(av[2u64]) != 0u64 { cs_ps("cannot read ledger\n" as u64)   return 2u64 }
+        if c_sha8(av[3u64]) != 0u64 { cs_ps("cannot hash krisis source\n" as u64)   return 2u64 }
+        C_PINK = C_PIN
+        if c_sha8(av[4u64]) != 0u64 { cs_ps("cannot hash probe source\n" as u64)   return 2u64 }
+        C_PINP = C_PIN
+        return c_stand()
+    }
+    if mc == 114u8 {
+        if c_read_file(av[2u64]) != 0u64 { cs_ps("cannot read ledger\n" as u64)   return 2u64 }
+        if c_sha8(av[3u64]) != 0u64 { cs_ps("cannot hash krisis source\n" as u64)   return 2u64 }
+        C_PINK = C_PIN
+        if c_sha8(av[4u64]) != 0u64 { cs_ps("cannot hash probe source\n" as u64)   return 2u64 }
+        C_PINP = C_PIN
+        return c_reearn()
+    }
+    cs_ps("usage: [genesis|stand|reearn] ...\n" as u64)
+    return 2u64
+}

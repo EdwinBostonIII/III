@@ -17,8 +17,10 @@
  * a source is fed to the compiler, kt_meter walks its bytes -- brace depth,
  * comments, strings, escapes -- and derives (top-level decls, fn count, max
  * declaration slots in any one fn: params + let + local var).  kt_preflight
- * prices the two documented walls (the seed's 1024-decl wall, the 64-slot
- * local ceiling) BEFORE any compile energy is spent.  JURISDICTION (the
+ * prices the two documented walls (SEMA_DECL_CAP -- 2048 since 2026-07-20 --
+ * and the 64-slot local ceiling) BEFORE any compile energy is spent.  Both
+ * walls have one shape: the value is the MOST accepted, and MORE refuses.
+ * JURISDICTION (the
  * eidolon law): this is a structural meter of the declaration grammar as the
  * organ corpus writes it (top-level keywords at line start, single-line or
  * multi-line signatures, block comments, double-quoted strings with
@@ -39,7 +41,8 @@
  *   322 THE PRE-FLIGHT METER: exact on generated corpora -- comments hiding
  *       keywords, strings hiding braces, extern decls, param slots, mid-line
  *       lets; the ceiling boundary EXACT (64 breathes, 65 refuses) and the
- *       wall boundary EXACT (1023 breathes, 1024th refuses).
+ *       decl-wall boundary EXACT (`wall` breathes, wall+1 refuses -- the
+ *       razor's edge a `>=` gets wrong).
  *   323 THE ECONOMY: the price is the width walked -- blind confirmation
  *       pays 64 for all; the mirror pays 8 for all plus 64 for survivors
  *       only, and every pruned candidate is PROVEN truly refused (zero
@@ -72,6 +75,8 @@ var KT_SCROLL : u64 = 0u64
 var KT_MDECLS : u64 = 0u64               /* last meter: top-level decls         */
 var KT_MFNS : u64 = 0u64                 /* last meter: fn definitions          */
 var KT_MSLOTS : u64 = 0u64               /* last meter: max decl slots in a fn  */
+var KT_MWLINE : u64 = 0u64               /* last meter: 1-based line of worst fn */
+var KT_SCOPE : [u64; 64]                 /* decls opened per brace depth        */
 var KT_SIGP : u64 = 0u64                 /* signature-scan resume position      */
 var KT_CBLIND : u64 = 0u64               /* economy: blind width total          */
 var KT_CMIRROR : u64 = 0u64              /* economy: mirror-first width total   */
@@ -242,6 +247,17 @@ fn kt_sig(buf: u64, len: u64, pos0: u64) -> u64 {
     if seen == 0u64 { return 0u64 }
     return commas + 1u64
 }
+fn kt_nl(buf: u64, lo: u64, hi: u64) -> u64 {
+    /* newlines in [lo,hi) -- the meter's line counter must cross a JUMPED
+     * span (a multi-line signature, which kt_sig skips wholesale) without
+     * losing count.  Without this the reported line drifts by exactly the
+     * number of continuation lines above it. */
+    let p : *u8 = buf as *u8
+    let mut i : u64 = lo
+    let mut n : u64 = 0u64
+    while i < hi { if p[i] == 10u8 { n = n + 1u64 }   i = i + 1u64 }
+    return n
+}
 fn kt_meter(buf: u64, len: u64) -> i32 @export {
     /* the structural walk: brace depth, block comments (nested), strings
      * (backslash escapes), line starts; decls and fn slots derived */
@@ -256,30 +272,39 @@ fn kt_meter(buf: u64, len: u64) -> i32 @export {
     let mut maxs : u64 = 0u64
     let mut cur : u64 = 0u64
     let mut infn : u64 = 0u64
+    let mut ln : u64 = 1u64
+    let mut fl : u64 = 0u64
+    KT_MWLINE = 0u64
     while pos < len {
         let c : u8 = p[pos]
         if instr == 1u64 {
-            if c == 92u8 { pos = pos + 2u64 } else {
+            if c == 92u8 { if pos + 1u64 < len { if p[pos + 1u64] == 10u8 { ln = ln + 1u64 } }   pos = pos + 2u64 } else {
                 if c == 34u8 { instr = 0u64 }
+                if c == 10u8 { ln = ln + 1u64 }
                 pos = pos + 1u64
             }
         } else { if com > 0u64 {
             if kt_kw(buf, len, pos, "/*" as u64) == 1u64 { com = com + 1u64   pos = pos + 2u64 } else {
             if kt_kw(buf, len, pos, "*" as u64) == 1u64 { if kt_kw(buf, len, pos + 1u64, "/" as u64) == 1u64 { com = com - 1u64   bol = 0u64   pos = pos + 2u64 } else { pos = pos + 1u64 } } else {
-                if c == 10u8 { bol = 1u64 }
+                if c == 10u8 { bol = 1u64   ln = ln + 1u64 }
                 pos = pos + 1u64
             } }
         } else {
             if kt_kw(buf, len, pos, "/*" as u64) == 1u64 { com = 1u64   bol = 0u64   pos = pos + 2u64 } else {
             if c == 34u8 { instr = 1u64   bol = 0u64   pos = pos + 1u64 } else {
-            if c == 10u8 { bol = 1u64   pos = pos + 1u64 } else {
+            if c == 10u8 { bol = 1u64   ln = ln + 1u64   pos = pos + 1u64 } else {
             if c == 13u8 { pos = pos + 1u64 } else {
-            if c == 123u8 { depth = depth + 1u64   bol = 0u64   pos = pos + 1u64 } else {
+            if c == 123u8 { depth = depth + 1u64   if depth < 64u64 { KT_SCOPE[depth] = 0u64 }   bol = 0u64   pos = pos + 1u64 } else {
             if c == 125u8 {
-                if depth > 0u64 { depth = depth - 1u64 }
+                if depth > 0u64 {
+                    /* the scope dies: its decls stop being live and the slots
+                     * are reusable -- this is what the codegen actually does */
+                    if depth < 64u64 { if cur >= KT_SCOPE[depth] { cur = cur - KT_SCOPE[depth] } }
+                    depth = depth - 1u64
+                }
                 if depth == 0u64 { if infn == 1u64 {
-                    if cur > maxs { maxs = cur }
                     infn = 0u64
+                    cur = 0u64
                 } }
                 bol = 0u64
                 pos = pos + 1u64
@@ -290,7 +315,12 @@ fn kt_meter(buf: u64, len: u64) -> i32 @export {
                         decls = decls + 1u64
                         fns = fns + 1u64
                         infn = 1u64
+                        fl = ln
                         cur = kt_sig(buf, len, pos + 3u64)
+                        ln = ln + kt_nl(buf, pos, KT_SIGP)
+                        /* params are live for the whole body: a signature can
+                         * breach the ceiling before a single let is written */
+                        if cur > maxs { maxs = cur   KT_MWLINE = fl }
                         pos = KT_SIGP
                         bol = 0u64
                         used = 1u64
@@ -303,8 +333,8 @@ fn kt_meter(buf: u64, len: u64) -> i32 @export {
                     let mut pv : u64 = 0u64
                     if pos == 0u64 { pv = 1u64 } else { if kt_is_word(p[pos - 1u64]) == 0u64 { pv = 1u64 } }
                     if pv == 1u64 {
-                        if kt_kw(buf, len, pos, "let " as u64) == 1u64 { cur = cur + 1u64   pos = pos + 4u64   bol = 0u64   used = 1u64 } else {
-                        if kt_kw(buf, len, pos, "var " as u64) == 1u64 { cur = cur + 1u64   pos = pos + 4u64   bol = 0u64   used = 1u64 } }
+                        if kt_kw(buf, len, pos, "let " as u64) == 1u64 { cur = cur + 1u64   if depth < 64u64 { KT_SCOPE[depth] = KT_SCOPE[depth] + 1u64 }   if cur > maxs { maxs = cur   KT_MWLINE = fl }   pos = pos + 4u64   bol = 0u64   used = 1u64 } else {
+                        if kt_kw(buf, len, pos, "var " as u64) == 1u64 { cur = cur + 1u64   if depth < 64u64 { KT_SCOPE[depth] = KT_SCOPE[depth] + 1u64 }   if cur > maxs { maxs = cur   KT_MWLINE = fl }   pos = pos + 4u64   bol = 0u64   used = 1u64 } }
                     }
                 } }
                 if used == 0u64 {
@@ -314,7 +344,8 @@ fn kt_meter(buf: u64, len: u64) -> i32 @export {
             } } } } } }
         } }
     }
-    if infn == 1u64 { if cur > maxs { maxs = cur } }
+    /* maxs is now raised at each decl as it opens, so an unterminated fn at
+     * EOF has already contributed everything it declared -- no close needed */
     KT_MDECLS = decls
     KT_MFNS = fns
     KT_MSLOTS = maxs
@@ -323,12 +354,17 @@ fn kt_meter(buf: u64, len: u64) -> i32 @export {
 fn kt_m_decls() -> u64 @export { return KT_MDECLS }
 fn kt_m_fns() -> u64 @export { return KT_MFNS }
 fn kt_m_slots() -> u64 @export { return KT_MSLOTS }
+fn kt_m_worst_line() -> u64 @export { return KT_MWLINE }
 fn kt_preflight(wall: u64, ceiling: u64) -> u64 @export {
-    /* the verdict on the LAST metered source: bit0 = the decl wall (the
-     * wall-th decl refuses), bit1 = the slot ceiling (ceiling breathes,
-     * ceiling+1 refuses).  0 = the compile energy is worth spending. */
+    /* the verdict on the LAST metered source.  BOTH walls have the SAME shape:
+     * the parameter is the MOST the compiler accepts, and MORE than it refuses.
+     * bit0 = the decl wall (`wall` = SEMA_DECL_CAP; `wall` decls breathe, wall+1
+     * refuses -- empirically metered 2048 compiles, 2049 OOMs).  bit1 = the slot
+     * ceiling (`ceiling` slots breathe, ceiling+1 refuses).  0 = worth spending.
+     * NOTE the strict `>`: a `>=` on the decl wall false-refuses a file with
+     * EXACTLY `wall` decls -- the razor's edge corpus D proves. */
     let mut v : u64 = 0u64
-    if KT_MDECLS >= wall { v = v | 1u64 }
+    if KT_MDECLS > wall { v = v | 1u64 }
     if KT_MSLOTS > ceiling { v = v | 2u64 }
     return v
 }
@@ -417,29 +453,79 @@ fn kt_arm322() -> u64 {
     kt_run_meter()
     if KT_MSLOTS != 65u64 { return 322u64 }
     if kt_preflight(1024u64, 64u64) != 2u64 { return 322u64 }
-    /* corpus D: the decl wall EXACT -- 1023 breathes, the 1024th refuses */
+    /* corpus D: THE DECL WALL, EXACT AT THE RAZOR'S EDGE.  `wall` is the MOST
+     * decls the compiler accepts, so EXACTLY `wall` breathes and wall+1 refuses
+     * -- the same "max accepted, refuse if exceeded" shape as the slot ceiling.
+     * The `>=` this replaced would false-refuse a file with exactly `wall`
+     * decls, which is exactly what cg_r3.iii@98de97e4 (1024 decls, compiled
+     * clean under the old cap) was.  This is the checkpoint that distinguishes
+     * `>` from `>=`. */
     kt_sclr()
     v = 0u64
-    while v < 1023u64 {
+    while v < 1024u64 {
         kt_sputs("var v" as u64)
         kt_sputn(v)
         kt_sputs(" : u64 = 0u64\n" as u64)
         v = v + 1u64
     }
     kt_run_meter()
-    if KT_MDECLS != 1023u64 { return 322u64 }
+    if KT_MDECLS != 1024u64 { return 322u64 }
     if KT_MFNS != 0u64 { return 322u64 }
-    if kt_preflight(1024u64, 64u64) != 0u64 { return 322u64 }
+    if kt_preflight(1024u64, 64u64) != 0u64 { return 322u64 }   /* EXACTLY wall -- breathes */
+    kt_sputs("var w0 : u64 = 0u64\n" as u64)
+    kt_run_meter()
+    if KT_MDECLS != 1025u64 { return 322u64 }
+    if kt_preflight(1024u64, 64u64) != 1u64 { return 322u64 }   /* wall+1 -- refuses */
+    /* corpus E: LINE ATTRIBUTION.  A MULTI-LINE signature sits above the worst
+     * fn, so the reported line is right only if the meter counts the newlines
+     * kt_sig jumps over.  Delete kt_nl and this reads 4, not 7 -- the drift is
+     * exactly the continuation-line count.  The corpus fixes the answer: the
+     * worst fn is the 7th line of the text this arm builds. */
+    kt_sclr()
+    kt_sputs("fn a(\n    x: u64,\n    y: u64\n) -> u64 {\n    return x\n}\n" as u64)
+    kt_sputs("fn worst() -> u64 {\n    let q0 : u64 = 0u64\n    let q1 : u64 = 0u64\n    let q2 : u64 = 0u64\n    return q0\n}\n" as u64)
+    kt_run_meter()
+    if KT_MFNS != 2u64 { return 322u64 }
+    if KT_MSLOTS != 3u64 { return 322u64 }
+    if kt_m_worst_line() != 7u64 { return 322u64 }
+    /* TEETH: the line is DERIVED, not a constant -- one added line above the
+     * worst fn moves the verdict by exactly one */
+    kt_sclr()
+    kt_sputs("var pad : u64 = 0u64\n" as u64)
+    kt_sputs("fn a(\n    x: u64,\n    y: u64\n) -> u64 {\n    return x\n}\n" as u64)
+    kt_sputs("fn worst() -> u64 {\n    let q0 : u64 = 0u64\n    let q1 : u64 = 0u64\n    let q2 : u64 = 0u64\n    return q0\n}\n" as u64)
+    kt_run_meter()
+    if kt_m_worst_line() != 8u64 { return 322u64 }
+    /* corpus F: THE SCOPE LAW -- the meter counts LIVE slots, not syntax.
+     * 69 decls written, but in DISJOINT scopes: the codegen reuses the slots
+     * of a scope that has died, so at most 35 are ever live and the compile
+     * SUCCEEDS.  Measured against iiis-2 directly (STDLIB/build/katoptron):
+     * 65 flat lets refuse with the silent exit 14, while 69 nested ones
+     * compile clean.  A syntactic sum reports 69, indicts this shape, and is
+     * WRONG -- it is exactly what metabole.iii:7073 (mb_arm376, 68 decls
+     * across brace depths 1,2,3,4,7) would have been falsely refused for. */
+    kt_sclr()
+    kt_sputs("fn big() -> u64 {\n    let r : u64 = 0u64\n    if r == 0u64 {\n" as u64)
     v = 0u64
-    while v < 7u64 {
-        kt_sputs("var w" as u64)
+    while v < 34u64 {
+        kt_sputs("        let a" as u64)
         kt_sputn(v)
         kt_sputs(" : u64 = 0u64\n" as u64)
         v = v + 1u64
     }
+    kt_sputs("        r = a0\n    }\n    if r == 0u64 {\n" as u64)
+    v = 0u64
+    while v < 34u64 {
+        kt_sputs("        let b" as u64)
+        kt_sputn(v)
+        kt_sputs(" : u64 = 0u64\n" as u64)
+        v = v + 1u64
+    }
+    kt_sputs("        r = b0\n    }\n    return r\n}\n" as u64)
     kt_run_meter()
-    if KT_MDECLS != 1030u64 { return 322u64 }
-    if kt_preflight(1024u64, 64u64) != 1u64 { return 322u64 }
+    if KT_MFNS != 1u64 { return 322u64 }
+    if KT_MSLOTS != 35u64 { return 322u64 }
+    if kt_preflight(1024u64, 64u64) != 0u64 { return 322u64 }
     return 0u64
 }
 fn kt_arm323() -> u64 {

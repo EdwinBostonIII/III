@@ -1,0 +1,165 @@
+/* STDLIB/iii/omnia/katoptron_cli.iii -- KATOPTRON'S FACE: the pre-flight the
+ * build path calls BEFORE it spends a compile.
+ *
+ * THE GAP THIS CLOSES.  The 64-slot local ceiling in cg_r3 announces itself as
+ * a SILENT exit 14 -- no message, no file, no line.  Every session that meets
+ * it pays the same tax: bisect the file by hand until the offending fn falls
+ * out.  KATOPTRON already priced that wall (kt_meter / kt_preflight); what it
+ * could not do was say WHERE.  With kt_m_worst_line the mirror now names the
+ * line, and this face is what lets a shell script ask.
+ *
+ *   katoptron prove                 the self-proof alone (arms 320..324)
+ *   katoptron meter <file.iii>      the metered shape: decls, fns, worst slots + line
+ *   katoptron preflight <file>...   REFUSE what would breach; exit 1 naming the line
+ *
+ * THE CONDITION OF MOTION (the kardia pattern, as eidolos_main and doxa_main
+ * hold it): every verb self-proves the organ FIRST and refuses to speak over a
+ * broken law -- exit 9.  A meter that cannot prove itself may not judge source.
+ *
+ * A REFUSAL IS NOT A TRUNCATION.  A file larger than the meter's window is
+ * REFUSED with its verdict withheld, never metered short: a confident verdict
+ * over a truncated buffer is worse than no verdict, because the caller cannot
+ * tell the difference.  The window is 1 MiB; the tree's largest source is
+ * metabole.iii at 293597 bytes.
+ *
+ * exit: 0 all clear / 1 a file would breach / 3 usage / 4 unreadable / 9 SELF-REFUSED */
+module katoptron_cli
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fread(buf: u64, sz: u64, n: u64, stream: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fclose(stream: u64) -> i32 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn kt_selfprove() -> u64 from "katoptron.iii"
+extern @abi(c-msvc-x64) fn kt_meter(buf: u64, len: u64) -> i32 from "katoptron.iii"
+extern @abi(c-msvc-x64) fn kt_m_decls() -> u64 from "katoptron.iii"
+extern @abi(c-msvc-x64) fn kt_m_fns() -> u64 from "katoptron.iii"
+extern @abi(c-msvc-x64) fn kt_m_slots() -> u64 from "katoptron.iii"
+extern @abi(c-msvc-x64) fn kt_m_worst_line() -> u64 from "katoptron.iii"
+extern @abi(c-msvc-x64) fn kt_preflight(wall: u64, ceiling: u64) -> u64 from "katoptron.iii"
+
+/* the compiler's two standing walls, named once.  KM_WALL MUST equal
+ * sema.iii's SEMA_DECL_CAP -- the katoptron_gate decl differential asks the
+ * live compiler where its wall is every run and reddens if this drifts from it
+ * (that drift is exactly how cg_r3.iii crossed the old 1024 wall unnoticed).
+ * Lifted 1024 -> 2048 alongside SEMA_DECL_CAP (2026-07-20). */
+const KM_WALL : u64 = 2048u64
+const KM_CEIL : u64 = 64u64
+/* read sentinels -- u64 throughout, as kt_mismatch holds the same idiom */
+const KM_ENOENT : u64 = 18446744073709551615u64
+const KM_EBIG : u64 = 18446744073709551614u64
+
+var KM_BUF : [u8; 1048576]
+
+fn ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn pu(v: u64) -> u32 { if v >= 10u64 { pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn seq(a: u64, b: u64) -> u64 {
+    let x : *u8 = a as *u8
+    let y : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while x[i] != 0u8 { if x[i] != y[i] { return 0u64 }   i = i + 1u64 }
+    if y[i] != 0u8 { return 0u64 }
+    return 1u64
+}
+
+fn km_read(path: u64) -> u64 {
+    /* the whole file into the window, or a REFUSAL -- never a short read */
+    let h : u64 = fopen(path, "rb" as u64)
+    if h == 0u64 { return KM_ENOENT }
+    let n : u64 = fread((&KM_BUF) as u64, 1u64, 1048576u64, h)
+    fclose(h)
+    if n >= 1048576u64 { return KM_EBIG }
+    return n
+}
+
+fn km_report(path: u64, n: u64) -> u64 {
+    /* the metered shape of one file; returns the preflight verdict */
+    kt_meter((&KM_BUF) as u64, n)
+    let v : u64 = kt_preflight(KM_WALL, KM_CEIL)
+    if v != 0u64 {
+        if (v & 2u64) == 2u64 {
+            ps("katoptron: REFUSED " as u64)   ps(path)   ps(":" as u64)   pu(kt_m_worst_line())
+            ps(" -- this fn holds " as u64)    pu(kt_m_slots())
+            ps(" decl slots; the ceiling is " as u64)   pu(KM_CEIL)
+            ps(" (hoist locals to a module var -- this is the silent exit 14)\n" as u64)
+        }
+        if (v & 1u64) == 1u64 {
+            ps("katoptron: REFUSED " as u64)   ps(path)
+            ps(" -- " as u64)   pu(kt_m_decls())
+            ps(" top-level decls; the wall is " as u64)   pu(KM_WALL)   ps("\n" as u64)
+        }
+    }
+    return v
+}
+
+fn usage() -> u64 {
+    ps("iii katoptron -- THE MIRROR'S PRE-FLIGHT: price the compile before spending it\n\n" as u64)
+    ps("  katoptron prove                 the self-proof alone (arms 320..324)\n" as u64)
+    ps("  katoptron meter <file.iii>      the metered shape: decls, fns, worst fn slots + line\n" as u64)
+    ps("  katoptron preflight <file>...   REFUSE any file that would breach; exit 1 naming the line\n" as u64)
+    return 3u64
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let av : *u64 = argv as *u64
+    if argc < 2i32 { return usage() }
+    /* THE CONDITION OF MOTION: a meter that cannot prove itself may not judge */
+    let sp : u64 = kt_selfprove()
+    if sp != 0u64 {
+        ps("katoptron: SELF-REFUSED at arm " as u64)   pu(sp)   ps(" -- the mirror does not judge over a broken law\n" as u64)
+        return 9u64
+    }
+    let verb : u64 = av[1]
+
+    if seq(verb, "prove" as u64) == 1u64 {
+        ps("KATOPTRON PROVEN -- arms 320..324 green; the shadow is exact, its price is the width walked\n" as u64)
+        return 0u64
+    }
+
+    if seq(verb, "meter" as u64) == 1u64 {
+        if argc < 3i32 { return usage() }
+        let n : u64 = km_read(av[2])
+        if n == KM_ENOENT { ps("katoptron: cannot open " as u64)   ps(av[2])   ps("\n" as u64)   return 4u64 }
+        if n == KM_EBIG { ps("katoptron: REFUSED " as u64)   ps(av[2])   ps(" -- larger than the 1 MiB window; verdict WITHHELD\n" as u64)   return 4u64 }
+        kt_meter((&KM_BUF) as u64, n)
+        ps(av[2])   ps("\n" as u64)
+        ps("  bytes        " as u64)   pu(n)   ps("\n" as u64)
+        ps("  top decls    " as u64)   pu(kt_m_decls())   ps("  (wall " as u64)   pu(KM_WALL)   ps(")\n" as u64)
+        ps("  fns          " as u64)   pu(kt_m_fns())   ps("\n" as u64)
+        ps("  worst fn     " as u64)   pu(kt_m_slots())   ps(" slots at line " as u64)   pu(kt_m_worst_line())
+        ps("  (ceiling " as u64)   pu(KM_CEIL)   ps(")\n" as u64)
+        if kt_preflight(KM_WALL, KM_CEIL) == 0u64 { ps("  verdict      CLEAR -- the compile energy is worth spending\n" as u64) } else { ps("  verdict      WOULD BREACH\n" as u64) }
+        return 0u64
+    }
+
+    if seq(verb, "preflight" as u64) == 1u64 {
+        if argc < 3i32 { return usage() }
+        let mut i : u64 = 2u64
+        let mut bad : u64 = 0u64
+        let mut seen : u64 = 0u64
+        while (i as i64) < (argc as i64) {
+            let path : u64 = av[i]
+            let n : u64 = km_read(path)
+            if n == KM_ENOENT {
+                ps("katoptron: cannot open " as u64)   ps(path)   ps("\n" as u64)
+                bad = bad + 1u64
+            } else {
+            if n == KM_EBIG {
+                ps("katoptron: REFUSED " as u64)   ps(path)   ps(" -- larger than the 1 MiB window; verdict WITHHELD\n" as u64)
+                bad = bad + 1u64
+            } else {
+                seen = seen + 1u64
+                if km_report(path, n) != 0u64 { bad = bad + 1u64 }
+            } }
+            i = i + 1u64
+        }
+        if bad > 0u64 { return 1u64 }
+        ps("katoptron: " as u64)   pu(seen)   ps(" file(s) CLEAR -- no decl wall, no slot ceiling\n" as u64)
+        return 0u64
+    }
+
+    return usage()
+}
+
+/* KATOPTRON_CLI: the mirror finally answers the only question the build path
+ * ever asked it -- not "how wide is this source" but "WHERE will it break". */

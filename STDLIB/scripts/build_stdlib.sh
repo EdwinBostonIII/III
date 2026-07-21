@@ -252,6 +252,39 @@ if [[ -f "$TRUSTED_BASE_CHECK" ]]; then
     fi
 fi
 
+# --- Compile pre-flight: price the compiler's walls before spending them ------
+# KATOPTRON (omnia/katoptron) meters each STDLIB source for the compiler's two
+# standing walls -- SEMA_DECL_CAP top-level decls (sema.iii) and the 64-slot
+# local declaration ceiling -- and REFUSES a source that would breach, naming
+# the file and (for the slot ceiling) the worst fn's line.  The slot ceiling's
+# failure is a SILENT exit 14 from the compiler with no message and no line;
+# this turns it into a named refusal BEFORE the compile is spent.
+# FAIL-OPEN BY DESIGN: katoptron.exe links the archive THIS script produces, so
+# on a from-clean build it does not exist yet and this skips -- exactly as the
+# drift gates above skip a missing generator.  It runs on every incremental
+# build.  katoptron_gate.sh proves the verdict matches the LIVE compiler at the
+# exact wall (2048) and ceiling (64), so a REFUSED here is a real breach.
+# Override with KATOPTRON_PREFLIGHT=0 (and then file it: a false refusal means
+# the meter drifted from the compiler, which katoptron_gate would have caught).
+KT_PREFLIGHT="$STDLIB_DIR/build/katoptron/katoptron.exe"
+if [[ -x "$KT_PREFLIGHT" && "${KATOPTRON_PREFLIGHT:-1}" != "0" ]]; then
+    echo "[build_stdlib] compile pre-flight: katoptron over STDLIB/iii"
+    KT_OUT="$STDLIB_DIR/build/_preflight.txt"
+    # -d '\n': this tree lives under a path with a space ("Edwin Boston"); default
+    # xargs word-splitting would fragment every path (the vacuous-census trap).
+    find "$STDLIB_DIR/iii" -name '*.iii' | xargs -d '\n' "$KT_PREFLIGHT" preflight > "$KT_OUT" 2>&1 || true
+    if grep -q '^katoptron: REFUSED' "$KT_OUT"; then
+        grep '^katoptron: REFUSED' "$KT_OUT" >&2
+        echo "[build_stdlib] FATAL: a STDLIB source would breach a compiler wall (named above)." >&2
+        echo "[build_stdlib]        Slot ceiling: hoist locals in the named fn to a module-level var. Decl wall: cut a top-level decl, or raise SEMA_DECL_CAP (and katoptron's KM_WALL) together." >&2
+        echo "[build_stdlib]        This is the compiler's silent exit-14, named ahead of time. Override: KATOPTRON_PREFLIGHT=0." >&2
+        exit 2
+    fi
+    if grep -q '^katoptron: cannot open' "$KT_OUT"; then
+        echo "[build_stdlib] WARN: pre-flight could not read some sources (not treated as a breach)." >&2
+    fi
+fi
+
 # --- Architectural invariant gate (cartographer --gate) ----------------
 # Beyond the per-.def drift gates above, the cartographer (sibling tree)
 # enforces the STRUCTURAL graph invariants: no un-allowlisted dependency

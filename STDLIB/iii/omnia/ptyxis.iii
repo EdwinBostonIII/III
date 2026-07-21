@@ -1,0 +1,227 @@
+/* STDLIB/iii/omnia/ptyxis.iii -- PTYXIS (the FOLD): the de-exponentiation faculty.
+ *
+ * THE ONE LAW, seven masks.  Exponential explosion is an artifact of REPRESENTATION.  Wherever a problem
+ * carries a GENERATING STRUCTURE, the exact answer is DERIVABLE and DECIDABLE from a small generating set,
+ * without ever materialising the exponential.  III already proves this in six domains, each a gated organ:
+ *   FOLD_GF2         linear / stabilizer   2^K timelines from K GF(2) colors      cassandra / aether_lens
+ *   FOLD_SYMMETRY    localization          infinite sum -> finite fixed points    meris (Nekrasov)
+ *   FOLD_CONGRUENCE  equality saturation   expo forms -> one e-class              e-graph (2117 superpos)
+ *   FOLD_FUNCTION    bounded codomain      infinite circuits -> 256 functions     weave_explosion / Toffoli
+ *   FOLD_CORRELATION affine cancellation   interval blowup -> bounded affine      zonos
+ *   FOLD_TILT        correspondence        infinite tower -> finite shadow        klisi (perfectoid)
+ *   FOLD_ORDER       exact decision        enumerate-argmax -> decide-by-sign     krisis / sqrt_sum_sign
+ *
+ * PTYXIS is the META-organ: it holds the ONE fold (GF(2) generators, the cleanest exact instance -- the
+ * Gottesman-Knill shape), RECOGNISES which generating structure a problem has, DISPATCHES the de-exponentiation
+ * (or REFUSES, naming the wall when the exponential is real -- no faked fold), and COMPOSES folds: the argmax
+ * over a 2^K candidate set decided in O(K) by exact sign, the exponential never enumerated (FOLD_GF2 (x) FOLD_ORDER
+ * = certified beam over an exact order with no exponential memory).  Truth is a CONDITION OF MOTION: every
+ * de-exponentiation is cross-checked against the brute exponential it replaces (the melt agrees with the heavy
+ * judge -- no self-grading).  NIH: hand-rolled GF(2) over u64 + exact i64 sign.  Ring R0. */
+module ptyxis
+
+/* ==================== THE GF(2) FOLD: K generators hold 2^K instances ==================== */
+const PT_CAP : u64 = 64u64                  /* the orthogonality ceiling = u64 dimension */
+var PT_GEN : [u64; 64]                       /* echelon basis vectors (the held generators) */
+var PT_PIV : [u64; 64]                       /* the distinct pivot bit of each basis vector */
+var PT_K : u64 = 0u64                        /* the rank -- how few generators the space folds to */
+var PT_REF_DEP : u64 = 0u64                  /* dependent directions refused (counted, never faked) */
+var PT_REF_FULL : u64 = 0u64                 /* directions past the 64-dim ceiling (counted) */
+var PT_INST : [u64; 64]                      /* derived-instance scratch (soundness cross-check) */
+
+fn pt_reset() -> i32 @export {
+    PT_K = 0u64   PT_REF_DEP = 0u64   PT_REF_FULL = 0u64   return 0i32
+}
+fn pt_hibit(v: u64) -> u64 {
+    let mut b : u64 = 63u64
+    while b > 0u64 { if ((v >> b) & 1u64) == 1u64 { return b }   b = b - 1u64 }
+    return 0u64
+}
+/* reduce v against the echelon basis; residual 0 == v is IN the span (derivable) */
+fn pt_reduce(v: u64) -> u64 {
+    let mut x : u64 = v
+    let mut i : u64 = 0u64
+    while i < PT_K {
+        if ((x >> PT_PIV[i]) & 1u64) == 1u64 { x = x ^ PT_GEN[i] }
+        i = i + 1u64
+    }
+    return x
+}
+/* THE RECOGNISER + THE REFUSAL: add a direction IFF it is INDEPENDENT (grows the rank).  A dependent
+ * direction is REFUSED and counted -- the fold never inflates 2^K by admitting a redundant generator. */
+fn pt_add_gen(v: u64) -> i32 @export {
+    if v == 0u64 { PT_REF_DEP = PT_REF_DEP + 1u64   return 1i32 }
+    if PT_K >= PT_CAP { PT_REF_FULL = PT_REF_FULL + 1u64   return 2i32 }
+    let r : u64 = pt_reduce(v)
+    if r == 0u64 { PT_REF_DEP = PT_REF_DEP + 1u64   return 1i32 }
+    PT_GEN[PT_K] = r
+    PT_PIV[PT_K] = pt_hibit(r)
+    PT_K = PT_K + 1u64
+    return 0i32
+}
+fn pt_rank() -> u64 @export { return PT_K }
+fn pt_ref_dep() -> u64 @export { return PT_REF_DEP }
+fn pt_ref_full() -> u64 @export { return PT_REF_FULL }
+/* DERIVE an instance on demand: XOR the generators the mask selects.  2^K instances, only K words stored. */
+fn pt_derive(mask: u64) -> u64 @export {
+    let mut x : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < PT_K { if ((mask >> i) & 1u64) == 1u64 { x = x ^ PT_GEN[i] }   i = i + 1u64 }
+    return x
+}
+/* DECIDE membership WITHOUT enumeration: is t derivable from the generators? (GF(2) solve) */
+fn pt_member(t: u64) -> u64 @export { if pt_reduce(t) == 0u64 { return 1u64 }   return 0u64 }
+/* COLLAPSE / observation: the subset that derives t (the surviving timeline), or SENTINEL if t is unreachable. */
+fn pt_collapse(t: u64) -> u64 @export {
+    let mut x : u64 = t
+    let mut s : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < PT_K {
+        if ((x >> PT_PIV[i]) & 1u64) == 1u64 { x = x ^ PT_GEN[i]   s = s | (1u64 << i) }
+        i = i + 1u64
+    }
+    if x != 0u64 { return 0xFFFFFFFFFFFFFFFFu64 }
+    return s
+}
+/* THE HEAVY JUDGE (soundness, no self-grading): brute membership over the full 2^K, must agree with pt_member. */
+fn pt_brute_member(t: u64) -> u64 {
+    let n : u64 = 1u64 << PT_K
+    let mut m : u64 = 0u64
+    while m < n { if pt_derive(m) == t { return 1u64 }   m = m + 1u64 }
+    return 0u64
+}
+/* the de-exponentiation itself, verified: K independent generators -> 2^K DISTINCT instances. */
+fn pt_count_distinct() -> u64 @export {
+    let n : u64 = 1u64 << PT_K
+    if n > 64u64 { return 0u64 }
+    let mut m : u64 = 0u64
+    while m < n { PT_INST[m] = pt_derive(m)   m = m + 1u64 }
+    let mut distinct : u64 = 0u64
+    m = 0u64
+    while m < n {
+        let mut seen : u64 = 0u64
+        let mut j : u64 = 0u64
+        while j < m { if PT_INST[j] == PT_INST[m] { seen = 1u64 }   j = j + 1u64 }
+        if seen == 0u64 { distinct = distinct + 1u64 }
+        m = m + 1u64
+    }
+    return distinct
+}
+
+/* ==================== THE ORDER FOLD: argmax over 2^K in O(K) by exact sign ==================== */
+/* A SEPARABLE exact score  score(S) = base + Sum_{i in S} w_i  is maximised by including generator i IFF
+ * its exact weight is positive -- O(K) exact-sign decisions, the 2^K set NEVER enumerated. */
+var PT_W : [i64; 64]
+var PT_BASE : i64 = 0i64
+fn pt_set_base(b: i64) -> i32 @export { PT_BASE = b   return 0i32 }
+fn pt_set_w(i: u64, w: i64) -> i32 @export { if i < 64u64 { PT_W[i] = w }   return 0i32 }
+fn pt_argmax_mask() -> u64 @export {
+    let mut s : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < PT_K { if PT_W[i] > 0i64 { s = s | (1u64 << i) }   i = i + 1u64 }
+    return s
+}
+/* EXPORTED so ONTOS can judge the being-signature of the ORDER fold's ACTUAL score function -- the map
+ * 2^K -> Z whose image count is exactly this fold's descent. The judge reads real scores, never a fixture. */
+fn pt_score(mask: u64) -> i64 @export {
+    let mut s : i64 = PT_BASE
+    let mut i : u64 = 0u64
+    while i < PT_K { if ((mask >> i) & 1u64) == 1u64 { s = s + PT_W[i] }   i = i + 1u64 }
+    return s
+}
+/* THE HEAVY JUDGE: brute argmax over the full 2^K (must agree with pt_argmax_mask). */
+fn pt_brute_argmax() -> u64 {
+    let n : u64 = 1u64 << PT_K
+    let mut best : u64 = 0u64
+    let mut bs : i64 = pt_score(0u64)
+    let mut m : u64 = 1u64
+    while m < n {
+        let sc : i64 = pt_score(m)
+        if sc > bs { bs = sc   best = m }
+        m = m + 1u64
+    }
+    return best
+}
+
+/* ==================== THE DISPATCHER: recognise the structure, route, or REFUSE ==================== */
+const FOLD_NONE : u64 = 0u64
+const FOLD_GF2 : u64 = 1u64
+const FOLD_SYMMETRY : u64 = 2u64
+const FOLD_CONGRUENCE : u64 = 3u64
+const FOLD_FUNCTION : u64 = 4u64
+const FOLD_CORRELATION : u64 = 5u64
+const FOLD_TILT : u64 = 6u64
+const FOLD_ORDER : u64 = 7u64
+/* the taxonomy is real: each tag is a generating structure III has a gated organ for.  FOLD_NONE is the HONEST
+ * WALL -- a problem with no generating structure is genuinely exponential and the fold REFUSES to fake it. */
+fn pt_dispatch(tag: u64) -> u64 @export {
+    if tag == FOLD_GF2 { return FOLD_GF2 }               /* -> cassandra / this kernel */
+    if tag == FOLD_SYMMETRY { return FOLD_SYMMETRY }     /* -> meris (Nekrasov localization) */
+    if tag == FOLD_CONGRUENCE { return FOLD_CONGRUENCE } /* -> e-graph superposition */
+    if tag == FOLD_FUNCTION { return FOLD_FUNCTION }     /* -> weave_explosion signatures */
+    if tag == FOLD_CORRELATION { return FOLD_CORRELATION } /* -> zonos affine forms */
+    if tag == FOLD_TILT { return FOLD_TILT }             /* -> klisi perfectoid tilt */
+    if tag == FOLD_ORDER { return FOLD_ORDER }           /* -> the exact-order krisis */
+    return FOLD_NONE                                     /* no structure -> the exponential is real, REFUSED */
+}
+/* RECOGNISE FOLD_GF2 directly: fold n candidate directions to their rank; if the rank K < n the space
+ * de-exponentiates (n directions, 2^K span held in K).  Returns the rank, or 0 on a null read. */
+fn pt_recognise_gf2(ptr: u64, n: u64) -> u64 @export {
+    pt_reset()
+    let p : *u64 = ptr as *u64
+    let mut i : u64 = 0u64
+    while i < n { pt_add_gen(p[i])   i = i + 1u64 }
+    return PT_K
+}
+
+/* ==================== THE GATE (pure, RED->GREEN, negatives, two-engine, determinism) ==================== */
+fn ptyxis_selfprove() -> u64 @export {
+    /* ARM 1 -- THE GF(2) DE-EXPONENTIATION, SOUND: 3 independent generators hold 2^3 = 8 DISTINCT instances
+     * (only 3 words stored), and the count agrees with the brute enumeration of the full 8. */
+    pt_reset()
+    if pt_add_gen(1u64) != 0i32 { return 1u64 }          /* e0 */
+    if pt_add_gen(2u64) != 0i32 { return 1u64 }          /* e1 */
+    if pt_add_gen(4u64) != 0i32 { return 1u64 }          /* e2 */
+    if pt_rank() != 3u64 { return 2u64 }
+    if pt_count_distinct() != 8u64 { return 3u64 }       /* 3 generators -> 2^3 distinct, verified vs brute */
+
+    /* ARM 2 -- DERIVE + DECIDE without enumeration, sound vs the heavy judge. */
+    if pt_derive(5u64) != 5u64 { return 4u64 }           /* {e0,e2} -> 1^4 = 5 */
+    if pt_member(7u64) != 1u64 { return 5u64 }           /* 7 in span */
+    if pt_member(7u64) != pt_brute_member(7u64) { return 6u64 }   /* melt agrees with brute */
+    if pt_member(8u64) != 0u64 { return 7u64 }           /* 8 NOT in span (bit 3 unreachable) */
+    if pt_member(8u64) != pt_brute_member(8u64) { return 8u64 }
+
+    /* ARM 3 -- COLLAPSE round-trips: the observed value names its surviving subset. */
+    let cs : u64 = pt_collapse(6u64)                     /* 6 = e1 ^ e2 -> subset {1,2} = 0b110 */
+    if pt_derive(cs) != 6u64 { return 9u64 }
+    if pt_collapse(8u64) != 0xFFFFFFFFFFFFFFFFu64 { return 10u64 }   /* unreachable -> honest sentinel */
+
+    /* ARM 4 -- REFUSAL (mandatory negative): a DEPENDENT direction is refused, the rank UNCHANGED -- the fold
+     * never inflates 2^K.  (3 = e0 ^ e1 is already in the span.) */
+    let before : u64 = pt_rank()
+    if pt_add_gen(3u64) != 1i32 { return 11u64 }         /* dependent -> refused */
+    if pt_rank() != before { return 12u64 }              /* rank did NOT grow -- no faked generator */
+    if pt_ref_dep() != 1u64 { return 13u64 }             /* the refusal counted, never silent */
+
+    /* ARM 5 -- THE CROSS-COMPOSITION (FOLD_GF2 (x) FOLD_ORDER): the argmax over the 2^3 candidate set decided
+     * in O(K) by exact sign, the exponential NEVER enumerated, and it AGREES with the brute 2^K argmax.
+     * weights (+5, -3, +2): the best subset includes generators 0 and 2 only -> mask 0b101 = 5. */
+    pt_set_base(0i64)
+    pt_set_w(0u64, 5i64)   pt_set_w(1u64, 0i64 - 3i64)   pt_set_w(2u64, 2i64)
+    let fold_arg : u64 = pt_argmax_mask()                /* O(K) exact-sign fold */
+    if fold_arg != 5u64 { return 14u64 }
+    if fold_arg != pt_brute_argmax() { return 15u64 }    /* no self-grading: the fold == the heavy 2^K argmax */
+
+    /* ARM 6 -- THE DISPATCHER routes real structures and REFUSES the structureless (the honest wall). */
+    if pt_dispatch(FOLD_GF2) != FOLD_GF2 { return 16u64 }
+    if pt_dispatch(FOLD_ORDER) != FOLD_ORDER { return 17u64 }
+    if pt_dispatch(FOLD_CORRELATION) != FOLD_CORRELATION { return 18u64 }
+    if pt_dispatch(999u64) != FOLD_NONE { return 19u64 }  /* no generating structure -> REFUSED, not faked */
+
+    /* ARM 7 -- RECOGNITION: 4 directions of rank 3 de-exponentiate (4 -> 3; the 2^3 span held in 3). */
+    pt_reset()
+    PT_INST[0u64] = 1u64   PT_INST[1u64] = 2u64   PT_INST[2u64] = 3u64   PT_INST[3u64] = 4u64
+    if pt_recognise_gf2((&PT_INST) as u64, 4u64) != 3u64 { return 20u64 }   /* rank 3, the 4th folded away */
+    return 0u64
+}

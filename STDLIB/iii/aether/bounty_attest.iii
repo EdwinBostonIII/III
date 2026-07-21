@@ -1,0 +1,95 @@
+/* STDLIB/iii/aether/bounty_attest.iii -- THE CERTIFIED-FINDING ATTESTATION ATOM (AUXESIS STANDING, networked).
+ *
+ * The UNIT of the bounty-reputation federation: a node publishes a SIGNED, CONTENT-ADDRESSED attestation that
+ * it holds a VERIFIED security finding AGAINST A PUBLIC ARTIFACT -- without revealing the finding's secret
+ * witness.  The claim is bound to (target_commitment, property_id, witness_digest, verdict):
+ *   - target_commitment : the 32-byte content-address of the PUBLIC on-chain bytecode / circuit r1cs -- the
+ *                         TRUST ANCHOR (anyone recomputes it from the public artifact; the attestation is NOT
+ *                         a self-grade, it is bound to a thing the world can see).
+ *   - property_id       : the vuln class decided (e.g. ZK under-constraint = the fold's nullspace refutation).
+ *   - witness_digest    : cad of the SECRET witnessed trace (the 2nd witness / forgery).  The trace stays
+ *                         private; only its digest is attested.  Selective disclosure reveals the trace to a
+ *                         paying program under its bounty terms -- the ONLY step that touches identity.
+ *   - verdict           : 1 = refuted/exploited (soundness broken), 0 = refused.
+ * attestation_root = cad(record); signature = the node's deterministic Ed25519 IDENTITY sig over the root.  A
+ * verifier holding the node's public key confirms -- OFFLINE, without the trace -- that THIS node vouches it
+ * holds a finding against THIS public target.  Tampering with ANY field changes the root; the old sig no longer
+ * matches (bound-to-artifact, non-reattributable).
+ *
+ * The STANDING unit: a node's accreted set of these attestations IS its anonymous, portable, platform-
+ * independent reputation.  INCREMENT 2 (aether/cap_zkp) proves "I hold >=N attestations in the sealed set"
+ * without revealing WHICH -- set-anonymity via the same merkle-inclusion mechanism cap_zkp already runs.
+ * INCREMENT 3 (aether/hotstuff_unified + pq_quorum + fed_sybil/fed_eclipse) reaches BFT agreement on the
+ * federation's attestation set with Sybil/eclipse resistance.  INCREMENT 4 (reach_core + tcp) gossips it.
+ * This organ is the ATOM they wrap -- built first, gated first, so nothing above it is an island.
+ *
+ * COMPOSES (not reimplements): cad (the ONE content-address primitive) + aether/node_identity (deterministic
+ * RFC-8032 Ed25519 identity: reproducible cross-run) + numera/crypt_ed25519 (offline verify) + aether/
+ * capability (ATTEST-right gate, deny-by-default).  SAME trust chain as aether/attest_box, pointed at a finding
+ * instead of a disk image.  Hexad: kind_compose + kind_witness.  Ring: R-1.  NIH: no new crypto. */
+module aether_bounty_attest
+
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn ni_identity_sign(msg: *u8, msg_len: u64, out_sig: *u8) -> i32 from "node_identity.iii"
+extern @abi(c-msvc-x64) fn ni_identity_pub(out_pub: *u8) -> i32 from "node_identity.iii"
+extern @abi(c-msvc-x64) fn ni_is_inited() -> u8 from "node_identity.iii"
+extern @abi(c-msvc-x64) fn ed25519_verify(pubkey: *u8, msg: *u8, msg_len: u64, sig: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+
+const BA_RIGHT_ATTEST : u64 = 0x800u64      /* capability bit 11 (ATTEST) -- same as attest_box / node_identity */
+const BA_SUITE   : u32 = 1u32               /* == cad CAD_SUITE_KECCAK256 (== attest_box AB_SUITE) */
+const BA_RECLEN  : u64 = 88u64              /* magic8 + target32 + propid8 + witness32 + verdict8 */
+const BA_ROOTB   : u64 = 32u64
+const BA_OK       : i32 = 0i32
+const BA_E_DENIED : i32 = -1i32             /* capability lacks the ATTEST right */
+const BA_E_NOID   : i32 = -2i32             /* node identity not initialised (no signing key) */
+const BA_E_SIGN   : i32 = -3i32             /* the Ed25519 signer refused */
+
+var BA_REC : [u8; 88]        /* the canonical attestation record (module-scope: runtime-index safe) */
+var BA_CMP : [u8; 32]        /* recompute staging for ba_verify (no aliasing with caller buffers) */
+
+fn ba_put32(off: u64, src: *u8) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { BA_REC[off + i] = src[i]   i = i + 1u64 }
+    return 0i32
+}
+fn ba_put_u64(off: u64, v: u64) -> i32 {
+    let mut j : u64 = 0u64
+    while j < 8u64 { BA_REC[off + j] = ((v >> (j * 8u64)) & 0xFFu64) as u8   j = j + 1u64 }
+    return 0i32
+}
+/* build the canonical finding record into BA_REC (magic "IIIBNTY1" | target | propid | witness | verdict) */
+fn ba_build(target_32: *u8, property_id: u64, witness_32: *u8, verdict: u64) -> i32 {
+    BA_REC[0u64]=73u8   BA_REC[1u64]=73u8   BA_REC[2u64]=73u8   BA_REC[3u64]=66u8    /* I I I B */
+    BA_REC[4u64]=78u8   BA_REC[5u64]=84u8   BA_REC[6u64]=89u8   BA_REC[7u64]=49u8    /* N T Y 1 */
+    ba_put32(8u64, target_32)
+    ba_put_u64(40u64, property_id)
+    ba_put32(48u64, witness_32)
+    ba_put_u64(80u64, verdict)
+    return 0i32
+}
+/* the attestation ROOT = cad(record) into out_32.  Deterministic. */
+fn ba_root(target_32: *u8, property_id: u64, witness_32: *u8, verdict: u64, out_32: *u8) -> i32 @export {
+    ba_build(target_32, property_id, witness_32, verdict)
+    cad_oneshot(BA_SUITE, (&BA_REC as u64) as *u8, BA_RECLEN, out_32)
+    return BA_OK
+}
+/* the node's attestation (identity) public key, for a remote verifier to fetch. */
+fn ba_identity_pub(out_pub_32: *u8) -> i32 @export { return ni_identity_pub(out_pub_32) }
+
+/* ATTEST a finding: cap-gated on the ATTEST right; root = cad(record); sig = Ed25519 identity sig over root.
+ * A cap without the ATTEST right is DENIED and nothing is signed. */
+fn ba_attest(cap: u64, target_32: *u8, property_id: u64, witness_32: *u8, verdict: u64, out_root_32: *u8, out_sig_64: *u8) -> i32 @export {
+    if cap_verify_rights(cap, BA_RIGHT_ATTEST) == 0u8 { return BA_E_DENIED }
+    if ni_is_inited() == 0u8 { return BA_E_NOID }
+    ba_root(target_32, property_id, witness_32, verdict, out_root_32)
+    if ni_identity_sign(out_root_32, BA_ROOTB, out_sig_64) != 0i32 { return BA_E_SIGN }
+    return BA_OK
+}
+/* OFFLINE verify: 1 iff sig_64 is a valid Ed25519 signature by pub_32 over the recomputed root of THIS EXACT
+ * finding (target, property, witness-digest, verdict).  A relying party runs it with only the node's public
+ * key + the public finding fields + the signature -- never the secret trace.  Any tampered field -> 0. */
+fn ba_verify(pub_32: *u8, target_32: *u8, property_id: u64, witness_32: *u8, verdict: u64, sig_64: *u8) -> u8 @export {
+    ba_root(target_32, property_id, witness_32, verdict, (&BA_CMP as u64) as *u8)
+    return ed25519_verify(pub_32, (&BA_CMP as u64) as *u8, BA_ROOTB, sig_64)
+}

@@ -1,0 +1,128 @@
+/* histos_conscience_probe.iii -- HISTOS stage 4: the two subtrees meet at the witness.
+ *
+ * The behavioral witness ("measured is not installed") rests on TWO things, and the web makes it
+ * literal: the exact-order SUBSTRATE (witness -> membrane -> krisis -> bigint, the two-engine
+ * exact order) and the conscience LAW (witness -> ethos -> {ontos, reach_oracle, praxis, horos},
+ * all rooted in EIDOLOS -- the one seat every entailment rests on). The witness STANDS iff BOTH
+ * subtrees stand. Break the exact engine (kr_sign) and the substrate collapses while the law
+ * holds; break the universal judge (eidolos) and the law collapses while the substrate holds --
+ * and the web names which. "Measured is not installed" made structural: the claim needs the
+ * substrate AND the law, and neither alone.
+ *
+ * NO island: composes the organs' REAL selfproves as cells, the loom's generic hs_node/hs_edge as
+ * the graph, HOROS/EIDOLOS as the edge judge. Nothing is reimplemented; nothing is modified. */
+module histos_conscience_probe
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+/* the loom (generic web primitives) */
+extern @abi(c-msvc-x64) fn hs_reset() -> i32 from "histos.iii"
+extern @abi(c-msvc-x64) fn hs_node(name: u64) -> u64 from "histos.iii"
+extern @abi(c-msvc-x64) fn hs_edge(src: u64, dst: u64, ob: u64, chain: u64) -> u64 from "histos.iii"
+extern @abi(c-msvc-x64) fn hs_set_verdict(idx: u64, v: u64) -> i32 from "histos.iii"
+extern @abi(c-msvc-x64) fn hs_verdict(idx: u64) -> u64 from "histos.iii"
+extern @abi(c-msvc-x64) fn histos_stand(idx: u64) -> u64 from "histos.iii"
+extern @abi(c-msvc-x64) fn histos_reddened_by(idx: u64) -> u64 from "histos.iii"
+/* the cells: the organs' REAL selfproves */
+extern @abi(c-msvc-x64) fn ethos_r1_selfprove() -> u64 from "ethos_r1_probe.iii"   /* witness   */
+extern @abi(c-msvc-x64) fn pb_attn_selfprove() -> u64 from "probole.iii"           /* membrane  */
+extern @abi(c-msvc-x64) fn kr_selfprove() -> u64 from "krisis.iii"                 /* krisis    */
+extern @abi(c-msvc-x64) fn ethos_gate() -> u64 from "ethos.iii"                    /* ethos     */
+extern @abi(c-msvc-x64) fn ontos_selfprove() -> u64 from "ontos.iii"              /* ontos     */
+extern @abi(c-msvc-x64) fn eol_selfprove() -> u64 from "eidolos.iii"              /* eidolos   */
+extern @abi(c-msvc-x64) fn praxis_selfprove() -> u64 from "praxis.iii"            /* praxis    */
+extern @abi(c-msvc-x64) fn horos_selfprove() -> u64 from "horos.iii"              /* horos     */
+extern @abi(c-msvc-x64) fn reach_oracle_admit_canonical(tier: u32) -> i32 from "reach_oracle.iii"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(arena: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii"
+
+fn ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn pz(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn pv(idx: u64) -> u32 { if histos_stand(idx) == 0u64 { ps("GREEN" as u64) } else { ps("RED" as u64) }   return 1u32 }
+
+fn bigint_kat() -> u64 {
+    let ar : u64 = arena_new(4096u64)
+    if ar == 0u64 { return 1u64 }
+    let two : u64 = bigint_from_u64(ar, 2u64)
+    let four : u64 = bigint_add(ar, two, two)
+    let three : u64 = bigint_from_u64(ar, 3u64)
+    let fourlit : u64 = bigint_from_u64(ar, 4u64)
+    let mut rc : u64 = 0u64
+    if bigint_cmp(four, three) <= 0i32 { rc = 1u64 }
+    if bigint_cmp(four, fourlit) != 0i32 { rc = 1u64 }
+    bigint_drop_arena(ar)   arena_drop(ar)
+    return rc
+}
+/* reach_oracle's cell: the DEFAULT-DENY wall law -- canonical admitted, provisional denied */
+fn reach_oracle_kat() -> u64 {
+    if reach_oracle_admit_canonical(0u32) != 0i32 { return 1u64 }
+    if reach_oracle_admit_canonical(1u32) != 1i32 { return 1u64 }
+    return 0u64
+}
+fn set_cell(idx: u64, v: u64) -> i32 { if v == 0u64 { hs_set_verdict(idx, 0u64) } else { hs_set_verdict(idx, 1u64) }   return 0i32 }
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let _a : i32 = argc   let _v : u64 = argv
+    hs_reset()
+    /* nodes */
+    let w  : u64 = hs_node("behavioral_witness" as u64)   /* 0 */
+    let m  : u64 = hs_node("membrane" as u64)             /* 1 */
+    let k  : u64 = hs_node("krisis" as u64)               /* 2 */
+    let b  : u64 = hs_node("bigint" as u64)               /* 3 */
+    let et : u64 = hs_node("ethos" as u64)                /* 4 */
+    let on : u64 = hs_node("ontos" as u64)                /* 5 */
+    let ei : u64 = hs_node("eidolos" as u64)              /* 6 */
+    let ro : u64 = hs_node("reach_oracle" as u64)         /* 7 */
+    let px : u64 = hs_node("praxis" as u64)               /* 8 */
+    let ho : u64 = hs_node("horos" as u64)                /* 9 */
+    /* the substrate subtree */
+    hs_edge(w, m,  "[behavioral_witness < membrane_verdict]" as u64, "[behavioral_witness < pb_head_order_trusted] [pb_head_order_trusted < membrane_verdict]" as u64)
+    hs_edge(m, k,  "[membrane < krisis_verdict]" as u64,            "[membrane < kr_sign] [kr_sign < krisis_verdict]" as u64)
+    hs_edge(k, b,  "[krisis < bigint_verdict]" as u64,              "[krisis < bigint_cmp] [bigint_cmp < bigint_verdict]" as u64)
+    /* the conscience subtree, all rooted in eidolos */
+    hs_edge(w, et, "[behavioral_witness < ethos_verdict]" as u64,   "[behavioral_witness < ethos_gate] [ethos_gate < ethos_verdict]" as u64)
+    hs_edge(et, on,"[ethos < ontos_verdict]" as u64,                "[ethos < ont_degrades] [ont_degrades < ontos_verdict]" as u64)
+    hs_edge(et, ro,"[ethos < reach_oracle_verdict]" as u64,         "[ethos < reach_oracle_admit_canonical] [reach_oracle_admit_canonical < reach_oracle_verdict]" as u64)
+    hs_edge(et, ei,"[ethos < eidolos_verdict]" as u64,              "[ethos < eol_lawcheck] [eol_lawcheck < eidolos_verdict]" as u64)
+    hs_edge(et, px,"[ethos < praxis_verdict]" as u64,               "[ethos < px_judge] [px_judge < praxis_verdict]" as u64)
+    hs_edge(et, ho,"[ethos < horos_verdict]" as u64,                "[ethos < hr_discharge] [hr_discharge < horos_verdict]" as u64)
+    hs_edge(on, ei,"[ontos < eidolos_verdict]" as u64,              "[ontos < eol_judge] [eol_judge < eidolos_verdict]" as u64)
+    hs_edge(px, ei,"[praxis < eidolos_verdict]" as u64,             "[praxis < eol_keep] [eol_keep < eidolos_verdict]" as u64)
+    hs_edge(ho, px,"[horos < praxis_verdict]" as u64,               "[horos < px_judge] [px_judge < praxis_verdict]" as u64)
+
+    /* the cells: every organ's REAL selfprove */
+    set_cell(w,  ethos_r1_selfprove())
+    set_cell(m,  pb_attn_selfprove())
+    set_cell(k,  kr_selfprove())
+    set_cell(b,  bigint_kat())
+    set_cell(et, ethos_gate())
+    set_cell(on, ontos_selfprove())
+    set_cell(ei, eol_selfprove())
+    set_cell(ro, reach_oracle_kat())
+    set_cell(px, praxis_selfprove())
+    set_cell(ho, horos_selfprove())
+
+    ps("cells: witness=" as u64)   ps_v(hs_verdict(w))
+    ps(" membrane=" as u64)  ps_v(hs_verdict(m))
+    ps(" krisis=" as u64)    ps_v(hs_verdict(k))
+    ps(" ethos=" as u64)     ps_v(hs_verdict(et))
+    ps(" ontos=" as u64)     ps_v(hs_verdict(on))
+    ps(" eidolos=" as u64)   ps_v(hs_verdict(ei))
+    ps(" reach_oracle=" as u64) ps_v(hs_verdict(ro))
+    ps(" praxis=" as u64)    ps_v(hs_verdict(px))
+    ps(" horos=" as u64)     ps_v(hs_verdict(ho))
+    putchar(10i32)
+
+    ps("conscience web: behavioral_witness " as u64)
+    let st : u64 = histos_stand(w)
+    if st == 0u64 { ps("GREEN" as u64) } else { ps("RED" as u64) }
+    ps(" rooted-at " as u64)   pz(histos_reddened_by(w))   putchar(10i32)
+    ps("subtrees: substrate(krisis)=" as u64)   pv(k)   ps(" law(eidolos)=" as u64)   pv(ei)   putchar(10i32)
+
+    if st == 0u64 { return 0u64 }
+    return 2u64
+}
+fn ps_v(v: u64) -> u32 { if v == 0u64 { ps("green" as u64) } else { ps("red" as u64) }   return 1u32 }

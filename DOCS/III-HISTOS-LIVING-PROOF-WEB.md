@@ -127,8 +127,46 @@ two-engine / no-self-grading law, lifted to whole organs. And the deposit gives 
 its PERMANENCE (a ledger entry, re-earned every session) without duplicating kardia. One
 standing, two axes.
 
+## Stage 4 (landed): the web grown to the conscience spine
+
+The MVP is the exact-order chain. Stage 4 (`histos_conscience_probe.iii` +
+`STDLIB/scripts/histos_conscience_gate.sh`) grows it to TEN organs, so the behavioral witness
+rests on TWO subtrees that meet at it:
+
+```
+              ┌─ membrane ─ krisis ─ bigint                    (SUBSTRATE: the exact two-engine order)
+behavioral_witness
+              └─ ethos ─ {ontos, reach_oracle, praxis, horos}  (LAW: the conscience, rooted in eidolos)
+```
+
+Cells are the organs' REAL selfproves (`eol_selfprove`, `ontos_selfprove`, `praxis_selfprove`,
+`horos_selfprove`, `ethos_gate`, a `reach_oracle` wall-KAT, plus the exact chain). The witness
+STANDS iff BOTH subtrees stand — "measured (substrate) is not installed (law)" made *structural*.
+The gate proves each subtree is independently load-bearing, on real mutated artifacts:
+
+```
+true  : behavioral_witness GREEN                        [substrate GREEN, law GREEN]
+wall  : behavioral_witness RED rooted-at reach_oracle   [substrate holds — the witness needs the LAW]
+engine: behavioral_witness RED rooted-at krisis         [law holds — the witness needs the SUBSTRATE]
+```
+
+Breaking the wall (reach_oracle → default-allow) collapses the law subtree while the exact
+substrate stands; breaking the engine (kr_sign → tie) collapses the substrate while the law
+stands. The web names which. (EIDOLOS is deeper still: it is both a node *and* the web's own
+edge-judge via HOROS discharge — breaking it collapses the entire web, the universal root of
+III's reasoning. That truth is noted, not gate-asserted, because with eidolos broken the web's
+own machinery is unreliable — the clean deterministic teeth are the wall and the engine.)
+
+## How it grows and what it subsumes
+
+Organ by organ: each new node registers its cell + its edges to already-webbed organs.
+`omnia_selfprove_gate.sh`'s 17 independent runs become 17 connected nodes; every PARATHEKE
+deposit can become a web node (stage 3); every web node worth persisting gets a deposit. The
+spatial web and the temporal ledger co-grow as one standing.
+
 ## Reproduce
 
 ```
-bash STDLIB/scripts/histos_gate.sh     # stages 1 + 2 + 3: exit 0, byte-deterministic
+bash STDLIB/scripts/histos_gate.sh             # stages 1 + 2 + 3 (MVP + PARATHEKE unification)
+bash STDLIB/scripts/histos_conscience_gate.sh  # stage 4 (the grown web: substrate ∧ law)
 ```

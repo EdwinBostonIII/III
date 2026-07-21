@@ -47,6 +47,7 @@ compile_one() {
   local b="$1"
   local s="${SRC[$b]:-}"
   [ -z "$s" ] && return 0
+  if [ -f "$CLO/$b.o" ] && [ "$s" -nt "$CLO/$b.o" ]; then rm -f "$CLO/$b.o"; fi   # source-mtime-fresh: a stale cached organ must never mask a live signature
   [ -f "$CLO/$b.o" ] && return 0
   for try in 1 2 3; do
     "$IIIS" "$s" --compile-only --out "$CLO/$b.o" > "$CLO/$b.log" 2>&1 && [ -f "$CLO/$b.o" ] && return 0

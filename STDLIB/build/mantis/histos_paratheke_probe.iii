@@ -30,7 +30,7 @@ extern @abi(c-msvc-x64) fn pk_mint_close(pin: u64) -> u64 from "paratheke.iii"
 extern @abi(c-msvc-x64) fn pk_out_len() -> u64 from "paratheke.iii"
 extern @abi(c-msvc-x64) fn pk_out_byte(i: u64) -> u8 from "paratheke.iii"
 extern @abi(c-msvc-x64) fn pk_std_begin() -> i32 from "paratheke.iii"
-extern @abi(c-msvc-x64) fn pk_std_line(base: u64, len: u64, pin_krisis: u64, pin_order: u64, waive: u64) -> u64 from "paratheke.iii"
+extern @abi(c-msvc-x64) fn pk_std_line(base: u64, len: u64, pin_krisis: u64, pin_order: u64, pin_entail: u64, waive: u64) -> u64 from "paratheke.iii"
 /* HISTOS -- the spatial axis (the web + the deposit node) */
 extern @abi(c-msvc-x64) fn histos_weave_mvp() -> u64 from "histos.iii"
 extern @abi(c-msvc-x64) fn hs_node(name: u64) -> u64 from "histos.iii"
@@ -85,7 +85,8 @@ fn main(argc: i32, argv: u64) -> u64 {
     let mut i : u64 = 0u64
     while i < n { dst[i] = pk_out_byte(i)   i = i + 1u64 }
     pk_std_begin()
-    let seal : u64 = pk_std_line((&HP_LINE) as u64, n, 170u64, 187u64, 0u64)   /* 0 = STANDS */
+    /* six-pin signature since PARATHEKE paths B+C+D: pin_entail unused for an ORDER-kind entry */
+    let seal : u64 = pk_std_line((&HP_LINE) as u64, n, 170u64, 187u64, 0u64, 0u64)   /* 0 = STANDS */
 
     /* THE SPATIAL AXIS: weave the exact chain and place the deposit AS A NODE resting on it. */
     if histos_weave_mvp() != 0u64 { ps("weave failed" as u64)   putchar(10i32)   return 9u64 }

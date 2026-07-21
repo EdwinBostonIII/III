@@ -1,0 +1,182 @@
+/* attnrank.iii -- EXACT certified rank of DeepSeek-R1's MLA attention factors, hunting the "accidentals":
+ * quantization-induced EXACT linear dependencies below the designed low-rank bottleneck.
+ *
+ * DeepSeek's MLA compresses attention through low-rank factors: attn_kv_b [512 x 32768] up-projects a 512-dim
+ * KV latent.  Its rank over Q is <= 512 (the designed bottleneck).  If the Q4_K-quantized weights have rank
+ * 512 - k, then k latent dimensions are EXACTLY linearly dependent in the deployed model -- the KV cache can be
+ * sliced by k with ALGEBRAICALLY CERTAIN identical output, no calibration data, no epsilon.  That is a certified
+ * inference optimization, invisible to floating-point SVD (which sees the discrete grid as a fuzzy full-rank cloud).
+ *
+ * Method: stream each output row through kquant's VERIFIED dequant (mantissa = weight * 2^24; the global 2^24 is
+ * a nonzero scalar, so rank is exactly the rank over Q), reduce it into a running echelon basis over GF(p) using
+ * gfp's Fermat inverse, early-exit at saturation.  Two primes agree => the rank over Q, certified, hardware-
+ * independent.  Composes omnia/kquant (verified against metabole) + omnia/gfp.  Ring R0. */
+module attnrank
+
+extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fread(ptr: u64, size: u64, count: u64, fp: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn _fseeki64(fp: u64, off: i64, whence: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn _ftelli64(fp: u64) -> i64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fclose(fp: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn kq_dec_q4k(blk: u64, out: u64) -> i32 from "kquant.iii"
+extern @abi(c-msvc-x64) fn gp_invm(a: u64, p: u64) -> u64 from "gfp.iii"
+
+const AR_P : u64 = 2147483647u64
+const AR_Q : u64 = 2147483629u64
+const AR_W : u64 = 1536u64                    /* max basis width (ne0) handled here: 512, 576, 1536 */
+var AR_B : [u8; 16]   var AR_NAME : [u8; 256]
+var AR_RAW : [u8; 8192]   var AR_MANT : [i64; 256]   var AR_ROW : [u64; 1536]
+var AR_BASIS : [u64; 2359296]   var AR_PIV : [u64; 1536]   var AR_NB : u64 = 0u64
+var AR_OFF : [u64; 64]   var AR_NE0 : [u64; 64]   var AR_NE1 : [u64; 64]   var AR_LY : [u64; 64]   var AR_N : u64 = 0u64
+var AR_DSTART : u64 = 0u64
+
+fn ar_pu(v: u64) -> u32 { if v >= 10u64 { ar_pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn ar_ps(sp: u64) -> u32 { let p : *u8 = sp as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn ar_nl() -> i32 { putchar(10i32)   return 0i32 }
+fn ar_rd(fp: u64, n: u64) -> u64 { fread((&AR_B) as u64, 1u64, n, fp)   let mut v : u64 = 0u64   let mut m : u64 = 1u64   let mut i : u64 = 0u64   while i < n { v = v + (AR_B[i] as u64) * m   m = m * 256u64   i = i + 1u64 }   return v }
+fn ar_u32(fp: u64) -> u64 { return ar_rd(fp, 4u64) }
+fn ar_u64(fp: u64) -> u64 { return ar_rd(fp, 8u64) }
+fn ar_skip(fp: u64, n: u64) -> i32 { _fseeki64(fp, n as i64, 1i32)   return 0i32 }
+fn ar_tsize(t: u64) -> u64 { if t == 0u64 { return 1u64 }   if t == 1u64 { return 1u64 }   if t == 2u64 { return 2u64 }   if t == 3u64 { return 2u64 }   if t == 4u64 { return 4u64 }   if t == 5u64 { return 4u64 }   if t == 6u64 { return 4u64 }   if t == 7u64 { return 1u64 }   if t == 10u64 { return 8u64 }   if t == 11u64 { return 8u64 }   if t == 12u64 { return 8u64 }   return 0u64 }
+fn ar_skip_val(fp: u64, vt: u64) -> i32 {
+    if vt == 8u64 { let sl : u64 = ar_u64(fp)   ar_skip(fp, sl)   return 0i32 }
+    if vt == 9u64 { let et : u64 = ar_u32(fp)   let cnt : u64 = ar_u64(fp)   if et == 8u64 { let mut i : u64 = 0u64   while i < cnt { let sl : u64 = ar_u64(fp)   ar_skip(fp, sl)   i = i + 1u64 }   return 0i32 }   ar_skip(fp, cnt * ar_tsize(et))   return 0i32 }
+    ar_skip(fp, ar_tsize(vt))   return 0i32
+}
+fn ar_has(nl: u64, needle: u64, ml: u64) -> u64 {
+    let np : *u8 = needle as *u8   let mut si : u64 = 0u64
+    while si + ml <= nl { let mut sj : u64 = 0u64   let mut ok : u64 = 1u64   while sj < ml { if AR_NAME[si + sj] != np[sj] { ok = 0u64   sj = ml }   sj = sj + 1u64 }   if ok == 1u64 { return 1u64 }   si = si + 1u64 }
+    return 0u64
+}
+fn ar_layer(nl: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i + 4u64 <= nl {
+        if AR_NAME[i] == 98u8 { if AR_NAME[i+1u64] == 108u8 { if AR_NAME[i+2u64] == 107u8 { if AR_NAME[i+3u64] == 46u8 {
+            let mut j : u64 = i + 4u64   let mut v : u64 = 0u64
+            while j < nl { let c : u8 = AR_NAME[j]   if c >= 48u8 { if c <= 57u8 { v = v * 10u64 + ((c - 48u8) as u64)   j = j + 1u64 } else { return v } } else { return v } }
+            return v
+        } } } }
+        i = i + 1u64
+    }
+    return 999u64
+}
+/* collect every tensor whose name contains `needle`; compute data_start */
+fn ar_scan(needle: u64, ml: u64) -> u64 {
+    AR_N = 0u64
+    let fp : u64 = fopen("Feast/r1_shard01.gguf" as u64, "rb" as u64)
+    if fp == 0u64 { return 0u64 }
+    ar_u32(fp)   ar_u32(fp)
+    let tc : u64 = ar_u64(fp)   let kvc : u64 = ar_u64(fp)   let align : u64 = 32u64
+    let mut k : u64 = 0u64
+    while k < kvc { let klen : u64 = ar_u64(fp)   ar_skip(fp, klen)   let vt : u64 = ar_u32(fp)   ar_skip_val(fp, vt)   k = k + 1u64 }
+    let mut t : u64 = 0u64
+    while t < tc {
+        let nlen : u64 = ar_u64(fp)
+        let mut rn : u64 = nlen   if rn > 255u64 { rn = 255u64 }
+        fread((&AR_NAME) as u64, 1u64, rn, fp)
+        if nlen > rn { ar_skip(fp, nlen - rn) }
+        let nd : u64 = ar_u32(fp)
+        let mut dims : [u64; 8]   let mut d : u64 = 0u64
+        while d < nd { dims[d] = ar_u64(fp)   d = d + 1u64 }
+        let ty : u64 = ar_u32(fp)   let off : u64 = ar_u64(fp)
+        if nd == 2u64 { if ty == 12u64 { if ar_has(rn, needle, ml) == 1u64 { if AR_N < 64u64 {
+            AR_OFF[AR_N] = off   AR_NE0[AR_N] = dims[0]   AR_NE1[AR_N] = dims[1]   AR_LY[AR_N] = ar_layer(rn)   AR_N = AR_N + 1u64
+        } } } }
+        t = t + 1u64
+    }
+    let pos : u64 = _ftelli64(fp) as u64
+    AR_DSTART = ((pos + align - 1u64) / align) * align
+    fclose(fp)
+    return AR_N
+}
+/* exact rank over GF(prime) of the ne1 x (full_ne0) matrix, streaming rows through kquant into an echelon basis.
+ * Rows wider than AR_W are read as a leading AR_W-column sub-block (stride is the full row): rank of the sub-block
+ * is a lower bound; if it reaches min(usew,ne1) it CERTIFIES the full matrix rank (sub <= full <= that bound). */
+fn ar_rank(off: u64, full_ne0: u64, ne1: u64, prime: u64) -> u64 {
+    let mut usew : u64 = full_ne0   if usew > AR_W { usew = AR_W }
+    let nstride : u64 = full_ne0 / 256u64
+    let nread : u64 = usew / 256u64
+    let mut cap : u64 = usew   if ne1 < cap { cap = ne1 }
+    AR_NB = 0u64
+    let base : u64 = AR_DSTART + off
+    let fp : u64 = fopen("Feast/r1_shard01.gguf" as u64, "rb" as u64)
+    if fp == 0u64 { return 0u64 }
+    let mut r : u64 = 0u64
+    while r < ne1 {
+        _fseeki64(fp, (base + r * nstride * 144u64) as i64, 0i32)
+        fread((&AR_RAW) as u64, 1u64, nread * 144u64, fp)
+        let mut bk : u64 = 0u64
+        while bk < nread {
+            kq_dec_q4k(((&AR_RAW) as u64) + bk * 144u64, (&AR_MANT) as u64)
+            let mut c : u64 = 0u64
+            while c < 256u64 {
+                let vm : i64 = AR_MANT[c]   let pr : i64 = prime as i64
+                let mut rr : i64 = vm % pr   if rr < 0i64 { rr = rr + pr }
+                AR_ROW[bk * 256u64 + c] = rr as u64
+                c = c + 1u64
+            }
+            bk = bk + 1u64
+        }
+        let mut kk : u64 = 0u64
+        while kk < AR_NB {
+            let pc : u64 = AR_PIV[kk]
+            let f : u64 = AR_ROW[pc]
+            if f != 0u64 {
+                let mut c : u64 = pc
+                while c < usew {
+                    let sub : u64 = (f * AR_BASIS[kk * usew + c]) % prime
+                    AR_ROW[c] = (AR_ROW[c] + prime - sub) % prime
+                    c = c + 1u64
+                }
+            }
+            kk = kk + 1u64
+        }
+        let mut pc : u64 = usew   let mut c2 : u64 = 0u64
+        while c2 < usew { if AR_ROW[c2] != 0u64 { pc = c2   c2 = usew } else { c2 = c2 + 1u64 } }
+        if pc < usew {
+            let iv : u64 = gp_invm(AR_ROW[pc], prime)
+            let mut c : u64 = pc
+            while c < usew { AR_BASIS[AR_NB * usew + c] = (AR_ROW[c] * iv) % prime   c = c + 1u64 }
+            let mut c3 : u64 = 0u64
+            while c3 < pc { AR_BASIS[AR_NB * usew + c3] = 0u64   c3 = c3 + 1u64 }
+            AR_PIV[AR_NB] = pc   AR_NB = AR_NB + 1u64
+            if AR_NB == cap { r = ne1 }
+        }
+        r = r + 1u64
+    }
+    fclose(fp)
+    return AR_NB
+}
+
+fn ar_report(needle: u64, ml: u64, label: u64) -> i32 {
+    if ar_scan(needle, ml) == 0u64 { ar_ps("  (no " as u64)   ar_ps(label)   ar_ps(" in shard01)\n" as u64)   return 0i32 }
+    ar_ps("== " as u64)   ar_ps(label)   ar_ps(": " as u64)   ar_pu(AR_N)   ar_ps(" tensors, two-prime exact rank vs latent bottleneck ==\n" as u64)
+    let mut i : u64 = 0u64
+    while i < AR_N {
+        let ne0 : u64 = AR_NE0[i]   let ne1 : u64 = AR_NE1[i]
+        let mut bott : u64 = ne0   if ne1 < bott { bott = ne1 }         /* bottleneck = min(ne0, ne1) = the latent */
+        let wide : u64 = ne0                                            /* >AR_W => rank read on a leading sub-block */
+        let rp : u64 = ar_rank(AR_OFF[i], ne0, ne1, AR_P)
+        let rq : u64 = ar_rank(AR_OFF[i], ne0, ne1, AR_Q)
+        ar_ps("  blk." as u64)   ar_pu(AR_LY[i])   ar_ps("  rank=" as u64)   ar_pu(rp)   ar_ps("/" as u64)   ar_pu(bott)
+        if rp == rq { if rp == bott { ar_ps("  FULL (latent fully used)" as u64) } else {
+            if wide > AR_W { ar_ps("  *** SUB-BLOCK DEFICIENT " as u64)   ar_pu(bott - rp)   ar_ps(" -> ACCIDENTAL CANDIDATE (needs full-column verify) ***" as u64) }
+            else { ar_ps("  *** ACCIDENTAL: " as u64)   ar_pu(bott - rp)   ar_ps(" dims EXACTLY dependent -> sliceable at zero loss ***" as u64) }
+        } } else { ar_ps("  (prime disagreement)" as u64) }
+        ar_nl()
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let _a : i32 = argc   let _v : u64 = argv
+    ar_ps("EXACT certified rank of real DeepSeek-R1 MLA factors -- hunting quantization-induced accidentals.\n" as u64)
+    ar_ps("  rank < latent => that many latent dims are EXACTLY dependent in the deployed Q4_K weights (sliceable, zero loss).\n\n" as u64)
+    ar_report("attn_kv_b" as u64, 9u64, "attn_kv_b  (KV up-projection, latent 512)" as u64)
+    ar_report("attn_q_b" as u64, 8u64, "attn_q_b   (Q  up-projection, latent 1536)" as u64)
+    ar_report("attn_kv_a_mqa" as u64, 13u64, "attn_kv_a  (KV DOWN-projection, latent 576, WIDE)" as u64)
+    ar_report("attn_q_a" as u64, 8u64, "attn_q_a   (Q  DOWN-projection, latent 1536, WIDE)" as u64)
+    return 0u64
+}

@@ -1,0 +1,106 @@
+/* kqcross.iii -- THE KILL-SWITCH: verify kquant's NIH Q4_K dequant against metabole's dual-engine dequant on
+ * REAL DeepSeek-R1 blocks, bit-for-bit.  If any mantissa deviates by a single bit, the gate reddens.  Proves the
+ * reader before any rank is trusted.  Ring R0. */
+module kqcross
+
+extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fread(ptr: u64, size: u64, count: u64, fp: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn _fseeki64(fp: u64, off: i64, whence: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn _ftelli64(fp: u64) -> i64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fclose(fp: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn kq_dec_q4k(blk: u64, out: u64) -> i32 from "kquant.iii"
+extern @abi(c-msvc-x64) fn mb_blk_put(i: u64, v: u64) -> i32 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_dec_q4k(into_b: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_va_raw(i: u64) -> i64 from "metabole.iii"
+
+var KX_B : [u8; 16]   var KX_NAME : [u8; 256]   var KX_BLK : [u8; 256]   var KX_MINE : [i64; 256]
+var KX_OFF : u64 = 0u64   var KX_NE0 : u64 = 0u64   var KX_NE1 : u64 = 0u64   var KX_TY : u64 = 0u64   var KX_DSTART : u64 = 0u64
+
+fn kx_pu(v: u64) -> u32 { if v >= 10u64 { kx_pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn kx_ps(sp: u64) -> u32 { let p : *u8 = sp as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn kx_pi(v: i64) -> u32 { if v < 0i64 { putchar(45i32)   kx_pu((0i64 - v) as u64) } else { kx_pu(v as u64) }   return 1u32 }
+fn kx_rd(fp: u64, n: u64) -> u64 { fread((&KX_B) as u64, 1u64, n, fp)   let mut v : u64 = 0u64   let mut m : u64 = 1u64   let mut i : u64 = 0u64   while i < n { v = v + (KX_B[i] as u64) * m   m = m * 256u64   i = i + 1u64 }   return v }
+fn kx_u32(fp: u64) -> u64 { return kx_rd(fp, 4u64) }
+fn kx_u64(fp: u64) -> u64 { return kx_rd(fp, 8u64) }
+fn kx_skip(fp: u64, n: u64) -> i32 { _fseeki64(fp, n as i64, 1i32)   return 0i32 }
+fn kx_tsize(t: u64) -> u64 { if t == 0u64 { return 1u64 }   if t == 1u64 { return 1u64 }   if t == 2u64 { return 2u64 }   if t == 3u64 { return 2u64 }   if t == 4u64 { return 4u64 }   if t == 5u64 { return 4u64 }   if t == 6u64 { return 4u64 }   if t == 7u64 { return 1u64 }   if t == 10u64 { return 8u64 }   if t == 11u64 { return 8u64 }   if t == 12u64 { return 8u64 }   return 0u64 }
+fn kx_skip_val(fp: u64, vt: u64) -> i32 {
+    if vt == 8u64 { let sl : u64 = kx_u64(fp)   kx_skip(fp, sl)   return 0i32 }
+    if vt == 9u64 { let et : u64 = kx_u32(fp)   let cnt : u64 = kx_u64(fp)   if et == 8u64 { let mut i : u64 = 0u64   while i < cnt { let sl : u64 = kx_u64(fp)   kx_skip(fp, sl)   i = i + 1u64 }   return 0i32 }   kx_skip(fp, cnt * kx_tsize(et))   return 0i32 }
+    kx_skip(fp, kx_tsize(vt))
+    return 0i32
+}
+/* name contains needle? */
+fn kx_has(nl: u64, needle: u64, ml: u64) -> u64 {
+    let np : *u8 = needle as *u8
+    let mut si : u64 = 0u64
+    while si + ml <= nl { let mut sj : u64 = 0u64   let mut ok : u64 = 1u64   while sj < ml { if KX_NAME[si + sj] != np[sj] { ok = 0u64   sj = ml }   sj = sj + 1u64 }   if ok == 1u64 { return 1u64 }   si = si + 1u64 }
+    return 0u64
+}
+/* parse header of shard01, find first tensor whose name contains `needle`; fill KX_* + KX_DSTART */
+fn kx_find(needle: u64, ml: u64) -> u64 {
+    let fp : u64 = fopen("Feast/r1_shard01.gguf" as u64, "rb" as u64)
+    if fp == 0u64 { return 0u64 }
+    kx_u32(fp)   kx_u32(fp)
+    let tc : u64 = kx_u64(fp)   let kvc : u64 = kx_u64(fp)
+    let align : u64 = 32u64
+    let mut k : u64 = 0u64
+    while k < kvc { let klen : u64 = kx_u64(fp)   kx_skip(fp, klen)   let vt : u64 = kx_u32(fp)   kx_skip_val(fp, vt)   k = k + 1u64 }
+    let mut found : u64 = 0u64
+    let mut t : u64 = 0u64
+    while t < tc {
+        let nlen : u64 = kx_u64(fp)
+        let mut rn : u64 = nlen   if rn > 255u64 { rn = 255u64 }
+        fread((&KX_NAME) as u64, 1u64, rn, fp)
+        if nlen > rn { kx_skip(fp, nlen - rn) }
+        let nd : u64 = kx_u32(fp)
+        let mut dims : [u64; 8]   let mut d : u64 = 0u64
+        while d < nd { dims[d] = kx_u64(fp)   d = d + 1u64 }
+        let ty : u64 = kx_u32(fp)   let off : u64 = kx_u64(fp)
+        if found == 0u64 { if kx_has(rn, needle, ml) == 1u64 { KX_OFF = off   KX_NE0 = dims[0]   KX_NE1 = dims[1]   KX_TY = ty   found = 1u64 } }
+        t = t + 1u64
+    }
+    let pos : u64 = _ftelli64(fp) as u64
+    KX_DSTART = ((pos + align - 1u64) / align) * align
+    fclose(fp)
+    return found
+}
+/* read the 144-byte block #blkidx of the found tensor into KX_BLK */
+fn kx_read_block(blkidx: u64) -> u64 {
+    let fp : u64 = fopen("Feast/r1_shard01.gguf" as u64, "rb" as u64)
+    if fp == 0u64 { return 1u64 }
+    _fseeki64(fp, (KX_DSTART + KX_OFF + blkidx * 144u64) as i64, 0i32)
+    fread((&KX_BLK) as u64, 1u64, 144u64, fp)
+    fclose(fp)
+    return 0u64
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let _a : i32 = argc   let _v : u64 = argv
+    if kx_find("attn_kv_b" as u64, 9u64) == 0u64 { kx_ps("attn_kv_b not found" as u64)   putchar(10i32)   return 20u64 }
+    kx_ps("cross-check kquant vs metabole on real R1 attn_kv_b [" as u64)   kx_pu(KX_NE0)   kx_ps(" x " as u64)   kx_pu(KX_NE1)   kx_ps("] type=" as u64)   kx_pu(KX_TY)   putchar(10i32)
+    if KX_TY != 12u64 { kx_ps("not Q4_K" as u64)   putchar(10i32)   return 21u64 }
+    /* cross-check several blocks with varied content */
+    var BL : [u64; 6]   BL[0] = 0u64   BL[1] = 1u64   BL[2] = 7u64   BL[3] = 50u64   BL[4] = 200u64   BL[5] = 1000u64
+    let mut bi : u64 = 0u64
+    let mut checked : u64 = 0u64
+    while bi < 6u64 {
+        kx_read_block(BL[bi])
+        kq_dec_q4k((&KX_BLK) as u64, (&KX_MINE) as u64)          /* my NIH dequant */
+        let mut i : u64 = 0u64                                    /* feed the same bytes to metabole */
+        while i < 144u64 { mb_blk_put(i, KX_BLK[i] as u64)   i = i + 1u64 }
+        let mrc : u64 = mb_dec_q4k(0u64)                          /* metabole dual-engine dequant -> MB_VA */
+        i = 0u64
+        while i < 256u64 { if KX_MINE[i] != mb_va_raw(i) {
+            kx_ps("  MISMATCH block " as u64)   kx_pu(BL[bi])   kx_ps(" idx " as u64)   kx_pu(i)
+            kx_ps("  mine=" as u64)   kx_pi(KX_MINE[i])   kx_ps(" meta=" as u64)   kx_pi(mb_va_raw(i))
+            kx_ps("  d=" as u64)   kx_pu((KX_BLK[0] as u64) | ((KX_BLK[1] as u64) << 8u64))   kx_ps(" dmin=" as u64)   kx_pu((KX_BLK[2] as u64) | ((KX_BLK[3] as u64) << 8u64))   kx_ps(" mb_rc=" as u64)   kx_pu(mrc)   putchar(10i32)
+            return 1u64
+        }   i = i + 1u64 }
+        checked = checked + 1u64
+        bi = bi + 1u64
+    }
+    kx_ps("  " as u64)   kx_pu(checked)   kx_ps(" real blocks x 256 mantissas: BIT-IDENTICAL to metabole. kquant VERIFIED.\n" as u64)
+    return 0u64
+}

@@ -1,0 +1,135 @@
+/* exprank.iii -- exact rank of a SAMPLE of DeepSeek-R1's routed MoE experts, hunting per-expert accidentals.
+ *
+ * ffn_gate_exps [7168 x 2048 x 256] Q4_K: 256 experts per MoE layer, each a [7168 -> 2048] map (rank <= 2048).
+ * If any expert's Q4_K weights have rank < 2048, that expert's hidden space is exactly over-parameterized: k
+ * neurons are exact linear combinations of the others -> prunable at zero loss.  Exhaustive scan of every expert
+ * in every layer is not lean; a representative sample tells us whether the phenomenon exists at all.
+ *
+ * Scan with prime p (fast detect); any deficiency is re-checked with prime q (certify).  Reads a leading 2048-col
+ * sub-block per row: sub-block rank == 2048 CERTIFIES the expert is full rank.  Composes kquant + gfp.  Ring R0. */
+module exprank
+
+extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fread(ptr: u64, size: u64, count: u64, fp: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn _fseeki64(fp: u64, off: i64, whence: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn _ftelli64(fp: u64) -> i64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fclose(fp: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn kq_dec_q4k(blk: u64, out: u64) -> i32 from "kquant.iii"
+extern @abi(c-msvc-x64) fn gp_invm(a: u64, p: u64) -> u64 from "gfp.iii"
+
+const EX_P : u64 = 2147483647u64
+const EX_Q : u64 = 2147483629u64
+const EX_W : u64 = 2048u64                    /* expert hidden dim = the rank bound */
+var EX_B : [u8; 16]   var EX_NAME : [u8; 256]
+var EX_RAW : [u8; 4096]   var EX_MANT : [i64; 256]   var EX_ROW : [u64; 2048]
+var EX_BASIS : [u64; 4194304]   var EX_PIV : [u64; 2048]   var EX_NB : u64 = 0u64
+var EX_OFF : u64 = 0u64   var EX_NE0 : u64 = 0u64   var EX_NE1 : u64 = 0u64   var EX_NE2 : u64 = 0u64   var EX_DSTART : u64 = 0u64
+
+fn ex_pu(v: u64) -> u32 { if v >= 10u64 { ex_pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn ex_ps(sp: u64) -> u32 { let p : *u8 = sp as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn ex_nl() -> i32 { putchar(10i32)   return 0i32 }
+fn ex_rd(fp: u64, n: u64) -> u64 { fread((&EX_B) as u64, 1u64, n, fp)   let mut v : u64 = 0u64   let mut m : u64 = 1u64   let mut i : u64 = 0u64   while i < n { v = v + (EX_B[i] as u64) * m   m = m * 256u64   i = i + 1u64 }   return v }
+fn ex_u32(fp: u64) -> u64 { return ex_rd(fp, 4u64) }
+fn ex_u64(fp: u64) -> u64 { return ex_rd(fp, 8u64) }
+fn ex_skip(fp: u64, n: u64) -> i32 { _fseeki64(fp, n as i64, 1i32)   return 0i32 }
+fn ex_tsize(t: u64) -> u64 { if t == 0u64 { return 1u64 }   if t == 1u64 { return 1u64 }   if t == 2u64 { return 2u64 }   if t == 3u64 { return 2u64 }   if t == 4u64 { return 4u64 }   if t == 5u64 { return 4u64 }   if t == 6u64 { return 4u64 }   if t == 7u64 { return 1u64 }   if t == 10u64 { return 8u64 }   if t == 11u64 { return 8u64 }   if t == 12u64 { return 8u64 }   return 0u64 }
+fn ex_skip_val(fp: u64, vt: u64) -> i32 {
+    if vt == 8u64 { let sl : u64 = ex_u64(fp)   ex_skip(fp, sl)   return 0i32 }
+    if vt == 9u64 { let et : u64 = ex_u32(fp)   let cnt : u64 = ex_u64(fp)   if et == 8u64 { let mut i : u64 = 0u64   while i < cnt { let sl : u64 = ex_u64(fp)   ex_skip(fp, sl)   i = i + 1u64 }   return 0i32 }   ex_skip(fp, cnt * ex_tsize(et))   return 0i32 }
+    ex_skip(fp, ex_tsize(vt))   return 0i32
+}
+fn ex_has(nl: u64, needle: u64, ml: u64) -> u64 {
+    let np : *u8 = needle as *u8   let mut si : u64 = 0u64
+    while si + ml <= nl { let mut sj : u64 = 0u64   let mut ok : u64 = 1u64   while sj < ml { if EX_NAME[si + sj] != np[sj] { ok = 0u64   sj = ml }   sj = sj + 1u64 }   if ok == 1u64 { return 1u64 }   si = si + 1u64 }
+    return 0u64
+}
+/* find the first ffn_gate_exps (3D) tensor; fill EX_OFF/NE0/NE1/NE2/DSTART */
+fn ex_find() -> u64 {
+    let fp : u64 = fopen("Feast/r1_shard01.gguf" as u64, "rb" as u64)
+    if fp == 0u64 { return 0u64 }
+    ex_u32(fp)   ex_u32(fp)
+    let tc : u64 = ex_u64(fp)   let kvc : u64 = ex_u64(fp)   let align : u64 = 32u64
+    let mut k : u64 = 0u64
+    while k < kvc { let klen : u64 = ex_u64(fp)   ex_skip(fp, klen)   let vt : u64 = ex_u32(fp)   ex_skip_val(fp, vt)   k = k + 1u64 }
+    let mut found : u64 = 0u64
+    let mut t : u64 = 0u64
+    while t < tc {
+        let nlen : u64 = ex_u64(fp)
+        let mut rn : u64 = nlen   if rn > 255u64 { rn = 255u64 }
+        fread((&EX_NAME) as u64, 1u64, rn, fp)
+        if nlen > rn { ex_skip(fp, nlen - rn) }
+        let nd : u64 = ex_u32(fp)
+        let mut dims : [u64; 8]   let mut d : u64 = 0u64
+        while d < nd { dims[d] = ex_u64(fp)   d = d + 1u64 }
+        let ty : u64 = ex_u32(fp)   let off : u64 = ex_u64(fp)
+        if found == 0u64 { if nd == 3u64 { if ty == 12u64 { if ex_has(rn, "ffn_gate_exps" as u64, 13u64) == 1u64 {
+            EX_OFF = off   EX_NE0 = dims[0]   EX_NE1 = dims[1]   EX_NE2 = dims[2]   found = 1u64
+        } } } }
+        t = t + 1u64
+    }
+    let pos : u64 = _ftelli64(fp) as u64
+    EX_DSTART = ((pos + align - 1u64) / align) * align
+    fclose(fp)
+    return found
+}
+/* exact rank over GF(prime) of expert `e` (ne1 rows x ne0 cols), reading a leading 2048-col sub-block per row */
+fn ex_rank(e: u64, prime: u64) -> u64 {
+    let bpr : u64 = EX_NE0 / 256u64                         /* blocks per full row (28) */
+    let nread : u64 = EX_W / 256u64                          /* read 8 blocks = 2048 cols */
+    let ebase : u64 = EX_DSTART + EX_OFF + e * EX_NE1 * bpr * 144u64
+    EX_NB = 0u64
+    let fp : u64 = fopen("Feast/r1_shard01.gguf" as u64, "rb" as u64)
+    if fp == 0u64 { return 0u64 }
+    let mut r : u64 = 0u64
+    while r < EX_NE1 {
+        _fseeki64(fp, (ebase + r * bpr * 144u64) as i64, 0i32)
+        fread((&EX_RAW) as u64, 1u64, nread * 144u64, fp)
+        let mut bk : u64 = 0u64
+        while bk < nread {
+            kq_dec_q4k(((&EX_RAW) as u64) + bk * 144u64, (&EX_MANT) as u64)
+            let mut c : u64 = 0u64
+            while c < 256u64 { let vm : i64 = EX_MANT[c]   let pr : i64 = prime as i64   let mut rr : i64 = vm % pr   if rr < 0i64 { rr = rr + pr }   EX_ROW[bk * 256u64 + c] = rr as u64   c = c + 1u64 }
+            bk = bk + 1u64
+        }
+        let mut kk : u64 = 0u64
+        while kk < EX_NB {
+            let pc : u64 = EX_PIV[kk]   let f : u64 = EX_ROW[pc]
+            if f != 0u64 { let mut c : u64 = pc   while c < EX_W { EX_ROW[c] = (EX_ROW[c] + prime - (f * EX_BASIS[kk * EX_W + c]) % prime) % prime   c = c + 1u64 } }
+            kk = kk + 1u64
+        }
+        let mut pc : u64 = EX_W   let mut c2 : u64 = 0u64
+        while c2 < EX_W { if EX_ROW[c2] != 0u64 { pc = c2   c2 = EX_W } else { c2 = c2 + 1u64 } }
+        if pc < EX_W {
+            let iv : u64 = gp_invm(EX_ROW[pc], prime)
+            let mut c : u64 = pc   while c < EX_W { EX_BASIS[EX_NB * EX_W + c] = (EX_ROW[c] * iv) % prime   c = c + 1u64 }
+            let mut c3 : u64 = 0u64   while c3 < pc { EX_BASIS[EX_NB * EX_W + c3] = 0u64   c3 = c3 + 1u64 }
+            EX_PIV[EX_NB] = pc   EX_NB = EX_NB + 1u64
+            if EX_NB == EX_W { r = EX_NE1 }
+        }
+        r = r + 1u64
+    }
+    fclose(fp)
+    return EX_NB
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let _a : i32 = argc   let _v : u64 = argv
+    if ex_find() == 0u64 { ex_ps("no ffn_gate_exps found" as u64)   ex_nl()   return 1u64 }
+    ex_ps("EXACT rank of a SAMPLE of R1 routed experts (blk.3 ffn_gate_exps [7168 x 2048 x 256], Q4_K).\n" as u64)
+    ex_ps("  each expert maps 7168 -> 2048; rank < 2048 => exact over-parameterization (prunable, zero loss).\n" as u64)
+    var ES : [u64; 8]   ES[0] = 0u64   ES[1] = 1u64   ES[2] = 42u64   ES[3] = 100u64   ES[4] = 150u64   ES[5] = 200u64   ES[6] = 255u64   ES[7] = 77u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let e : u64 = ES[i]
+        let rp : u64 = ex_rank(e, EX_P)
+        ex_ps("  expert " as u64)   ex_pu(e)   ex_ps("  rank=" as u64)   ex_pu(rp)   ex_ps("/2048" as u64)
+        if rp == EX_W { ex_ps("  FULL" as u64) } else {
+            let rq : u64 = ex_rank(e, EX_Q)
+            if rq == rp { ex_ps("  *** ACCIDENTAL: " as u64)   ex_pu(EX_W - rp)   ex_ps(" hidden dims exactly dependent (two-prime certified) ***" as u64) } else { ex_ps("  deficient p but primes disagree=" as u64)   ex_pu(rq) }
+        }
+        ex_nl()
+        i = i + 1u64
+    }
+    return 0u64
+}

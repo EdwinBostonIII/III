@@ -1,0 +1,86 @@
+/* ggufinfo.iii -- a fast, self-contained GGUF v3 header reader: dump the tensor table (name, shape, type)
+ * of a real R1 shard so we can point exact rank at genuine weight blocks.  Header-only (skips tensor data),
+ * so it runs in a second on a 48GB file.  Ring R0. */
+module ggufinfo
+
+extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fread(ptr: u64, size: u64, count: u64, fp: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn _fseeki64(fp: u64, off: i64, whence: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn fclose(fp: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+var GF_B : [u8; 16]   var GF_NAME : [u8; 256]
+
+fn gf_pu(v: u64) -> u32 { if v >= 10u64 { gf_pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn gf_ps(sp: u64) -> u32 { let p : *u8 = sp as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn gf_nl() -> i32 { putchar(10i32)   return 0i32 }
+
+fn gf_rd(fp: u64, n: u64) -> u64 {
+    fread((&GF_B) as u64, 1u64, n, fp)
+    let mut v : u64 = 0u64   let mut m : u64 = 1u64   let mut i : u64 = 0u64
+    while i < n { v = v + (GF_B[i] as u64) * m   m = m * 256u64   i = i + 1u64 }
+    return v
+}
+fn gf_u32(fp: u64) -> u64 { return gf_rd(fp, 4u64) }
+fn gf_u64(fp: u64) -> u64 { return gf_rd(fp, 8u64) }
+fn gf_skip(fp: u64, n: u64) -> i32 { _fseeki64(fp, n as i64, 1i32)   return 0i32 }
+fn gf_tsize(t: u64) -> u64 {
+    if t == 0u64 { return 1u64 }   if t == 1u64 { return 1u64 }   if t == 2u64 { return 2u64 }   if t == 3u64 { return 2u64 }
+    if t == 4u64 { return 4u64 }   if t == 5u64 { return 4u64 }   if t == 6u64 { return 4u64 }   if t == 7u64 { return 1u64 }
+    if t == 10u64 { return 8u64 }  if t == 11u64 { return 8u64 }  if t == 12u64 { return 8u64 }
+    return 0u64
+}
+fn gf_skip_val(fp: u64, vt: u64) -> i32 {
+    if vt == 8u64 { let sl : u64 = gf_u64(fp)   gf_skip(fp, sl)   return 0i32 }
+    if vt == 9u64 {
+        let et : u64 = gf_u32(fp)   let cnt : u64 = gf_u64(fp)
+        if et == 8u64 { let mut i : u64 = 0u64   while i < cnt { let sl : u64 = gf_u64(fp)   gf_skip(fp, sl)   i = i + 1u64 }   return 0i32 }
+        gf_skip(fp, cnt * gf_tsize(et))
+        return 0i32
+    }
+    gf_skip(fp, gf_tsize(vt))
+    return 0i32
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let _a : i32 = argc   let _v : u64 = argv
+    let fp : u64 = fopen("Feast/r1_shard01.gguf" as u64, "rb" as u64)
+    if fp == 0u64 { gf_ps("cannot open Feast/r1_shard01.gguf" as u64)   gf_nl()   return 1u64 }
+    let magic : u64 = gf_u32(fp)   let ver : u64 = gf_u32(fp)
+    let tc : u64 = gf_u64(fp)      let kvc : u64 = gf_u64(fp)
+    gf_ps("magic=" as u64)   gf_pu(magic)   gf_ps(" ver=" as u64)   gf_pu(ver)   gf_ps(" tensors=" as u64)   gf_pu(tc)   gf_ps(" kv=" as u64)   gf_pu(kvc)   gf_nl()
+    let mut k : u64 = 0u64
+    while k < kvc {
+        let klen : u64 = gf_u64(fp)   gf_skip(fp, klen)
+        let vt : u64 = gf_u32(fp)   gf_skip_val(fp, vt)
+        k = k + 1u64
+    }
+    /* tensor infos: print only 2D tensors (weight matrices), first 40 */
+    let mut t : u64 = 0u64   let mut shown : u64 = 0u64
+    while t < tc {
+        let nlen : u64 = gf_u64(fp)
+        let cap : u64 = nlen   let mut rn : u64 = cap
+        if rn > 255u64 { rn = 255u64 }
+        fread((&GF_NAME) as u64, 1u64, rn, fp)
+        if nlen > rn { gf_skip(fp, nlen - rn) }
+        GF_NAME[rn] = 0u8
+        let nd : u64 = gf_u32(fp)
+        let mut dims : [u64; 8]
+        let mut d : u64 = 0u64
+        while d < nd { dims[d] = gf_u64(fp)   d = d + 1u64 }
+        let ty : u64 = gf_u32(fp)
+        let off : u64 = gf_u64(fp)
+        /* print any tensor whose name contains "ffn" (experts + shared + dense), with all dims */
+        let mut isffn : u64 = 0u64   let mut si : u64 = 0u64
+        while si + 3u64 <= rn { if GF_NAME[si] == 102u8 { if GF_NAME[si+1u64] == 102u8 { if GF_NAME[si+2u64] == 110u8 { isffn = 1u64 } } }   si = si + 1u64 }
+        if isffn == 1u64 { if shown < 44u64 {
+            gf_ps((&GF_NAME) as u64)   gf_ps("  nd=" as u64)   gf_pu(nd)   gf_ps(" [" as u64)
+            let mut dd : u64 = 0u64   while dd < nd { if dd > 0u64 { gf_ps(" x " as u64) }   gf_pu(dims[dd])   dd = dd + 1u64 }
+            gf_ps("]  type=" as u64)   gf_pu(ty)   gf_nl()
+            shown = shown + 1u64
+        } }
+        t = t + 1u64
+    }
+    fclose(fp)
+    return 0u64
+}

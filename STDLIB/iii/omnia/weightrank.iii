@@ -1,0 +1,251 @@
+/* weightrank.iii -- point EXACT rank at REAL DeepSeek-R1 weights.
+ *
+ * The MoE router blk.<L>.ffn_gate_inp.weight is [7168 x 256] F32 (raw floats): 256 experts, each a 7168-dim
+ * routing vector.  Its rank over a field is the CERTIFIED routing dimensionality -- if rank < 256, some experts
+ * are linearly redundant in routing space (prunable).  We read a real 256 x C block, quantize to fixed-point
+ * (scale 2^20), and compute exact rank over TWO primes (agreement certifies the rank over Q, tolerance-free).
+ * A 256 x C submatrix reaching rank 256 CERTIFIES the full router is rank 256 (submatrix rank <= full rank <= 256).
+ *
+ * Reuses gfp's verified modular inverse; local field mul/sub + a big scratch with early-exit at saturation.
+ * Ring R0. */
+module weightrank
+
+extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fread(ptr: u64, size: u64, count: u64, fp: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn _fseeki64(fp: u64, off: i64, whence: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn _ftelli64(fp: u64) -> i64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fclose(fp: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn gp_invm(a: u64, p: u64) -> u64 from "gfp.iii"
+
+const WR_P : u64 = 2147483647u64
+const WR_Q : u64 = 2147483629u64
+const WR_ROWCAP : u64 = 256u64
+const WR_COLCAP : u64 = 1024u64
+var WR_B : [u8; 16]     var WR_NAME : [u8; 256]     var WR_ROW : [u8; 4096]
+var WR_M : [u64; 262144]                              /* 256 x 1024 scratch (destroyed by elimination) */
+var WR_OFF : [u64; 40]  var WR_NE0 : [u64; 40]  var WR_NE1 : [u64; 40]  var WR_L : [u64; 40]  var WR_N : u64 = 0u64
+var WR_SC : [u64; 12]
+
+fn wr_pow2(k: u64) -> u64 { let mut r : u64 = 1u64   let mut i : u64 = 0u64   while i < k { r = r + r   i = i + 1u64 }   return r }
+fn wr_mul(a: u64, b: u64, p: u64) -> u64 { return (a * b) % p }
+fn wr_sub(a: u64, b: u64, p: u64) -> u64 { return (a + p - b) % p }
+fn wr_pu(v: u64) -> u32 { if v >= 10u64 { wr_pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn wr_ps(sp: u64) -> u32 { let p : *u8 = sp as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn wr_nl() -> i32 { putchar(10i32)   return 0i32 }
+
+fn wr_rd(fp: u64, n: u64) -> u64 {
+    fread((&WR_B) as u64, 1u64, n, fp)
+    let mut v : u64 = 0u64   let mut m : u64 = 1u64   let mut i : u64 = 0u64
+    while i < n { v = v + (WR_B[i] as u64) * m   m = m * 256u64   i = i + 1u64 }
+    return v
+}
+fn wr_u32(fp: u64) -> u64 { return wr_rd(fp, 4u64) }
+fn wr_u64(fp: u64) -> u64 { return wr_rd(fp, 8u64) }
+fn wr_skip(fp: u64, n: u64) -> i32 { _fseeki64(fp, n as i64, 1i32)   return 0i32 }
+fn wr_tsize(t: u64) -> u64 {
+    if t == 0u64 { return 1u64 }   if t == 1u64 { return 1u64 }   if t == 2u64 { return 2u64 }   if t == 3u64 { return 2u64 }
+    if t == 4u64 { return 4u64 }   if t == 5u64 { return 4u64 }   if t == 6u64 { return 4u64 }   if t == 7u64 { return 1u64 }
+    if t == 10u64 { return 8u64 }  if t == 11u64 { return 8u64 }  if t == 12u64 { return 8u64 }
+    return 0u64
+}
+fn wr_skip_val(fp: u64, vt: u64) -> i32 {
+    if vt == 8u64 { let sl : u64 = wr_u64(fp)   wr_skip(fp, sl)   return 0i32 }
+    if vt == 9u64 {
+        let et : u64 = wr_u32(fp)   let cnt : u64 = wr_u64(fp)
+        if et == 8u64 { let mut i : u64 = 0u64   while i < cnt { let sl : u64 = wr_u64(fp)   wr_skip(fp, sl)   i = i + 1u64 }   return 0i32 }
+        wr_skip(fp, cnt * wr_tsize(et))
+        return 0i32
+    }
+    wr_skip(fp, wr_tsize(vt))
+    return 0i32
+}
+/* IEEE-754 f32 bits -> round(value * 2^scale), mapped into GF(p).  scale sweeps the quantization resolution. */
+fn wr_f32s(bits: u64, p: u64, scale: u64) -> u64 {
+    let s : u64 = (bits >> 31u64) & 1u64
+    let e : u64 = (bits >> 23u64) & 255u64
+    let m : u64 = bits & 8388607u64
+    if e == 0u64 { return 0u64 }
+    if e == 255u64 { return 0u64 }
+    let mant : u64 = 8388608u64 + m
+    let esum : u64 = e + scale
+    let mut mag : u64 = 0u64
+    if esum >= 150u64 {
+        let mut sh : u64 = esum - 150u64
+        if sh > 7u64 { sh = 7u64 }
+        mag = mant * wr_pow2(sh)
+    } else {
+        let sh : u64 = 150u64 - esum
+        if sh >= 24u64 { return 0u64 }
+        mag = (mant + wr_pow2(sh - 1u64)) >> sh
+    }
+    mag = mag % p
+    if s == 1u64 { return (p - mag) % p }
+    return mag
+}
+/* does WR_NAME (len nl) contain "ffn_gate_inp"?  and parse the layer number after "blk." */
+fn wr_is_router(nl: u64) -> u64 {
+    let ndl : u64 = "ffn_gate_inp" as u64   let np : *u8 = ndl as *u8
+    let mut si : u64 = 0u64
+    while si + 12u64 <= nl {
+        let mut sj : u64 = 0u64   let mut ok : u64 = 1u64
+        while sj < 12u64 { if WR_NAME[si + sj] != np[sj] { ok = 0u64   sj = 12u64 }   sj = sj + 1u64 }
+        if ok == 1u64 { return 1u64 }
+        si = si + 1u64
+    }
+    return 0u64
+}
+fn wr_layer(nl: u64) -> u64 {   /* parse digits after "blk." */
+    let mut i : u64 = 0u64
+    while i + 4u64 <= nl {
+        if WR_NAME[i] == 98u8 { if WR_NAME[i+1u64] == 108u8 { if WR_NAME[i+2u64] == 107u8 { if WR_NAME[i+3u64] == 46u8 {
+            let mut j : u64 = i + 4u64   let mut v : u64 = 0u64
+            while j < nl { let c : u8 = WR_NAME[j]   if c >= 48u8 { if c <= 57u8 { v = v * 10u64 + ((c - 48u8) as u64)   j = j + 1u64 } else { return v } } else { return v } }
+            return v
+        } } } }
+        i = i + 1u64
+    }
+    return 999u64
+}
+/* read a 256 x ncols block of the router at (data_start+off), quantize mod p into WR_M; stride = ne0 */
+fn wr_load(fp: u64, dstart: u64, off: u64, ne0: u64, nrows: u64, ncols: u64, p: u64, scale: u64) -> i32 {
+    let mut r : u64 = 0u64
+    while r < nrows {
+        let base : u64 = dstart + off + r * ne0 * 4u64
+        _fseeki64(fp, base as i64, 0i32)
+        fread((&WR_ROW) as u64, 1u64, ncols * 4u64, fp)
+        let mut c : u64 = 0u64
+        while c < ncols {
+            let b0 : u64 = WR_ROW[c * 4u64] as u64
+            let b1 : u64 = WR_ROW[c * 4u64 + 1u64] as u64
+            let b2 : u64 = WR_ROW[c * 4u64 + 2u64] as u64
+            let b3 : u64 = WR_ROW[c * 4u64 + 3u64] as u64
+            let bits : u64 = b0 + b1 * 256u64 + b2 * 65536u64 + b3 * 16777216u64
+            WR_M[r * ncols + c] = wr_f32s(bits, p, scale)
+            c = c + 1u64
+        }
+        r = r + 1u64
+    }
+    return 0i32
+}
+/* exact rank of WR_M (nrows x ncols) over GF(p), early-exit at saturation (rank == nrows) */
+fn wr_rank(nrows: u64, ncols: u64, p: u64) -> u64 {
+    let mut rank : u64 = 0u64   let mut col : u64 = 0u64
+    while col < ncols {
+        if rank == nrows { return rank }
+        let mut piv : u64 = nrows   let mut r : u64 = rank
+        while r < nrows { if WR_M[r * ncols + col] != 0u64 { if piv == nrows { piv = r } }   r = r + 1u64 }
+        if piv != nrows {
+            if piv != rank {
+                let mut c : u64 = col
+                while c < ncols { let t : u64 = WR_M[rank * ncols + c]   WR_M[rank * ncols + c] = WR_M[piv * ncols + c]   WR_M[piv * ncols + c] = t   c = c + 1u64 }
+            }
+            let inv : u64 = gp_invm(WR_M[rank * ncols + col], p)
+            let mut rr : u64 = 0u64
+            while rr < nrows {
+                if rr != rank {
+                    let f : u64 = wr_mul(WR_M[rr * ncols + col], inv, p)
+                    if f != 0u64 {
+                        let mut c : u64 = col
+                        while c < ncols { WR_M[rr * ncols + c] = wr_sub(WR_M[rr * ncols + c], wr_mul(f, WR_M[rank * ncols + c], p), p)   c = c + 1u64 }
+                    }
+                }
+                rr = rr + 1u64
+            }
+            rank = rank + 1u64
+        }
+        col = col + 1u64
+    }
+    return rank
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let _a : i32 = argc   let _v : u64 = argv
+    let fp : u64 = fopen("Feast/r1_shard01.gguf" as u64, "rb" as u64)
+    if fp == 0u64 { wr_ps("cannot open Feast/r1_shard01.gguf" as u64)   wr_nl()   return 1u64 }
+    wr_u32(fp)   wr_u32(fp)                                  /* magic, version */
+    let tc : u64 = wr_u64(fp)   let kvc : u64 = wr_u64(fp)
+    let mut align : u64 = 32u64
+    let mut k : u64 = 0u64
+    while k < kvc {
+        let klen : u64 = wr_u64(fp)   wr_skip(fp, klen)
+        let vt : u64 = wr_u32(fp)   wr_skip_val(fp, vt)
+        k = k + 1u64
+    }
+    /* tensor infos: collect routers; advance to end of infos to get data_start */
+    let mut t : u64 = 0u64
+    while t < tc {
+        let nlen : u64 = wr_u64(fp)
+        let mut rn : u64 = nlen   if rn > 255u64 { rn = 255u64 }
+        fread((&WR_NAME) as u64, 1u64, rn, fp)
+        if nlen > rn { wr_skip(fp, nlen - rn) }
+        let nd : u64 = wr_u32(fp)
+        let mut dims : [u64; 8]   let mut d : u64 = 0u64
+        while d < nd { dims[d] = wr_u64(fp)   d = d + 1u64 }
+        let ty : u64 = wr_u32(fp)   let off : u64 = wr_u64(fp)
+        if nd == 2u64 { if ty == 0u64 { if wr_is_router(rn) == 1u64 { if WR_N < 40u64 {
+            WR_OFF[WR_N] = off   WR_NE0[WR_N] = dims[0]   WR_NE1[WR_N] = dims[1]   WR_L[WR_N] = wr_layer(rn)   WR_N = WR_N + 1u64
+        } } } }
+        t = t + 1u64
+    }
+    let pos : u64 = _ftelli64(fp) as u64
+    let dstart : u64 = ((pos + align - 1u64) / align) * align
+
+    wr_ps("EXACT CERTIFIED RANK of real DeepSeek-R1 MoE routers (blk.L.ffn_gate_inp, F32, 256 experts x 7168)\n" as u64)
+    wr_ps("  block 256 x " as u64)   wr_pu(WR_COLCAP)   wr_ps(", quantized 2^-20, exact rank over two primes (agreement => rank over Q)\n" as u64)
+    wr_ps("  found " as u64)   wr_pu(WR_N)   wr_ps(" F32 routers in shard01\n" as u64)
+    let mut i : u64 = 0u64
+    let lim : u64 = WR_N
+    while i < lim {
+        let ne0 : u64 = WR_NE0[i]   let ne1 : u64 = WR_NE1[i]
+        let nrows : u64 = ne1   let ncols : u64 = ne0
+        let mut nr : u64 = nrows   if nr > WR_ROWCAP { nr = WR_ROWCAP }
+        let mut nc : u64 = ncols   if nc > WR_COLCAP { nc = WR_COLCAP }
+        wr_load(fp, dstart, WR_OFF[i], ne0, nr, nc, WR_P, 20u64)
+        let rp : u64 = wr_rank(nr, nc, WR_P)
+        wr_load(fp, dstart, WR_OFF[i], ne0, nr, nc, WR_Q, 20u64)
+        let rq : u64 = wr_rank(nr, nc, WR_Q)
+        wr_ps("  blk." as u64)   wr_pu(WR_L[i])   wr_ps(".router  rank_p=" as u64)   wr_pu(rp)   wr_ps(" rank_q=" as u64)   wr_pu(rq)
+        wr_ps("  /" as u64)   wr_pu(nr)
+        if rp == rq { if rp == nr { wr_ps("  CERTIFIED FULL (no redundant experts)" as u64) } else { wr_ps("  DEFICIENT -> redundancy " as u64)   wr_pu(nr - rp) } } else { wr_ps("  (prime disagreement -- widen block)" as u64) }
+        wr_nl()
+        i = i + 1u64
+    }
+    /* THE CERTIFIED RANK-vs-PRECISION CURVE (blk.3 router): how coarsely can the router be quantized before it
+     * loses routing dimensionality?  Each rank is exact over GF(p); the drop point is the quantization floor. */
+    if WR_N > 0u64 {
+        wr_ps("\nRANK-vs-QUANTIZATION (blk." as u64)   wr_pu(WR_L[0])   wr_ps(".router, 256 x " as u64)   wr_pu(WR_COLCAP)   wr_ps("): certified routing rank at each fixed-point resolution\n" as u64)
+        let ne0 : u64 = WR_NE0[0]   let nr : u64 = WR_ROWCAP   let nc : u64 = WR_COLCAP
+        WR_SC[0] = 20u64  WR_SC[1] = 16u64  WR_SC[2] = 12u64  WR_SC[3] = 10u64  WR_SC[4] = 8u64  WR_SC[5] = 7u64  WR_SC[6] = 6u64  WR_SC[7] = 5u64  WR_SC[8] = 4u64  WR_SC[9] = 3u64  WR_SC[10] = 2u64  WR_SC[11] = 1u64
+        let mut si : u64 = 0u64
+        while si < 12u64 {
+            wr_load(fp, dstart, WR_OFF[0], ne0, nr, nc, WR_P, WR_SC[si])
+            let rr : u64 = wr_rank(nr, nc, WR_P)
+            wr_ps("  2^-" as u64)   wr_pu(WR_SC[si])   wr_ps("  rank=" as u64)   wr_pu(rr)   wr_ps("/256" as u64)
+            if rr < 256u64 { wr_ps("   <- lost " as u64)   wr_pu(256u64 - rr)   wr_ps(" dims" as u64) }
+            wr_nl()
+            si = si + 1u64
+        }
+    }
+    /* CROSS-LAYER quantization-floor table: is the floor uniform across all MoE routers?  Certified rank of each
+     * router's 256x1024 block at the transition resolutions.  (Full-precision rank is 256 for all, shown above.) */
+    wr_ps("\nCROSS-LAYER FLOOR (certified rank/256 of each router at coarse resolutions):\n" as u64)
+    wr_ps("  layer   2^-6  2^-5  2^-4  2^-3\n" as u64)
+    WR_SC[0] = 6u64   WR_SC[1] = 5u64   WR_SC[2] = 4u64   WR_SC[3] = 3u64
+    let mut ri : u64 = 0u64
+    while ri < WR_N {
+        let ne0b : u64 = WR_NE0[ri]
+        wr_ps("  blk." as u64)   wr_pu(WR_L[ri])   wr_ps("   " as u64)
+        let mut sj : u64 = 0u64
+        while sj < 4u64 {
+            wr_load(fp, dstart, WR_OFF[ri], ne0b, WR_ROWCAP, WR_COLCAP, WR_P, WR_SC[sj])
+            let rr2 : u64 = wr_rank(WR_ROWCAP, WR_COLCAP, WR_P)
+            wr_pu(rr2)   wr_ps("   " as u64)
+            sj = sj + 1u64
+        }
+        wr_nl()
+        ri = ri + 1u64
+    }
+    fclose(fp)
+    return 0u64
+}

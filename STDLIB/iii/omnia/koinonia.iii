@@ -1,0 +1,135 @@
+/* STDLIB/iii/omnia/koinonia.iii -- KOINONIA (κοινωνία, communion): the money-engine in communion with the aether
+ * federation, gated by EXACT PROOF.  This is the wiring the federation lacked -- it puts a ZK-hunt finding ONTO
+ * the sealed federation (III-FEDERATION B2 / R1.B2), under the one law that matters: TIER-GATED OUTBOUND (§2).
+ *
+ * A finding (an under-constrained ZK circuit -- a forged witness w0 with row·w0 = 0 over the field) becomes a
+ * WITNESSED event (isub merkle root).  Its TIER decides whether it may leave this machine:
+ *   FED_TIER_HOST(1)      -- local only; never crosses.  The default for an UNPROVEN finding.
+ *   FED_TIER_SOVEREIGN(4) -- cross-organization, sealed-trust boundary (a disclosure to a bounty program).
+ * THE COMMUNION LAW: a finding lifts to the cross-boundary tier and is SEALED into the append-only witness chain
+ * (fed_seal) ONLY when KOINONIA's own exact check confirms the forgery.  A false/unproven finding stays HOST-local,
+ * unsealed, forever.  The proof IS the passport -- which is exactly why a fabricated finding is worthless: it can
+ * never cross.  Composes omnia/isub (witness) + aether/fed_tier (tier) + aether/fed_seal (sealed chain).  Ring R0.
+ *
+ * The exact check here is the self-contained GF(p) dot-product (the ELENCHOS/APORIA verdict in miniature); the full
+ * wiring routes a real 254-bit ELENCHOS confirmation through the SAME gate. */
+module koinonia
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_emit(verb: u32, a: u32, b: u32) -> u64 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_witness_into(out32: *u8) -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn fed_tier_register(slot: u32, tier_id: u32, peer_root_ptr: u64) -> i32 from "fed_tier.iii"
+extern @abi(c-msvc-x64) fn fed_tier_get(slot: u32) -> u32 from "fed_tier.iii"
+extern @abi(c-msvc-x64) fn fed_seal_anchor(child_tier: u32, child_root_ptr: u64, parent_tier: u32, parent_root_ptr: u64) -> i32 from "fed_seal.iii"
+extern @abi(c-msvc-x64) fn fed_seal_anchor_count() -> u32 from "fed_seal.iii"
+extern @abi(c-msvc-x64) fn fed_seal_compute_chain_root(out_32_ptr: u64) -> i32 from "fed_seal.iii"
+
+const KN_TIER_HOST : u32 = 1u32        /* single-machine; never crosses */
+const KN_TIER_CROSS : u32 = 4u32       /* FED_TIER_SOVEREIGN -- cross-org sealed-trust (a bounty disclosure) */
+const KN_TIER_PLANET : u32 = 5u32      /* FED_TIER_PLANETARY -- the open bounty fabric; the parent a disclosure anchors under */
+const KN_P : u64 = 2147483647u64       /* demo field prime (the exact check; full engine is 254-bit BN254) */
+
+var KN_ROW : [u64; 16]   var KN_W0 : [u64; 16]   var KN_N : u64 = 0u64
+var KN_ROOT : [u8; 32]   var KN_GENESIS : [u8; 32]   var KN_CR : [u8; 32]   var KN_CR2 : [u8; 32]
+
+fn ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn pu(v: u64) -> u32 { if v >= 10u64 { pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+
+/* THE EXACT CHECK (the law): is w0 a real forgery for this constraint row?  row·w0 == 0 (mod p)  =>  1 */
+fn kn_verify() -> u64 {
+    let mut acc : u64 = 0u64   let mut i : u64 = 0u64
+    while i < KN_N { acc = (acc + (KN_ROW[i] % KN_P) * (KN_W0[i] % KN_P)) % KN_P   i = i + 1u64 }
+    if acc == 0u64 { return 1u64 }
+    return 0u64
+}
+/* witness the finding as an isub event -> merkle root into KN_ROOT */
+fn kn_witness(circuit_id: u64, free_wire: u64) -> i32 {
+    isub_reset()
+    isub_emit(0u32, (circuit_id % 1048576u64) as u32, (free_wire % 1048576u64) as u32)
+    isub_witness_into((&KN_ROOT) as u64 as *u8)
+    return 0i32
+}
+/* THE COMMUNION: submit a finding.  It crosses the machine boundary (SOVEREIGN tier + sealed) ONLY if PROVEN.
+ * returns the tier it was admitted at (4 = federated/disclosable, 1 = held local). */
+fn kn_submit(slot: u32, circuit_id: u64, free_wire: u64) -> u32 {
+    kn_witness(circuit_id, free_wire)
+    let mut tier : u32 = KN_TIER_HOST
+    if kn_verify() == 1u64 { tier = KN_TIER_CROSS }            /* the proof is the passport */
+    fed_tier_register(slot, tier, (&KN_ROOT) as u64)
+    if tier == KN_TIER_CROSS {
+        fed_seal_anchor(tier, (&KN_ROOT) as u64, KN_TIER_PLANET, (&KN_GENESIS) as u64)   /* SOVEREIGN finding sealed under the PLANETARY fabric */
+    }
+    return tier
+}
+
+fn kn_set_real_forgery() -> i32 {                             /* row=[2,3], w0=[3,-2]: 2*3+3*(p-2)=3p=0 mod p */
+    KN_N = 2u64   KN_ROW[0] = 2u64   KN_ROW[1] = 3u64   KN_W0[0] = 3u64   KN_W0[1] = KN_P - 2u64   return 0i32
+}
+fn kn_set_fake_forgery() -> i32 {                             /* row=[2,3], w0=[3,1]: 2*3+3*1=9 != 0 */
+    KN_N = 2u64   KN_ROW[0] = 2u64   KN_ROW[1] = 3u64   KN_W0[0] = 3u64   KN_W0[1] = 1u64   return 0i32
+}
+
+/* ================= THE GATE ================= */
+fn koinonia_selfprove() -> u64 @export {
+    let mut k : u64 = 0u64
+    while k < 32u64 { KN_GENESIS[k] = 0u8   k = k + 1u64 }     /* genesis parent = 0^32 */
+    let before : u32 = fed_seal_anchor_count()
+
+    /* 1. a PROVEN finding (real forgery) -> crosses to SOVEREIGN tier AND is sealed into the chain
+     * (distinct circuit id from kn_show so the append-only seal is a genuinely NEW anchor) */
+    kn_set_real_forgery()
+    let t1 : u32 = kn_submit(2u32, 22222u64, 5u64)
+    if t1 != KN_TIER_CROSS { return 1u64 }
+    if fed_tier_get(2u32) != KN_TIER_CROSS { return 2u64 }
+    if fed_seal_anchor_count() != before + 1u32 { return 3u64 }        /* it federated -> one new seal */
+
+    /* 2. a FALSE finding (fake forgery) -> stays HOST-local, NOT sealed -> it does NOT cross the machine */
+    let mid : u32 = fed_seal_anchor_count()
+    kn_set_fake_forgery()
+    let t2 : u32 = kn_submit(3u32, 88888u64, 9u64)
+    if t2 != KN_TIER_HOST { return 4u64 }
+    if fed_tier_get(3u32) != KN_TIER_HOST { return 5u64 }
+    if fed_seal_anchor_count() != mid { return 6u64 }                  /* NOT sealed -> the false finding never federates */
+
+    /* 3. the federation now carries a WITNESSED chain root over the proven finding (nonzero) */
+    fed_seal_compute_chain_root((&KN_CR) as u64)
+    let mut nz : u64 = 0u64   let mut i : u64 = 0u64
+    while i < 32u64 { if KN_CR[i] != 0u8 { nz = 1u64 }   i = i + 1u64 }
+    if nz != 1u64 { return 7u64 }                                      /* the sealed chain is real */
+
+    /* 4. THE WITNESSED STANDING accumulates: a SECOND proven finding extends the append-only chain root
+     * (the tamper-evident reputation the AUXESIS flywheel compounds) -- while the false finding above changed
+     * nothing.  The standing is exactly the chain of PROOFS that crossed, and only those. */
+    let mut j : u64 = 0u64   while j < 32u64 { KN_CR2[j] = KN_CR[j]   j = j + 1u64 }   /* save chain root #1 */
+    kn_set_real_forgery()
+    let t3 : u32 = kn_submit(6u32, 33333u64, 8u64)
+    if t3 != KN_TIER_CROSS { return 8u64 }
+    fed_seal_compute_chain_root((&KN_CR) as u64)                        /* chain root #2 */
+    let mut same : u64 = 1u64   let mut m : u64 = 0u64
+    while m < 32u64 { if KN_CR[m] != KN_CR2[m] { same = 0u64 }   m = m + 1u64 }
+    if same == 1u64 { return 9u64 }                                    /* the standing MUST have grown with the 2nd proof */
+
+    return 0u64
+}
+
+fn kn_show() -> i32 @export {
+    ps("KOINONIA -- the money-engine in communion with the aether federation, gated by exact proof.\n" as u64)
+    let b : u32 = fed_seal_anchor_count()
+    let mut k : u64 = 0u64   while k < 32u64 { KN_GENESIS[k] = 0u8   k = k + 1u64 }
+    kn_set_real_forgery()   let t1 : u32 = kn_submit(0u32, 12345u64, 3u64)
+    ps("  PROVEN forgery (row.w0=0 mod p): admitted at tier " as u64)   pu(t1 as u64)   ps(" (SOVEREIGN=4, crosses to a bounty program), sealed.\n" as u64)
+    kn_set_fake_forgery()   let t2 : u32 = kn_submit(1u32, 99999u64, 7u64)
+    ps("  FALSE  forgery (row.w0!=0):      held at tier " as u64)   pu(t2 as u64)   ps(" (HOST=1, never leaves the machine), unsealed.\n" as u64)
+    let _b : u32 = b
+    return 0i32
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let _a : i32 = argc   let _v : u64 = argv
+    kn_show()
+    let r : u64 = koinonia_selfprove()
+    ps("koinonia_selfprove = " as u64)   pu(r)
+    if r == 0u64 { ps("  GREEN: proof gates the boundary -- only exact-verified findings federate + seal; false ones stay local.\n" as u64) } else { ps("  (arm failed)\n" as u64) }
+    return r
+}

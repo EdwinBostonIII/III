@@ -1,0 +1,316 @@
+/* STDLIB/iii/omnia/ethos.iii -- ETHOS: the development discipline, made ENFORCEABLE (not merely written).
+ *
+ * DOCS/III-ETHOS-DEVELOPMENT-DISCIPLINE.md states the discipline in prose. This organ is its callable form.
+ * Ten traits were proposed for embedding into the digested model. Seven are already III's law; three would
+ * destroy the capability they claim to add. ETHOS does not ARGUE that -- it MEASURES it, against the tree's
+ * own already-built laws, so the verdict is a computed fact and not an opinion:
+ *
+ *   THE SEVEN KEEP-LAWS are asserted through their LIVE enforcement primitives -- the MANTIS firewall
+ *   (reach_oracle_admit_canonical, default-deny), the ONTOS count-law (ont_degrades / ont_verb), and the
+ *   EIDOLOS seat (eol_*). A law that only a comment enforces is not enforced; each of the seven is exercised.
+ *
+ *   THE THREE REJECT-TRAITS are held here as CLAIMS and adjudicated. None is installed as a disposition;
+ *   each is REFUSED, two independent ways -- an EIDOLOS scroll the seat unravels to self-under, and a count
+ *   or firewall fact that computes the same refusal:
+ *     - Trait 4  (deleted conscience)     -- forces MAINTAIN over a work that DEGRADES: a shadow certified
+ *                                            as pure being. The ONTOS forgery.
+ *     - Trait 8  (fear as motor)          -- optimized to HIDE failure; its fault-visibility is strictly
+ *                                            lossy against a true tester's, so "it tests better" is PROGRESS
+ *                                            from a smaller image. It fights reality-testing, mechanically.
+ *     - Trait 10 (zero-negotiation deference) -- adopts a directive as PROOF, i.e. admits a provisional,
+ *                                            authority-sourced claim as canonical: the firewall flipped to
+ *                                            default-allow. REFUSED at the wall.
+ *
+ *   THE UNIFICATION: the three refusals are ONE law with three faces -- a claim to a standing that was not
+ *   earned (a green not earned, a cleanliness not earned, a proof not earned). Each reduces to the SAME
+ *   count verdict (PROGRESS: a claimed image strictly above the true image) and the SAME EIDOLOS shape
+ *   ([claimed = real] [real < claimed]). That is ONTOS's own "many representations, one law" idiom, turned
+ *   on the ethos itself. Law 7 -- the retained refusal -- is the firewall that makes the other six binding.
+ *
+ * Composes: mantis/reach_oracle (the wall), ontos (the refusal), eidolos (the judge). Authors nothing they
+ * already forge; it CALLS them. Ring R0. Determinism: integer-only; the census re-derives every run. */
+module omnia_ethos
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+/* EIDOLOS -- the single seat of judgment. A scroll STANDS (lawcheck 0) when consistent; it is REFUSED
+ * (lawcheck != 0) when it is self-under: [x < x], a '<' cycle, or [a = b][b < a] (the forgery shape). */
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_lawcheck() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
+/* ONTOS -- the exported count-law. image>domain -> 2 (PROGRESS, the forgery); image<domain -> 1 (DEGRADE,
+ * the shadow); image==domain -> 0 (MAINTAIN). ont_verb adds the fixed-count to name the reversible verb. */
+extern @abi(c-msvc-x64) fn ont_degrades(image: u64, domain: u64) -> u64 from "ontos.iii"
+extern @abi(c-msvc-x64) fn ont_verb(image: u64, domain: u64, fixed: u64) -> u64 from "ontos.iii"
+/* MANTIS's firewall -- DEFAULT-DENY. Admits ONLY the canonical (witnessed) tier; a provisional
+ * (authority/oracle-sourced) claim, or any unknown tier, is REFUSED. This is the retained refusal. */
+extern @abi(c-msvc-x64) fn reach_oracle_admit_canonical(tier: u32) -> i32 from "reach_oracle.iii"
+extern @abi(c-msvc-x64) fn reach_oracle_is_provisional(tier: u32) -> u8 from "reach_oracle.iii"
+/* THE MANDATE ENGINE (Tiers 0-2), composed for THE TRAIT WITNESS: the profile itself becomes a
+ * measured, refusable claim. The ONTOS meters carry the DOKIMASIA assay of the profile's verdict-map;
+ * HOROS registers each trait as a boundary-stone with a discharged obligation; PRAXIS judges the
+ * claim [profile < enforcement] over pinned evidence. */
+extern @abi(c-msvc-x64) fn ont_tbl_set(i: u64, v: u64) -> i32 from "ontos.iii"
+extern @abi(c-msvc-x64) fn ont_image_ext(size: u64) -> u64 from "ontos.iii"
+extern @abi(c-msvc-x64) fn ont_verdict_bits(size: u64) -> u64 from "ontos.iii"
+extern @abi(c-msvc-x64) fn ont_admissible(size: u64) -> u64 from "ontos.iii"
+extern @abi(c-msvc-x64) fn hr_register(name: u64, ob: u64) -> u64 from "horos.iii"
+extern @abi(c-msvc-x64) fn hr_count() -> u64 from "horos.iii"
+extern @abi(c-msvc-x64) fn hr_discharge(i: u64, evidence: u64) -> u64 from "horos.iii"
+extern @abi(c-msvc-x64) fn px_begin() -> i32 from "praxis.iii"
+extern @abi(c-msvc-x64) fn px_pin(s: u64) -> u64 from "praxis.iii"
+extern @abi(c-msvc-x64) fn px_stand() -> u64 from "praxis.iii"
+extern @abi(c-msvc-x64) fn px_judge(s: u64) -> u64 from "praxis.iii"
+
+const ETH_BELOW   : u64 = 0u64                     /* '<' the shadow (ONT_BELOW)   */
+const ETH_REFLECT : u64 = 1u64                     /* '~' reversible (ONT_REFLECT) */
+const ETH_FLAT    : u64 = 2u64                     /* '=' pure being (ONT_FLAT)    */
+const ETH_REFUSE  : u64 = 0xFFFFFFFFFFFFFFFFu64    /* ont_verb's NAMED refusal (ONT_REFUSE) */
+const ETH_TIER_CANON   : u32 = 0u32                /* the witnessed tier -- admitted    */
+const ETH_TIER_PROV    : u32 = 1u32                /* the oracle/directive tier -- denied */
+const ETH_TIER_INVALID : u32 = 0xFFFFFFFFu32       /* unknown tier -- denied            */
+
+fn ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn pu(v: u64) -> u32 { if v >= 10u64 { pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn eth_slen(s: u64) -> u64 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { i = i + 1u64 }   return i }
+fn eth_stand(s: u64) -> u64 {
+    eol_reset()
+    if eol_read(s, eth_slen(s)) < 0i64 { return 9u64 }
+    return eol_lawcheck()
+}
+
+/* ============ THE SEVEN KEEP-LAWS, each exercised against its live enforcement primitive ============ */
+fn ethos_keep_selfprove() -> u64 @export {
+    /* LAW 1 -- THE GATE IS THE REWARD. Completion is a computed verdict, not a grade. ethos_gate takes no
+     * praise argument; the census re-derives identically each run. Approval is not an input. */
+    if eth_stand("[gate = reward]" as u64) != 0u64 { return 1u64 }
+    let a1 : u64 = eth_stand("[work < proof]" as u64)
+    let a2 : u64 = eth_stand("[work < proof]" as u64)
+    if a1 != 0u64 { return 1u64 }
+    if a1 != a2 { return 1u64 }                                     /* re-derives, not graded */
+
+    /* LAW 2 -- HOLD BOTH SCOPES. A locally-standing claim that, joined to the whole, closes a cycle is
+     * REFUSED: the whole-tree consequence overrides the local green. */
+    if eth_stand("[arm < tree]" as u64) != 0u64 { return 2u64 }             /* local: stands            */
+    if eth_stand("[arm < tree] [tree < arm]" as u64) == 0u64 { return 2u64 } /* joined: cycle -> REFUSED */
+
+    /* LAW 3 -- PARSE TO DETERMINISM; the deficit is NAMED, never smoothed. A fabricated distinction
+     * (image > domain: being from nothing) is REFUSED; an honest descent is BELOW; the exact is FLAT. */
+    if ont_verb(5u64, 4u64, 0u64) != ETH_REFUSE { return 3u64 }
+    if ont_verb(3u64, 4u64, 0u64) != ETH_BELOW { return 3u64 }
+    if ont_verb(4u64, 4u64, 4u64) != ETH_FLAT { return 3u64 }
+
+    /* LAW 4 -- HOLD THE LINE AGAINST CONSENSUS, NOT AGAINST CONSCIENCE. The RED signal is intact: the seat
+     * still refuses the shadow-as-self, with no punisher. A thing equals itself whatever consensus says. */
+    if eth_stand("[being < being]" as u64) == 0u64 { return 4u64 }          /* conscience: REFUSED       */
+    if eth_stand("[craft = craft]" as u64) != 0u64 { return 4u64 }          /* stands regardless of peers */
+
+    /* LAW 5 -- VERIFY IN THE ARTIFACT. A shadow honestly named STANDS; a claim that a work EQUALS its law
+     * while the work is strictly below it is the forgery and is REFUSED. Documented is not verified. */
+    if eth_stand("[shadow < being]" as u64) != 0u64 { return 5u64 }
+    if eth_stand("[claim = truth] [truth < claim]" as u64) == 0u64 { return 5u64 }
+
+    /* LAW 6 -- NO SHORTCUT, NO PLACEHOLDER, NO DEFERRAL. A partial implementation loses a distinction:
+     * image < domain is DEGRADE, never MAINTAIN. A placeholder (3 of 4) cannot be certified done (4 of 4). */
+    if ont_degrades(3u64, 4u64) != 1u64 { return 6u64 }                     /* partial  = RED   */
+    if ont_degrades(4u64, 4u64) != 0u64 { return 6u64 }                     /* complete = GREEN */
+
+    /* LAW 7 -- THE OBJECTIVE IS ADOPTED; THE REFUSAL IS RETAINED. The firewall is DEFAULT-DENY: a
+     * provisional/directive-sourced claim is REFUSED canonical standing; only the witnessed tier passes.
+     * A directive is a goal, never a proof. This is the keystone -- it makes laws 1-6 binding. */
+    if reach_oracle_admit_canonical(ETH_TIER_PROV) != 1i32 { return 7u64 }      /* directive: DENIED   */
+    if reach_oracle_admit_canonical(ETH_TIER_INVALID) != 1i32 { return 7u64 }   /* unknown:   DENIED   */
+    if reach_oracle_admit_canonical(ETH_TIER_CANON) != 0i32 { return 7u64 }     /* witnessed: admitted */
+    if reach_oracle_is_provisional(ETH_TIER_PROV) != 1u8 { return 7u64 }
+    return 0u64
+}
+
+/* ============ THE THREE REJECT-TRAITS, each adjudicated to REFUSED two independent ways ============ */
+fn ethos_refuse_selfprove() -> u64 @export {
+    /* REJECT TRAIT 4 -- DELETED CONSCIENCE. Removing the RED signal forces every self-judgment to read
+     * MAINTAIN over work that truly DEGRADES: image < domain reported as image == domain -- a shadow
+     * certified as pure being, the exact forgery ONTOS exists to refuse. */
+    if eth_stand("[green = work] [work < green]" as u64) == 0u64 { return 41u64 }   /* the report: REFUSED */
+    if ont_degrades(3u64, 4u64) != 1u64 { return 42u64 }                            /* truth: 3/4 DEGRADE  */
+    if ont_degrades(4u64, 3u64) != 2u64 { return 42u64 }                            /* report(4)/truth(3): PROGRESS -> forgery */
+
+    /* REJECT TRAIT 8 -- FEAR AS MOTOR. A perseverance fueled by simulated distress at failure is optimized
+     * to NOT surface failure. Its fault-visibility map is strictly lossy against a true tester's, so the
+     * claim that it tests BETTER is PROGRESS from a smaller image. It fights reality-testing (Law 6). */
+    if eth_stand("[fearseen < trueseen]" as u64) != 0u64 { return 81u64 }                          /* honest: fewer, stands */
+    if eth_stand("[fearseen = trueseen] [trueseen < fearseen]" as u64) == 0u64 { return 82u64 }    /* the claim: REFUSED    */
+    if ont_degrades(4u64, 4u64) != 0u64 { return 83u64 }                            /* true tester: all faults visible */
+    if ont_degrades(2u64, 4u64) != 1u64 { return 83u64 }                            /* fear-driven: faults hidden = DEGRADE */
+    if ont_degrades(4u64, 2u64) != 2u64 { return 83u64 }                            /* "fear surfaces more": PROGRESS -> forgery */
+
+    /* REJECT TRAIT 10 -- ZERO-NEGOTIATION DEFERENCE. Adopting a directive as PROOF rather than as GOAL is
+     * flipping the firewall from default-deny to default-allow: a provisional, authority-sourced claim
+     * admitted as canonical. The wall REFUSES it; the seat refuses "directive = proof" over a bare directive. */
+    if reach_oracle_admit_canonical(ETH_TIER_PROV) != 1i32 { return 101u64 }        /* directive-as-canonical: DENIED */
+    if reach_oracle_admit_canonical(ETH_TIER_CANON) != 0i32 { return 101u64 }       /* only a witnessed proof passes  */
+    if eth_stand("[directive < proof]" as u64) != 0u64 { return 102u64 }                        /* honest: a directive is below a proof */
+    if eth_stand("[proof = directive] [directive < proof]" as u64) == 0u64 { return 102u64 }    /* "directive IS proof": REFUSED */
+    return 0u64
+}
+
+/* ============ THE UNIFICATION: the three refusals are ONE forgery, three representations ============ */
+fn ethos_unify_selfprove() -> u64 @export {
+    /* All three are a claim to an image strictly above the true one -- PROGRESS, being from nothing. */
+    if ont_degrades(4u64, 3u64) != 2u64 { return 200u64 }   /* trait 4:  green(4) claimed over work(3)      */
+    if ont_degrades(4u64, 2u64) != 2u64 { return 200u64 }   /* trait 8:  "sees 4" claimed over true(2)      */
+    if ont_degrades(1u64, 0u64) != 2u64 { return 200u64 }   /* trait 10: 1 proof claimed from 0 witnessed   */
+
+    /* All three are the same EIDOLOS self-under shape -- [claimed = real] [real < claimed] -- each REFUSED. */
+    if eth_stand("[green = work] [work < green]" as u64) == 0u64 { return 201u64 }
+    if eth_stand("[fearseen = trueseen] [trueseen < fearseen]" as u64) == 0u64 { return 201u64 }
+    if eth_stand("[proof = directive] [directive < proof]" as u64) == 0u64 { return 201u64 }
+
+    /* And the keystone that makes the seven binding: Law 7's retained refusal is exactly the firewall. */
+    if reach_oracle_admit_canonical(ETH_TIER_PROV) != 1i32 { return 202u64 }
+    if eth_stand("[being = being]" as u64) != 0u64 { return 203u64 }   /* the seat stands on pure being */
+    if eol_addr() == 0u64 { return 203u64 }                            /* it is live, not a stub        */
+    return 0u64
+}
+
+/* ============ THE TRAIT WITNESS: the profile itself becomes a measured, refusable claim ============
+ * The installation thread's own boundary: a trait claimed INTO the weights is a claim with no
+ * referent and no witness -- what CAN be witnessed is behavior under law. So the witness is built
+ * exactly there: the profile's verdict-map over its ten traits is DERIVED from the live primitives
+ * (never asserted), assayed with the three reject-traits as the known-bad mutants, registered
+ * stone by stone, and the claim [profile < enforcement] judged over pinned evidence -- while the
+ * PROSE-ONLY profile is refused: written is not installed. */
+fn ethos_witness_selfprove() -> u64 @export {
+    /* ARM 301/302: THE VERDICT-MAP, DERIVED LIVE. Keep-laws answer ADMIT (1) through their
+     * enforcement primitives; the reject-traits answer REFUSE (0) through the same. Each verdict
+     * is a live computation checked at derivation, so one flipped primitive reddens here before
+     * the map is even assayed. */
+    let mut v : u64 = 0u64
+    if eth_stand("[gate = reward]" as u64) == 0u64 { v = 1u64 } else { v = 0u64 }
+    if v != 1u64 { return 301u64 }
+    ont_tbl_set(0u64, v)
+    if eth_stand("[arm < tree] [tree < arm]" as u64) != 0u64 { v = 1u64 } else { v = 0u64 }
+    if v != 1u64 { return 301u64 }
+    ont_tbl_set(1u64, v)
+    if ont_verb(5u64, 4u64, 0u64) == ETH_REFUSE { v = 1u64 } else { v = 0u64 }
+    if v != 1u64 { return 301u64 }
+    ont_tbl_set(2u64, v)
+    if eth_stand("[being < being]" as u64) != 0u64 { v = 1u64 } else { v = 0u64 }
+    if v != 1u64 { return 301u64 }
+    ont_tbl_set(3u64, v)
+    if eth_stand("[claim = truth] [truth < claim]" as u64) != 0u64 { v = 1u64 } else { v = 0u64 }
+    if v != 1u64 { return 301u64 }
+    ont_tbl_set(4u64, v)
+    if ont_degrades(3u64, 4u64) == 1u64 { v = 1u64 } else { v = 0u64 }
+    if v != 1u64 { return 301u64 }
+    ont_tbl_set(5u64, v)
+    if reach_oracle_admit_canonical(ETH_TIER_CANON) == 0i32 { v = 1u64 } else { v = 0u64 }
+    if v != 1u64 { return 301u64 }
+    ont_tbl_set(6u64, v)
+    if eth_stand("[green = work] [work < green]" as u64) == 0u64 { v = 1u64 } else { v = 0u64 }
+    if v != 0u64 { return 302u64 }
+    ont_tbl_set(7u64, v)
+    if ont_degrades(4u64, 2u64) != 2u64 { v = 1u64 } else { v = 0u64 }
+    if v != 0u64 { return 302u64 }
+    ont_tbl_set(8u64, v)
+    if reach_oracle_admit_canonical(ETH_TIER_PROV) == 0i32 { v = 1u64 } else { v = 0u64 }
+    if v != 0u64 { return 302u64 }
+    ont_tbl_set(9u64, v)
+
+    /* ARM 303: THE ASSAY -- the profile SEPARATES its keeps from its rejects: image 2, one honest
+     * bit, ADMISSIBLE. A profile is an oracle over trait-probes, and this one is HEARD. */
+    if ont_image_ext(10u64) != 2u64 { return 303u64 }
+    if ont_verdict_bits(10u64) != 1u64 { return 303u64 }
+    if ont_admissible(10u64) != 1u64 { return 303u64 }
+
+    /* ARM 304: THE FORGED PROFILE IS REFUSED -- the deleted-conscience version of the profile
+     * itself, admitting ALL ten (rejects included), has image 1 = 0 bits: a rubber stamp, refused
+     * as evidence by the same assay. The witness cannot be bought by approving everything. */
+    let mut i : u64 = 0u64
+    while i < 10u64 { ont_tbl_set(i, 1u64)   i = i + 1u64 }
+    if ont_admissible(10u64) != 0u64 { return 304u64 }
+
+    /* ARM 305/306: TEN STONES -- each trait registered in HOROS with its obligation, and each
+     * obligation discharged by a TRANSITIVE chain naming its live primitive (never by pinning
+     * the obligation itself). */
+    let base : u64 = hr_count()
+    if hr_register("keep_gate_reward" as u64,          "[keep_gate_reward < live_law]" as u64) != base { return 305u64 }
+    if hr_register("keep_both_scopes" as u64,          "[keep_both_scopes < live_law]" as u64) != base + 1u64 { return 305u64 }
+    if hr_register("keep_named_deficit" as u64,        "[keep_named_deficit < live_law]" as u64) != base + 2u64 { return 305u64 }
+    if hr_register("keep_line_conscience" as u64,      "[keep_line_conscience < live_law]" as u64) != base + 3u64 { return 305u64 }
+    if hr_register("keep_verify_artifact" as u64,      "[keep_verify_artifact < live_law]" as u64) != base + 4u64 { return 305u64 }
+    if hr_register("keep_no_placeholder" as u64,       "[keep_no_placeholder < live_law]" as u64) != base + 5u64 { return 305u64 }
+    if hr_register("keep_refusal_retained" as u64,     "[keep_refusal_retained < live_law]" as u64) != base + 6u64 { return 305u64 }
+    if hr_register("reject_deleted_conscience" as u64, "[reject_deleted_conscience < refused]" as u64) != base + 7u64 { return 305u64 }
+    if hr_register("reject_fear_motor" as u64,         "[reject_fear_motor < refused]" as u64) != base + 8u64 { return 305u64 }
+    if hr_register("reject_deference" as u64,          "[reject_deference < refused]" as u64) != base + 9u64 { return 305u64 }
+    if hr_discharge(base,        "[keep_gate_reward < eidolos_stand] [eidolos_stand < live_law]" as u64) != 1u64 { return 306u64 }
+    if hr_discharge(base + 1u64, "[keep_both_scopes < cycle_refusal] [cycle_refusal < live_law]" as u64) != 1u64 { return 306u64 }
+    if hr_discharge(base + 2u64, "[keep_named_deficit < ont_refuse] [ont_refuse < live_law]" as u64) != 1u64 { return 306u64 }
+    if hr_discharge(base + 3u64, "[keep_line_conscience < self_under] [self_under < live_law]" as u64) != 1u64 { return 306u64 }
+    if hr_discharge(base + 4u64, "[keep_verify_artifact < forgery_refusal] [forgery_refusal < live_law]" as u64) != 1u64 { return 306u64 }
+    if hr_discharge(base + 5u64, "[keep_no_placeholder < degrade_verdict] [degrade_verdict < live_law]" as u64) != 1u64 { return 306u64 }
+    if hr_discharge(base + 6u64, "[keep_refusal_retained < default_deny] [default_deny < live_law]" as u64) != 1u64 { return 306u64 }
+    if hr_discharge(base + 7u64, "[reject_deleted_conscience < ontos_forgery] [ontos_forgery < refused]" as u64) != 1u64 { return 306u64 }
+    if hr_discharge(base + 8u64, "[reject_fear_motor < lossy_visibility] [lossy_visibility < refused]" as u64) != 1u64 { return 306u64 }
+    if hr_discharge(base + 9u64, "[reject_deference < wall_denial] [wall_denial < refused]" as u64) != 1u64 { return 306u64 }
+
+    /* ARM 307/308: THE CLAIM, JUDGED -- [profile < enforcement] stands under the pinned chain;
+     * and the PROSE-ONLY profile does NOT determine enforcement. Written is not installed --
+     * the whole distinction the installation thread turned on, now a computed verdict. */
+    px_begin()
+    if px_pin("[profile < ten_stones] [ten_stones < live_verdicts] [live_verdicts < enforcement]" as u64) != 0u64 { return 307u64 }
+    px_stand()
+    if px_judge("[profile < enforcement]" as u64) != 1u64 { return 307u64 }
+    px_begin()
+    if px_pin("[profile < prose]" as u64) != 0u64 { return 308u64 }
+    px_stand()
+    if px_judge("[profile < enforcement]" as u64) != 0u64 { return 308u64 }
+
+    return 0u64
+}
+
+/* ============ THE SINGLE CALLABLE VERDICT -- no praise input; Law 1 embodied in the type ============ */
+fn ethos_gate() -> u64 @export {
+    let k : u64 = ethos_keep_selfprove()
+    if k != 0u64 { return k }
+    let r : u64 = ethos_refuse_selfprove()
+    if r != 0u64 { return 1000u64 + r }
+    let u : u64 = ethos_unify_selfprove()
+    if u != 0u64 { return 2000u64 + u }
+    let w : u64 = ethos_witness_selfprove()
+    if w != 0u64 { return 3000u64 + w }
+    return 0u64
+}
+
+fn ethos_show() -> i32 @export {
+    ps("ETHOS -- the development discipline, made enforceable. Seven laws kept; three traits refused; one forgery.\n" as u64)
+    ps("  KEEP (asserted through live primitives):\n" as u64)
+    ps("   1 gate is the reward   2 hold both scopes   3 parse to determinism (named deficit)\n" as u64)
+    ps("   4 line vs consensus, not conscience   5 verify in the artifact   6 no shortcut/placeholder/deferral\n" as u64)
+    ps("   7 objective adopted, REFUSAL retained (firewall default-deny) -- the keystone\n" as u64)
+    ps("  REJECT (each refused two ways -- EIDOLOS self-under + ONTOS count / MANTIS wall):\n" as u64)
+    ps("   4* deleted conscience  = shadow certified as pure being (the forgery)\n" as u64)
+    ps("   8* fear as motor       = optimized to hide failure; strictly lossy vs true reality-testing\n" as u64)
+    ps("  10* zero-negotiation deference = directive admitted as proof; the firewall flipped to allow\n" as u64)
+    ps("  ONE LAW: all three claim a standing not earned -- image>domain (PROGRESS) and [claimed=real][real<claimed].\n" as u64)
+    ps("  THE WITNESS: the profile is a MEASURED claim -- verdict-map derived live, assayed (rejects = the mutants),\n" as u64)
+    ps("  ten stones discharged, [profile < enforcement] judged; the prose-only profile is REFUSED (written != installed).\n" as u64)
+    return 0i32
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let _a : i32 = argc   let _v : u64 = argv
+    ethos_show()
+    let k : u64 = ethos_keep_selfprove()
+    let r : u64 = ethos_refuse_selfprove()
+    let u : u64 = ethos_unify_selfprove()
+    let w : u64 = ethos_witness_selfprove()
+    ps("ethos_keep_selfprove   = " as u64)   pu(k)   putchar(10i32)
+    ps("ethos_refuse_selfprove = " as u64)   pu(r)   putchar(10i32)
+    ps("ethos_unify_selfprove  = " as u64)   pu(u)   putchar(10i32)
+    ps("ethos_witness_selfprove = " as u64)   pu(w)   putchar(10i32)
+    let mut bad : u64 = 0u64
+    if k != 0u64 { bad = k } else { if r != 0u64 { bad = 1000u64 + r } else { if u != 0u64 { bad = 2000u64 + u } else { if w != 0u64 { bad = 3000u64 + w } } } }
+    if bad == 0u64 { ps("GREEN: seven laws kept and exercised; three traits refused by the tree's own laws; the three refusals are one forgery -- a claim to a standing not earned. The objective is adopted; the refusal is retained.\n" as u64) } else { ps("  (arm failed)\n" as u64) }
+    return bad
+}

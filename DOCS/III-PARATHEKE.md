@@ -1,8 +1,9 @@
 # PARATHEKE — the standing deposit: reasoning that survives the session
 
-*Status: LANDED + GATED (`STDLIB/scripts/paratheke_gate.sh`, exit 0, byte-deterministic;
-registered in the standalone-organ sweep). Born 2026-07-21, ledger head
-`k9f44d67ab6140672`, n=3.*
+*Status: LANDED + GATED, **all four paths** (`STDLIB/scripts/paratheke_gate.sh`,
+exit 0, eight sections, byte-deterministic; registered in the standalone-organ
+sweep). Born 2026-07-21 at n=3; grown the same day by the loop (e4) and the web
+atom (e5) — ledger head `kfefb133ae1766268`, n=5.*
 
 ## The gap this closes
 
@@ -123,12 +124,37 @@ A later session runs `stand` from a fresh process: every entry is re-earned
 against the *current* living body — it stands, goes DUE and heals by append, or
 reddens itself with the drift named. Self-cleaning permanence.
 
-## What grows from here
+## The remaining paths — LANDED
 
-- **Path B generalized**: any oracle proposal (MANTIS consult, HERMENEUS
-  utterance) that the krisis kernel / exact tier re-derives can be deposited by
-  the same mint — new `kind_`s, same law.
-- **Path C**: ZETESIS seeds questions; PTYXIS folds to the decidable subset;
-  decided questions deposit; ANAMNESIS reads the fold to seed the next.
-- **Path D**: entries are already EIDOLOS scrolls — organ verdicts can chain
-  into the same house, one proof graph, the krisis kernel behind every election.
+**Path B — the oracle door** (`propose <ledger> <srcs> <p|n|z> <s,m,e,b>…`): an
+outside CLAIMED verdict enters; the kernel re-derives; only agreement deposits
+(rc 0, the ratchet clicks). Disagreement is **ORACLE REFUTED** (rc 1) and
+deposits *nothing* — the lie dies at the door, proven in the gate by a forged
+claim leaving the ledger byte-identical. The mint cannot even express an
+unearned verdict: it derives before it writes.
+
+**Path C — the growth loop** (`grow`): the ledger reads ITSELF (the ANAMNESIS
+reading), folds two standing krisis bodies into their union question under the
+PTYXIS discipline (hold generators, decide by the exact predicate — the term
+cap and the kernel's named walls; the shadow is skipped, never forced), the
+kernel decides, and the deposit lands with `from_eN` provenance. Real first
+click: **e4** = e1 ∪ e2 — five terms mixing 2^100-scale dyadics with √2/√8
+radicals, decided `+1` by the separation-bound path. The gate proves two
+consecutive clicks are NOVEL (pair-provenance dedupe) and both stand.
+
+**Path D — the web atom** (`entail <ledger> <srcs> <w0..w5> [from]`): a theorem
+deposit — premises `[w0<w1] [w2<w3]`, conclusion `[w4<w5]` — that the LOGOS
+re-derives on every read (`eol_entails` over the carried premises). NOT a
+tautology: disconnected premises are expressible and are **refused at the
+mint** (selfprove arm 37), so only true theorems ever enter the chain. Real
+first edge: **e5** `from_e3` — premises `[k…0785 < k…60d8]` (the real R1 order)
+and `[k…60d8 < decided]`, conclusion `[k…0785 < decided]`, re-proven by the
+barometer every read; bend one premise word and the logos refuses (gate G).
+Entail entries pin `eidolos.iii` — each kind pins its own deciding engine.
+
+## The horizon (named, not stubbed)
+
+MANTIS/HERMENEUS proposals shelling the same `propose` door with their own
+`kind_`s; ZETESIS emergence seeding `grow` beyond pairwise unions; the fleet
+web — every organ's selfprove verdict a scroll in the same house, katoptron's
+structural wall generalized to semantic entailment.

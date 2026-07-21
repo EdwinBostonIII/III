@@ -65,6 +65,7 @@ extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
 extern @abi(c-msvc-x64) fn eol_lawcheck() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_entails(a_addr: u64, a_len: u64, verb: u64, b_addr: u64, b_len: u64) -> u64 from "eidolos.iii"
 
 /* ---- the decision kernel (the one exact-sign law) ---- */
 extern @abi(c-msvc-x64) fn kr_begin() -> i32 from "krisis.iii"
@@ -78,6 +79,9 @@ const PK_LCAP : u64 = 1024u64             /* canonical line bytes (loud refusal 
 const PK_TCAP : u64 = 8u64                /* terms per krisis entry (loud refusal past it) */
 const PK_KRISIS : u64 = 1u64
 const PK_ORDER  : u64 = 2u64
+const PK_ENTAIL : u64 = 3u64              /* Path D: a theorem the logos re-derives every read */
+const PK_FRCAP  : u64 = 4u64              /* provenance edges per entry (loud refusal past it) */
+const PK_WCAP   : u64 = 24u64             /* entail word bytes (loud refusal past it) */
 const PK_NOTF   : u64 = 0x8000000000000000u64    /* scan sentinel: not found */
 
 /* ---- the mint staging (what the builder writes FROM) ---- */
@@ -95,6 +99,10 @@ var PKM_WIN : u64 = 0u64
 var PKM_LOS : u64 = 0u64
 var PKM_ORD : u64 = 0u64
 var PKM_PIN : u64 = 0u64
+var PKM_FR : [u64; 4]                     /* provenance: the standing entries this one grew from */
+var PKM_FN : u64 = 0u64
+var PKM_WS : [u8; 144]                    /* entail words: 6 slots x 24 (p1a p1b p2a p2b ca cb) */
+var PKM_WL : [u64; 6]
 
 /* ---- the canonical output line ---- */
 var PK_OUT : [u8; 1024]
@@ -117,6 +125,10 @@ var PK_WIN : u64 = 0u64
 var PK_LOS : u64 = 0u64
 var PK_ORD : u64 = 0u64
 var PK_PIN : u64 = 0u64
+var PK_FR : [u64; 4]
+var PK_FN : u64 = 0u64
+var PK_WS : [u8; 144]
+var PK_WL : [u64; 6]
 
 /* ---- the parse cursor (module-held so helpers stay slot-light) ---- */
 var PKP_B : u64 = 0u64
@@ -181,6 +193,17 @@ fn pk_hexmin(v: u64) -> i32 {
     return 0i32
 }
 
+/* emit len raw bytes from base (an entail word travels verbatim) */
+fn pk_putw(base: u64, len: u64) -> i32 {
+    let p : *u8 = base as *u8
+    let mut i : u64 = 0u64
+    while i < len { pk_put(p[i])   i = i + 1u64 }
+    return 0i32
+}
+
+fn pkm_wbase(i: u64) -> u64 { return ((&PKM_WS) as u64) + i * 24u64 }
+fn pk_wbase(i: u64) -> u64 { return ((&PK_WS) as u64) + i * 24u64 }
+
 /* close the current claim: " < e<seq>]" */
 fn pk_eclose() -> i32 {
     pk_putz(" < e" as u64)
@@ -222,10 +245,18 @@ fn pk_build() -> u64 {
     pk_eclose()
     if PKM_KIND == PK_KRISIS { pk_putz(" [kind_krisis" as u64)   pk_eclose() }
     if PKM_KIND == PK_ORDER  { pk_putz(" [kind_order" as u64)    pk_eclose() }
+    if PKM_KIND == PK_ENTAIL { pk_putz(" [kind_entail" as u64)   pk_eclose() }
     if PKM_OF != 0u64 {
         pk_putz(" [of_e" as u64)
         pk_hexmin(PKM_OF)
         pk_eclose()
+    }
+    let mut fr : u64 = 0u64
+    while fr < PKM_FN {
+        pk_putz(" [from_e" as u64)
+        pk_hexmin(PKM_FR[fr])
+        pk_eclose()
+        fr = fr + 1u64
     }
     if PKM_KIND == PK_KRISIS {
         pk_putz(" [verdict_" as u64)
@@ -241,6 +272,14 @@ fn pk_build() -> u64 {
         pk_putz(" [winner_k" as u64)   pk_hex16(PKM_WIN)   pk_eclose()
         pk_putz(" [loser_k" as u64)    pk_hex16(PKM_LOS)   pk_eclose()
         pk_putz(" [order_k" as u64)    pk_hex16(PKM_ORD)   pk_eclose()
+    }
+    if PKM_KIND == PK_ENTAIL {
+        pk_putz(" [pa_" as u64)   pk_putw(pkm_wbase(0u64), PKM_WL[0u64])   pk_eclose()
+        pk_putz(" [pb_" as u64)   pk_putw(pkm_wbase(1u64), PKM_WL[1u64])   pk_eclose()
+        pk_putz(" [pc_" as u64)   pk_putw(pkm_wbase(2u64), PKM_WL[2u64])   pk_eclose()
+        pk_putz(" [pd_" as u64)   pk_putw(pkm_wbase(3u64), PKM_WL[3u64])   pk_eclose()
+        pk_putz(" [ce_" as u64)   pk_putw(pkm_wbase(4u64), PKM_WL[4u64])   pk_eclose()
+        pk_putz(" [cf_" as u64)   pk_putw(pkm_wbase(5u64), PKM_WL[5u64])   pk_eclose()
     }
     pk_putz(" [pin_k" as u64)
     pk_hex16(PKM_PIN)
@@ -274,6 +313,44 @@ fn pk_rederive_krisis() -> i64 {
     return kr_sign()
 }
 
+/* Path D re-derivation -- the LOGOS judges the theorem: do the carried premises
+ * [w0 < w1] [w2 < w3] entail the carried conclusion [w4 < w5]?  1 = entailed.
+ * NOT a tautology: disconnected premises are expressible and are REFUSED. */
+var PK_EB : [u8; 128]
+var PK_EBN : u64 = 0u64
+fn pk_ebput(c: u8) -> i32 { if PK_EBN < 128u64 { PK_EB[PK_EBN] = c   PK_EBN = PK_EBN + 1u64 }   return 0i32 }
+fn pk_ebw(base: u64, len: u64) -> i32 {
+    let p : *u8 = base as *u8
+    let mut i : u64 = 0u64
+    while i < len { pk_ebput(p[i])   i = i + 1u64 }
+    return 0i32
+}
+fn pk_ebz(s: u64) -> i32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { pk_ebput(p[i])   i = i + 1u64 }
+    return 0i32
+}
+fn pk_rederive_entail() -> u64 {
+    let mut w : u64 = 0u64
+    while w < 6u64 {
+        if PKM_WL[w] == 0u64 { return 0u64 }
+        w = w + 1u64
+    }
+    PK_EBN = 0u64
+    pk_ebput(91u8)
+    pk_ebw(pkm_wbase(0u64), PKM_WL[0u64])   pk_ebz(" < " as u64)   pk_ebw(pkm_wbase(1u64), PKM_WL[1u64])
+    pk_ebz("] [" as u64)
+    pk_ebw(pkm_wbase(2u64), PKM_WL[2u64])   pk_ebz(" < " as u64)   pk_ebw(pkm_wbase(3u64), PKM_WL[3u64])
+    pk_ebput(93u8)
+    eol_reset()
+    if eol_read((&PK_EB) as u64, PK_EBN) < 0i64 { eol_reset()   return 0u64 }
+    if eol_lawcheck() != 0u64 { eol_reset()   return 0u64 }
+    let r : u64 = eol_entails(pkm_wbase(4u64), PKM_WL[4u64], 0u64, pkm_wbase(5u64), PKM_WL[5u64])
+    eol_reset()
+    return r
+}
+
 /* ==================== the mint (deposit-by-rederivation) ==================== */
 
 fn pk_mint_begin(seq: u64, prev: u64, kind: u64, of_seq: u64) -> i32 @export {
@@ -286,7 +363,36 @@ fn pk_mint_begin(seq: u64, prev: u64, kind: u64, of_seq: u64) -> i32 @export {
     PKM_LOS = 0u64
     PKM_ORD = 0u64
     PKM_VERD = 0i64
+    PKM_FN = 0u64
+    let mut w : u64 = 0u64
+    while w < 6u64 { PKM_WL[w] = 0u64   w = w + 1u64 }
     return 0i32
+}
+
+/* stage one provenance edge (the standing entry this deposit grew from) */
+fn pk_mint_from_add(seq: u64) -> u64 @export {
+    if PKM_FN >= PK_FRCAP { return 1u64 }
+    if seq == 0u64 { return 1u64 }
+    PKM_FR[PKM_FN] = seq
+    PKM_FN = PKM_FN + 1u64
+    return 0u64
+}
+
+/* stage one entail word (0..3 = premise words, 4..5 = conclusion) from a
+ * NUL-terminated string; loud refusal on empty or over PK_WCAP */
+fn pk_mint_word(which: u64, s: u64) -> u64 @export {
+    if which >= 6u64 { return 1u64 }
+    let p : *u8 = s as *u8
+    let d : *u8 = pkm_wbase(which) as *u8
+    let mut n : u64 = 0u64
+    while p[n] != 0u8 {
+        if n >= PK_WCAP { return 1u64 }
+        d[n] = p[n]
+        n = n + 1u64
+    }
+    if n == 0u64 { return 1u64 }
+    PKM_WL[which] = n
+    return 0u64
 }
 
 fn pk_mint_term(s: i64, m: u64, e: i64, b: u64) -> i32 @export {
@@ -321,7 +427,10 @@ fn pk_mint_close(pin: u64) -> u64 @export {
         if oa == 0u64 { return 3u64 }
         PKM_ORD = oa
     }
-    if PKM_KIND != PK_KRISIS { if PKM_KIND != PK_ORDER { return 4u64 } }
+    if PKM_KIND == PK_ENTAIL {
+        if pk_rederive_entail() != 1u64 { return 7u64 }      /* a theorem the logos does not derive is never deposited */
+    }
+    if PKM_KIND != PK_KRISIS { if PKM_KIND != PK_ORDER { if PKM_KIND != PK_ENTAIL { return 4u64 } } }
     PKM_PIN = pin
     if pk_build() != 0u64 { return 5u64 }
     let a : u64 = pk_line_addr((&PK_OUT) as u64, PK_ON)
@@ -331,6 +440,7 @@ fn pk_mint_close(pin: u64) -> u64 @export {
 }
 
 fn pk_mint_addr() -> u64 @export { return PK_MADDR }
+fn pk_mint_verdict() -> i64 @export { return PKM_VERD }   /* the DERIVED verdict (the oracle door compares) */
 fn pk_out_len() -> u64 @export { return PK_ON }
 fn pk_out_byte(i: u64) -> u8 @export { if i < PK_ON { return PK_OUT[i] }   return 0u8 }
 
@@ -447,6 +557,38 @@ fn pkp_term() -> u64 {
     return 1u64
 }
 
+fn pk_is_wch(c: u8) -> u64 {
+    if c >= 97u8 { if c <= 122u8 { return 1u64 } }
+    if c >= 48u8 { if c <= 57u8 { return 1u64 } }
+    if c == 95u8 { return 1u64 }
+    if c == 45u8 { return 1u64 }
+    return 0u64
+}
+
+/* one entail word (legal EIDOLOS word bytes, 1..24) into parse slot `which` */
+fn pkp_word(which: u64) -> u64 {
+    let b : *u8 = PKP_B as *u8
+    let d : *u8 = pk_wbase(which) as *u8
+    let mut n : u64 = 0u64
+    let mut go : u64 = 1u64
+    while go == 1u64 {
+        if PKP_P >= PKP_L { go = 0u64 }
+        if go == 1u64 {
+            let c : u8 = b[PKP_P]
+            if pk_is_wch(c) == 0u64 { go = 0u64 }
+            if go == 1u64 {
+                if n >= PK_WCAP { return 0u64 }
+                d[n] = c
+                n = n + 1u64
+                PKP_P = PKP_P + 1u64
+            }
+        }
+    }
+    if n == 0u64 { return 0u64 }
+    PK_WL[which] = n
+    return 1u64
+}
+
 /* parse one canonical entry line.  0 = parsed | 5 = malformed (the exact
  * grammar or nothing; a bent line never half-parses). */
 fn pk_parse_line(base: u64, len: u64) -> u64 @export {
@@ -462,6 +604,9 @@ fn pk_parse_line(base: u64, len: u64) -> u64 @export {
     PK_LOS = 0u64
     PK_ORD = 0u64
     PK_VERD = 0i64
+    PK_FN = 0u64
+    let mut wz : u64 = 0u64
+    while wz < 6u64 { PK_WL[wz] = 0u64   wz = wz + 1u64 }
     if pkp_lit("[e" as u64) == 0u64 { return 5u64 }
     if pkp_hexseq() == 0u64 { return 5u64 }
     PK_SEQ = PK_PV
@@ -475,6 +620,7 @@ fn pk_parse_line(base: u64, len: u64) -> u64 @export {
     PK_KIND = 0u64
     if pkp_lit("krisis" as u64) == 1u64 { PK_KIND = PK_KRISIS }
     if PK_KIND == 0u64 { if pkp_lit("order" as u64) == 1u64 { PK_KIND = PK_ORDER } }
+    if PK_KIND == 0u64 { if pkp_lit("entail" as u64) == 1u64 { PK_KIND = PK_ENTAIL } }
     if PK_KIND == 0u64 { return 5u64 }
     if pkp_close() == 0u64 { return 5u64 }
     if pkp_lit(" [of_e" as u64) == 1u64 {
@@ -482,6 +628,19 @@ fn pk_parse_line(base: u64, len: u64) -> u64 @export {
         PK_OF = PK_PV
         if PK_OF == 0u64 { return 5u64 }
         if pkp_close() == 0u64 { return 5u64 }
+    }
+    let mut morefr : u64 = 1u64
+    while morefr == 1u64 {
+        if pkp_lit(" [from_e" as u64) == 1u64 {
+            if PK_FN >= PK_FRCAP { return 5u64 }
+            if pkp_hexseq() == 0u64 { return 5u64 }
+            if PK_PV == 0u64 { return 5u64 }
+            PK_FR[PK_FN] = PK_PV
+            PK_FN = PK_FN + 1u64
+            if pkp_close() == 0u64 { return 5u64 }
+        }
+        if pkp_lit(" [from_e" as u64) == 0u64 { morefr = 0u64 }
+        if morefr == 1u64 { PKP_P = PKP_P - 8u64 }   /* un-consume the probe */
     }
     if PK_KIND == PK_KRISIS {
         if pkp_lit(" [verdict_" as u64) == 0u64 { return 5u64 }
@@ -520,6 +679,26 @@ fn pk_parse_line(base: u64, len: u64) -> u64 @export {
         PK_ORD = PK_PV
         if pkp_close() == 0u64 { return 5u64 }
     }
+    if PK_KIND == PK_ENTAIL {
+        if pkp_lit(" [pa_" as u64) == 0u64 { return 5u64 }
+        if pkp_word(0u64) == 0u64 { return 5u64 }
+        if pkp_close() == 0u64 { return 5u64 }
+        if pkp_lit(" [pb_" as u64) == 0u64 { return 5u64 }
+        if pkp_word(1u64) == 0u64 { return 5u64 }
+        if pkp_close() == 0u64 { return 5u64 }
+        if pkp_lit(" [pc_" as u64) == 0u64 { return 5u64 }
+        if pkp_word(2u64) == 0u64 { return 5u64 }
+        if pkp_close() == 0u64 { return 5u64 }
+        if pkp_lit(" [pd_" as u64) == 0u64 { return 5u64 }
+        if pkp_word(3u64) == 0u64 { return 5u64 }
+        if pkp_close() == 0u64 { return 5u64 }
+        if pkp_lit(" [ce_" as u64) == 0u64 { return 5u64 }
+        if pkp_word(4u64) == 0u64 { return 5u64 }
+        if pkp_close() == 0u64 { return 5u64 }
+        if pkp_lit(" [cf_" as u64) == 0u64 { return 5u64 }
+        if pkp_word(5u64) == 0u64 { return 5u64 }
+        if pkp_close() == 0u64 { return 5u64 }
+    }
     if pkp_lit(" [pin_k" as u64) == 0u64 { return 5u64 }
     if pkp_hex16() == 0u64 { return 5u64 }
     PK_PIN = PK_PV
@@ -531,6 +710,8 @@ fn pk_parse_line(base: u64, len: u64) -> u64 @export {
 fn pk_parsed_seq() -> u64 @export { return PK_SEQ }
 fn pk_parsed_of() -> u64 @export { return PK_OF }
 fn pk_parsed_kind() -> u64 @export { return PK_KIND }
+fn pk_parsed_from_count() -> u64 @export { return PK_FN }
+fn pk_parsed_from(i: u64) -> u64 @export { if i < PK_FN { return PK_FR[i] }   return 0u64 }
 
 /* copy the parse result into the mint staging (the body travels; the verdict
  * and the order address are RE-DERIVED, never copied). */
@@ -547,7 +728,36 @@ fn pk_stage_from_parse() -> i32 {
     }
     PKM_WIN = PK_WIN
     PKM_LOS = PK_LOS
+    PKM_FN = PK_FN
+    let mut f : u64 = 0u64
+    while f < PK_FN { PKM_FR[f] = PK_FR[f]   f = f + 1u64 }
+    let mut w : u64 = 0u64
+    while w < 6u64 {
+        PKM_WL[w] = PK_WL[w]
+        let s : *u8 = pk_wbase(w) as *u8
+        let d : *u8 = pkm_wbase(w) as *u8
+        let mut c : u64 = 0u64
+        while c < PK_WL[w] { d[c] = s[c]   c = c + 1u64 }
+        w = w + 1u64
+    }
     return 0i32
+}
+
+/* Path C: APPEND the parsed krisis terms to the staging (the growth union);
+ * 1 = the fold refuses (not krisis, or the union exceeds the exact cap) */
+fn pk_stage_append_terms() -> u64 @export {
+    if PK_KIND != PK_KRISIS { return 1u64 }
+    let mut i : u64 = 0u64
+    while i < PK_TN {
+        if PKM_TN >= PK_TCAP { return 1u64 }
+        PKM_TS[PKM_TN] = PK_TS[i]
+        PKM_TM[PKM_TN] = PK_TM[i]
+        PKM_TE[PKM_TN] = PK_TE[i]
+        PKM_TB[PKM_TN] = PK_TB[i]
+        PKM_TN = PKM_TN + 1u64
+        i = i + 1u64
+    }
+    return 0u64
 }
 
 /* re-mint the just-parsed line verbatim (the round-trip law: mint(parse(x)) == x) */
@@ -578,8 +788,10 @@ fn pk_std_begin() -> i32 @export {
  *   3 = CONTRADICTION (the live body no longer derives the recorded verdict)
  *   5 = malformed | 6 = the engine refused by name
  * Contradiction dominates DUE: the body is re-earned BEFORE pins are consulted.
- * waive=1 (a superseded entry) waives ONLY the pin check -- never the body. */
-fn pk_std_line(base: u64, len: u64, pin_krisis: u64, pin_order: u64, waive: u64) -> u64 @export {
+ * waive=1 (a superseded entry) waives ONLY the pin check -- never the body.
+ * Pins by deciding engine: krisis entries pin the kernel, order entries the
+ * probe, entail entries the logos itself. */
+fn pk_std_line(base: u64, len: u64, pin_krisis: u64, pin_order: u64, pin_entail: u64, waive: u64) -> u64 @export {
     if pk_parse_line(base, len) != 0u64 { return 5u64 }
     let a : u64 = pk_line_addr(base, PKP_L)
     if a == 0u64 { return 1u64 }
@@ -598,6 +810,11 @@ fn pk_std_line(base: u64, len: u64, pin_krisis: u64, pin_order: u64, waive: u64)
         if oa != PK_ORD { return 3u64 }
         live = pin_order
     }
+    if PK_KIND == PK_ENTAIL {
+        pk_stage_from_parse()
+        if pk_rederive_entail() != 1u64 { return 3u64 }
+        live = pin_entail
+    }
     PK_STD_PREV = a
     PK_STD_HEAD = a
     if waive == 0u64 { if PK_PIN != live { return 4u64 } }
@@ -608,9 +825,9 @@ fn pk_std_head() -> u64 @export { return PK_STD_HEAD }
 
 /* ==================== the fixtures (pure; the selfprove's in-memory ledger) ==================== */
 
-var PK_F  : [u8; 6144]                    /* 6 slots x 1024 */
-var PK_FL : [u64; 6]
-var PK_FA : [u64; 6]
+var PK_F  : [u8; 8192]                    /* 8 slots x 1024 */
+var PK_FL : [u64; 8]
+var PK_FA : [u64; 8]
 
 fn pk_fbase(slot: u64) -> u64 { return ((&PK_F) as u64) + slot * 1024u64 }
 
@@ -661,12 +878,12 @@ fn pk_fscan(slot: u64, lit: u64) -> u64 {
 }
 
 /* the fixture sweep; 0 = every entry stands, else (slot+1)*100 + code */
-fn pk_sp_sweep(n: u64, pkr: u64, por: u64, waive_mask: u64) -> u64 {
+fn pk_sp_sweep(n: u64, pkr: u64, por: u64, pen: u64, waive_mask: u64) -> u64 {
     pk_std_begin()
     let mut i : u64 = 0u64
     while i < n {
         let w : u64 = (waive_mask >> i) & 1u64
-        let rc : u64 = pk_std_line(pk_fbase(i), PK_FL[i], pkr, por, w)
+        let rc : u64 = pk_std_line(pk_fbase(i), PK_FL[i], pkr, por, pen, w)
         if rc != 0u64 { return (i + 1u64) * 100u64 + rc }
         i = i + 1u64
     }
@@ -720,7 +937,7 @@ fn pk_sp_teeth() -> u64 {
     let d : *u8 = pk_fbase(3u64) as *u8
     d[vi + 8u64] = 110u8                                     /* p -> n */
     pk_std_begin()
-    if pk_std_line(pk_fbase(3u64), PK_FL[3u64], 170u64, 187u64, 0u64) != 3u64 { return 13u64 }
+    if pk_std_line(pk_fbase(3u64), PK_FL[3u64], 170u64, 187u64, 221u64, 0u64) != 3u64 { return 13u64 }
     /* one bent pin nybble: the entry itself only goes DUE, but its ADDRESS moved,
      * so the NEXT entry's chain refuses at exactly that link */
     pk_fdup(0u64, 3u64)
@@ -729,9 +946,9 @@ fn pk_sp_teeth() -> u64 {
     let d2 : *u8 = pk_fbase(3u64) as *u8
     d2[pi + 5u64] = 49u8                                     /* leading pin nybble 0 -> 1 */
     pk_std_begin()
-    let r1 : u64 = pk_std_line(pk_fbase(3u64), PK_FL[3u64], 170u64, 187u64, 0u64)
+    let r1 : u64 = pk_std_line(pk_fbase(3u64), PK_FL[3u64], 170u64, 187u64, 221u64, 0u64)
     if r1 != 4u64 { return 15u64 }
-    let r2 : u64 = pk_std_line(pk_fbase(1u64), PK_FL[1u64], 170u64, 187u64, 0u64)
+    let r2 : u64 = pk_std_line(pk_fbase(1u64), PK_FL[1u64], 170u64, 187u64, 221u64, 0u64)
     if r2 != 2u64 { return 15u64 }
     return 0u64
 }
@@ -739,7 +956,7 @@ fn pk_sp_teeth() -> u64 {
 /* pin drift -> DUE -> heal by supersession -> stands; waive never skips the body; arms 16..24 */
 fn pk_sp_drift() -> u64 {
     pk_std_begin()
-    if pk_std_line(pk_fbase(0u64), PK_FL[0u64], 204u64, 187u64, 0u64) != 4u64 { return 16u64 }
+    if pk_std_line(pk_fbase(0u64), PK_FL[0u64], 204u64, 187u64, 221u64, 0u64) != 4u64 { return 16u64 }
     /* re-earn e1 and e2 under the new pin cc, appended as of_ supersessions */
     if pk_parse_line(pk_fbase(0u64), PK_FL[0u64]) != 0u64 { return 17u64 }
     if pk_mint_from_parse(4u64, PK_FA[2u64], 204u64) != 0u64 { return 18u64 }
@@ -748,7 +965,7 @@ fn pk_sp_drift() -> u64 {
     if pk_mint_from_parse(5u64, PK_FA[3u64], 204u64) != 0u64 { return 20u64 }
     pk_fset(4u64)
     /* the healed ledger stands whole: e1/e2 waived (superseded), e4/e5 current */
-    let sw : u64 = pk_sp_sweep(5u64, 204u64, 187u64, 3u64)
+    let sw : u64 = pk_sp_sweep(5u64, 204u64, 187u64, 221u64, 3u64)
     if sw != 0u64 { return 21u64 }
     /* waive can NEVER skip the body: a fresh standalone entry with a flipped
      * verdict refuses 3 even when its pin check is waived */
@@ -761,7 +978,7 @@ fn pk_sp_drift() -> u64 {
     let d : *u8 = pk_fbase(5u64) as *u8
     d[vi + 8u64] = 110u8
     pk_std_begin()
-    if pk_std_line(pk_fbase(5u64), PK_FL[5u64], 204u64, 187u64, 1u64) != 3u64 { return 24u64 }
+    if pk_std_line(pk_fbase(5u64), PK_FL[5u64], 204u64, 187u64, 221u64, 1u64) != 3u64 { return 24u64 }
     return 0u64
 }
 
@@ -769,27 +986,90 @@ fn pk_sp_drift() -> u64 {
 fn pk_sp_det() -> u64 {
     pk_mint_begin(6u64, 0u64, PK_KRISIS, 0u64)
     if pk_mint_close(170u64) != 1u64 { return 25u64 }        /* nothing re-derived, nothing minted */
-    let s1 : u64 = pk_sp_sweep(3u64, 170u64, 187u64, 0u64)
+    let s1 : u64 = pk_sp_sweep(3u64, 170u64, 187u64, 221u64, 0u64)
     if s1 != 0u64 { return 26u64 }
     let h1 : u64 = pk_std_head()
-    let s2 : u64 = pk_sp_sweep(3u64, 170u64, 187u64, 0u64)
+    let s2 : u64 = pk_sp_sweep(3u64, 170u64, 187u64, 221u64, 0u64)
     if s2 != 0u64 { return 26u64 }
     if pk_std_head() != h1 { return 27u64 }
     if h1 != PK_FA[2u64] { return 27u64 }
     return 0u64
 }
 
+/* Paths B/C/D law arms (pure): the growth union with provenance round-trips and
+ * stands (C); a TRUE transitivity theorem mints and stands while a DISCONNECTED
+ * one is REFUSED at the mint -- the logos owns the verdict, both outcomes
+ * expressible, no tautology (D); the entail tamper tooth (a bent premise word is
+ * a CONTRADICTION); arms 30..38. */
+fn pk_sp_paths() -> u64 {
+    /* C: union of fixture e1 + e2 bodies, from_e1 from_e2, minted by re-derivation */
+    if pk_parse_line(pk_fbase(0u64), PK_FL[0u64]) != 0u64 { return 30u64 }
+    pk_mint_begin(7u64, 0u64, PK_KRISIS, 0u64)
+    if pk_stage_append_terms() != 0u64 { return 30u64 }
+    if pk_mint_from_add(1u64) != 0u64 { return 30u64 }
+    if pk_parse_line(pk_fbase(1u64), PK_FL[1u64]) != 0u64 { return 30u64 }
+    if pk_stage_append_terms() != 0u64 { return 30u64 }
+    if pk_mint_from_add(2u64) != 0u64 { return 30u64 }
+    if pk_mint_close(204u64) != 0u64 { return 31u64 }
+    pk_fset(6u64)
+    if pk_parse_line(pk_fbase(6u64), PK_FL[6u64]) != 0u64 { return 32u64 }
+    if pk_parsed_from_count() != 2u64 { return 32u64 }
+    if pk_remint_parsed() != 0u64 { return 32u64 }
+    if PK_ON != PK_FL[6u64] { return 33u64 }
+    let b6 : *u8 = pk_fbase(6u64) as *u8
+    let mut i : u64 = 0u64
+    while i < PK_ON { if PK_OUT[i] != b6[i] { return 33u64 }   i = i + 1u64 }
+    pk_std_begin()
+    if pk_std_line(pk_fbase(6u64), PK_FL[6u64], 204u64, 187u64, 221u64, 0u64) != 0u64 { return 34u64 }
+    /* D: the true theorem [alpha<beta][beta<gamma] |- [alpha<gamma] mints + stands */
+    pk_mint_begin(8u64, 0u64, PK_ENTAIL, 0u64)
+    if pk_mint_word(0u64, "alpha" as u64) != 0u64 { return 35u64 }
+    if pk_mint_word(1u64, "beta" as u64) != 0u64 { return 35u64 }
+    if pk_mint_word(2u64, "beta" as u64) != 0u64 { return 35u64 }
+    if pk_mint_word(3u64, "gamma" as u64) != 0u64 { return 35u64 }
+    if pk_mint_word(4u64, "alpha" as u64) != 0u64 { return 35u64 }
+    if pk_mint_word(5u64, "gamma" as u64) != 0u64 { return 35u64 }
+    if pk_mint_close(221u64) != 0u64 { return 35u64 }
+    pk_fset(7u64)
+    if pk_parse_line(pk_fbase(7u64), PK_FL[7u64]) != 0u64 { return 36u64 }
+    if pk_remint_parsed() != 0u64 { return 36u64 }
+    if PK_ON != PK_FL[7u64] { return 36u64 }
+    let b7 : *u8 = pk_fbase(7u64) as *u8
+    i = 0u64
+    while i < PK_ON { if PK_OUT[i] != b7[i] { return 36u64 }   i = i + 1u64 }
+    pk_std_begin()
+    if pk_std_line(pk_fbase(7u64), PK_FL[7u64], 204u64, 187u64, 221u64, 0u64) != 0u64 { return 36u64 }
+    /* D negative: DISCONNECTED premises never deposit -- the mint refuses (7) */
+    pk_mint_begin(9u64, 0u64, PK_ENTAIL, 0u64)
+    pk_mint_word(0u64, "alpha" as u64)
+    pk_mint_word(1u64, "beta" as u64)
+    pk_mint_word(2u64, "gamma" as u64)
+    pk_mint_word(3u64, "delta" as u64)
+    pk_mint_word(4u64, "alpha" as u64)
+    pk_mint_word(5u64, "delta" as u64)
+    if pk_mint_close(221u64) != 7u64 { return 37u64 }
+    /* D tooth: a bent premise word in the standing theorem is a CONTRADICTION */
+    let bi : u64 = pk_fscan(7u64, "pb_beta" as u64)
+    if bi == PK_NOTF { return 38u64 }
+    let d7 : *u8 = pk_fbase(7u64) as *u8
+    d7[bi + 3u64] = 120u8                                    /* beta -> xeta: the chain no longer connects */
+    pk_std_begin()
+    if pk_std_line(pk_fbase(7u64), PK_FL[7u64], 204u64, 187u64, 221u64, 0u64) != 3u64 { return 38u64 }
+    return 0u64
+}
+
 /* THE CONDITION OF MOTION (pure, no filesystem): every invocation re-derives the
  * whole deposit law -- mint-by-rederivation, the round-trip identity, the chain
  * that names its bent link, contradiction over DUE, supersession that waives
- * only pins, refusal of the empty deposit, determinism.  0 = the law holds;
- * a nonzero arm code names the exact clause that failed. */
+ * only pins, refusal of the empty deposit, the growth union with provenance,
+ * the entailment theorem law (true deposits, forged refusals), determinism.
+ * 0 = the law holds; a nonzero arm code names the exact clause that failed. */
 fn paratheke_selfprove() -> u64 @export {
     let m : u64 = pk_sp_mint3()
     if m != 0u64 { return m }
     let r : u64 = pk_sp_roundtrip()
     if r != 0u64 { return r }
-    let s : u64 = pk_sp_sweep(3u64, 170u64, 187u64, 0u64)
+    let s : u64 = pk_sp_sweep(3u64, 170u64, 187u64, 221u64, 0u64)
     if s != 0u64 { return 10u64 }
     if pk_std_head() != PK_FA[2u64] { return 11u64 }
     let t : u64 = pk_sp_teeth()
@@ -798,5 +1078,7 @@ fn paratheke_selfprove() -> u64 @export {
     if dr != 0u64 { return dr }
     let de : u64 = pk_sp_det()
     if de != 0u64 { return de }
+    let pp : u64 = pk_sp_paths()
+    if pp != 0u64 { return pp }
     return 0u64
 }

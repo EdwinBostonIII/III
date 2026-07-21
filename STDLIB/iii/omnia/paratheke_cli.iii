@@ -1,18 +1,28 @@
 /* STDLIB/iii/omnia/paratheke_cli.iii -- the carrier: PARATHEKE has no main (library
  * organ); this does.  The organ owns the LAW; this carries the file I/O and the
  * live pins (sha256 heads of the deciding sources, hashed HERE, never trusted
- * from the caller).
+ * from the caller).  Pins by deciding engine: krisis entries pin the kernel,
+ * order entries the probe, entail entries the logos (eidolos) itself.
  *
- *   (no args)                                  -> paratheke_selfprove (pure law)
- *   genesis <krisis-src> <probe-src>           -> print the canonical birth lines
- *   stand   <ledger> <krisis-src> <probe-src>  -> re-earn every entry; verdict prose
- *   reearn  <ledger> <krisis-src> <probe-src>  -> print ONLY the superseding lines
- *                                                 for DUE entries (bash appends them)
- * exit 0 = every entry STANDS | 1 = REFUSED (named) | 2 = usage/io | 4 = DUE
- *
- * The ledger file is read whole (<= 64 KiB, loud refusal past it), split on LF
- * (a trailing CR is stripped -- the msvcrt text-mode pen writes CRLF; the law
- * judges the CR-stripped bytes, so the address is newline-convention-free). */
+ *   (no args)                                             -> paratheke_selfprove
+ *   genesis <krisis-src> <probe-src>                      -> print the birth lines
+ *   stand   <ledger> <krisis> <probe> <eidolos>           -> re-earn every entry
+ *   reearn  <ledger> <krisis> <probe> <eidolos>           -> print ONLY the healing lines
+ *   propose <ledger> <krisis> <probe> <eidolos> <p|n|z> <s,m,e,b> ...   (Path B: the oracle door)
+ *           an outside CLAIMED verdict enters; the kernel re-derives; agreement
+ *           prints the deposit line (rc 0, the ratchet clicks); disagreement is
+ *           ORACLE REFUTED (rc 1, nothing to append) -- the lie dies at the door
+ *   grow    <ledger> <krisis> <probe> <eidolos>           (Path C: the loop)
+ *           the ledger reads ITSELF (anamnesis), folds two standing krisis
+ *           bodies into the union question (the ptyxis discipline: only pairs
+ *           inside the exact cap fold; the shadow is refused), the kernel
+ *           decides, and the new deposit prints with from_e provenance (rc 0);
+ *           rc 3 = the fold is exhausted (every pair deposited or refused)
+ *   entail  <ledger> <krisis> <probe> <eidolos> <w0..w5> [from-seq]   (Path D: the web atom)
+ *           a theorem deposit: premises [w0<w1] [w2<w3], conclusion [w4<w5];
+ *           the LOGOS re-derives it or the mint refuses -- only true theorems
+ *           ever enter the chain
+ * exit 0 = done/STANDS | 1 = REFUSED (named) | 2 = usage/io | 3 = fold exhausted | 4 = DUE */
 module omnia_paratheke_cli
 
 extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
@@ -33,15 +43,21 @@ extern @abi(c-msvc-x64) fn pk_parse_line(base: u64, len: u64) -> u64 from "parat
 extern @abi(c-msvc-x64) fn pk_parsed_seq() -> u64 from "paratheke.iii"
 extern @abi(c-msvc-x64) fn pk_parsed_of() -> u64 from "paratheke.iii"
 extern @abi(c-msvc-x64) fn pk_parsed_kind() -> u64 from "paratheke.iii"
+extern @abi(c-msvc-x64) fn pk_parsed_from_count() -> u64 from "paratheke.iii"
+extern @abi(c-msvc-x64) fn pk_parsed_from(i: u64) -> u64 from "paratheke.iii"
 extern @abi(c-msvc-x64) fn pk_std_begin() -> i32 from "paratheke.iii"
-extern @abi(c-msvc-x64) fn pk_std_line(base: u64, len: u64, pin_krisis: u64, pin_order: u64, waive: u64) -> u64 from "paratheke.iii"
+extern @abi(c-msvc-x64) fn pk_std_line(base: u64, len: u64, pin_krisis: u64, pin_order: u64, pin_entail: u64, waive: u64) -> u64 from "paratheke.iii"
 extern @abi(c-msvc-x64) fn pk_std_head() -> u64 from "paratheke.iii"
 extern @abi(c-msvc-x64) fn pk_mint_begin(seq: u64, prev: u64, kind: u64, of_seq: u64) -> i32 from "paratheke.iii"
 extern @abi(c-msvc-x64) fn pk_mint_term(s: i64, m: u64, e: i64, b: u64) -> i32 from "paratheke.iii"
 extern @abi(c-msvc-x64) fn pk_mint_pair(win: u64, los: u64) -> i32 from "paratheke.iii"
+extern @abi(c-msvc-x64) fn pk_mint_word(which: u64, s: u64) -> u64 from "paratheke.iii"
+extern @abi(c-msvc-x64) fn pk_mint_from_add(seq: u64) -> u64 from "paratheke.iii"
 extern @abi(c-msvc-x64) fn pk_mint_close(pin: u64) -> u64 from "paratheke.iii"
 extern @abi(c-msvc-x64) fn pk_mint_addr() -> u64 from "paratheke.iii"
+extern @abi(c-msvc-x64) fn pk_mint_verdict() -> i64 from "paratheke.iii"
 extern @abi(c-msvc-x64) fn pk_mint_from_parse(newseq: u64, prev: u64, pin: u64) -> u64 from "paratheke.iii"
+extern @abi(c-msvc-x64) fn pk_stage_append_terms() -> u64 from "paratheke.iii"
 extern @abi(c-msvc-x64) fn pk_out_len() -> u64 from "paratheke.iii"
 extern @abi(c-msvc-x64) fn pk_out_byte(i: u64) -> u8 from "paratheke.iii"
 
@@ -56,11 +72,19 @@ var C_SBUF : [u8; 4096]
 var C_PIN  : u64 = 0u64
 var C_PINK : u64 = 0u64
 var C_PINP : u64 = 0u64
+var C_PINE : u64 = 0u64
 var C_LOFF : [u64; 256]
 var C_LLEN : [u64; 256]
 var C_NL   : u64 = 0u64
 var C_SUP  : [u64; 4]
 var C_DUE  : [u64; 64]
+var C_NDUE : u64 = 0u64
+var C_MAXSEQ : u64 = 0u64
+var C_SEQA : [u64; 256]
+var C_KINDA : [u64; 256]
+var C_WVA  : [u64; 256]
+var C_FRA  : [u64; 256]
+var C_FRB  : [u64; 256]
 var C_HEXT : [u8; 16]
 
 fn cs_ps(s: u64) -> i32 {
@@ -104,7 +128,6 @@ fn cs_hexmin(v: u64) -> i32 {
     return 0i32
 }
 
-/* print the just-minted canonical line + newline */
 fn cs_pline() -> i32 {
     let n : u64 = pk_out_len()
     let mut i : u64 = 0u64
@@ -113,7 +136,6 @@ fn cs_pline() -> i32 {
     return 0i32
 }
 
-/* read a whole file into C_BUF; 0 ok | 1 open | 2 oversized | 3 short read */
 fn c_read_file(path: u64) -> u64 {
     let h : u64 = fs_open(C_CAP, path, 1u32)
     if h == 0u64 { return 1u64 }
@@ -135,7 +157,6 @@ fn c_read_file(path: u64) -> u64 {
     return 0u64
 }
 
-/* the live pin of a source file: the first 8 bytes of its sha256, big-endian; 0 ok */
 fn c_sha8(path: u64) -> u64 {
     let h : u64 = fs_open(C_CAP, path, 1u32)
     if h == 0u64 { return 1u64 }
@@ -156,7 +177,6 @@ fn c_sha8(path: u64) -> u64 {
     return 0u64
 }
 
-/* split C_BUF into the line table (strip trailing CR, skip empty); 0 ok | 1 too many */
 fn c_lines() -> u64 {
     C_NL = 0u64
     let mut start : u64 = 0u64
@@ -188,14 +208,12 @@ fn c_lines() -> u64 {
 fn c_sup_set(seq: u64) -> i32 { C_SUP[seq >> 6u64] = C_SUP[seq >> 6u64] | (1u64 << (seq & 63u64))   return 0i32 }
 fn c_sup_get(seq: u64) -> u64 { return (C_SUP[seq >> 6u64] >> (seq & 63u64)) & 1u64 }
 
-/* the stand sweep over the loaded ledger.  quiet=1 prints nothing (reearn mode).
- * returns 0 STANDS | 1 REFUSED | 2 structural | 4 DUE.  Fills C_DUE/C_NDUE. */
-var C_NDUE : u64 = 0u64
-var C_MAXSEQ : u64 = 0u64
+/* the stand sweep over the loaded ledger; quiet=1 prints nothing.
+ * 0 STANDS | 1 REFUSED | 2 structural | 4 DUE.  Records per-line seq/kind/
+ * waive/provenance for the growth fold, and C_DUE for the healer. */
 fn c_sweep(quiet: u64) -> u64 {
     if c_lines() != 0u64 { return 2u64 }
     C_SUP[0u64] = 0u64   C_SUP[1u64] = 0u64   C_SUP[2u64] = 0u64   C_SUP[3u64] = 0u64
-    /* pass 1: collect the of_ supersessions */
     let mut k : u64 = 0u64
     while k < C_NL {
         let rc : u64 = pk_parse_line(((&C_BUF) as u64) + C_LOFF[k], C_LLEN[k])
@@ -208,7 +226,6 @@ fn c_sweep(quiet: u64) -> u64 {
         }
         k = k + 1u64
     }
-    /* pass 2: re-earn every entry in chain order */
     pk_std_begin()
     C_NDUE = 0u64
     C_MAXSEQ = 0u64
@@ -218,12 +235,19 @@ fn c_sweep(quiet: u64) -> u64 {
         let len : u64 = C_LLEN[k]
         let mut waive : u64 = 0u64
         let mut seq : u64 = 0u64
+        C_KINDA[k] = 0u64
+        C_FRA[k] = 0u64
+        C_FRB[k] = 0u64
         if pk_parse_line(base, len) == 0u64 {
             seq = pk_parsed_seq()
             if seq > C_MAXSEQ { C_MAXSEQ = seq }
             waive = c_sup_get(seq)
+            C_KINDA[k] = pk_parsed_kind()
+            if pk_parsed_from_count() >= 2u64 { C_FRA[k] = pk_parsed_from(0u64)   C_FRB[k] = pk_parsed_from(1u64) }
         }
-        let rc : u64 = pk_std_line(base, len, C_PINK, C_PINP, waive)
+        C_SEQA[k] = seq
+        C_WVA[k] = waive
+        let rc : u64 = pk_std_line(base, len, C_PINK, C_PINP, C_PINE, waive)
         if quiet == 0u64 {
             cs_ps("e" as u64)   cs_hexmin(seq)
             if rc == 0u64 { cs_ps(" STANDS" as u64) }
@@ -248,7 +272,6 @@ fn c_sweep(quiet: u64) -> u64 {
     return 0u64
 }
 
-/* stand mode: prose + summary; exit 0 / 1 / 4 */
 fn c_stand() -> u64 {
     let rc : u64 = c_sweep(0u64)
     if rc == 1u64 { cs_ps("PARATHEKE REFUSED\n" as u64)   return 1u64 }
@@ -262,7 +285,6 @@ fn c_stand() -> u64 {
     return rc
 }
 
-/* reearn mode: print ONLY the superseding canonical lines for the DUE entries */
 fn c_reearn() -> u64 {
     let rc : u64 = c_sweep(1u64)
     if rc == 1u64 { return 1u64 }
@@ -277,6 +299,7 @@ fn c_reearn() -> u64 {
         ns = ns + 1u64
         let mut pin : u64 = C_PINK
         if pk_parsed_kind() == 2u64 { pin = C_PINP }
+        if pk_parsed_kind() == 3u64 { pin = C_PINE }
         if pk_mint_from_parse(ns, head, pin) != 0u64 { return 1u64 }
         cs_pline()
         head = pk_mint_addr()
@@ -285,7 +308,6 @@ fn c_reearn() -> u64 {
     return 4u64
 }
 
-/* genesis: the three birth deposits, re-derived live and printed */
 fn c_genesis() -> u64 {
     pk_mint_begin(1u64, 0u64, 1u64, 0u64)
     pk_mint_term(1i64, 1u64, 100i64, 1u64)
@@ -307,6 +329,207 @@ fn c_genesis() -> u64 {
     return 0u64
 }
 
+/* ---- decimal parsing for the oracle door ---- */
+var C_AP : u64 = 0u64
+var C_AI : u64 = 0u64
+var C_OK : u64 = 0u64
+var C_TS : i64 = 0i64
+var C_TM : u64 = 0u64
+var C_TE : i64 = 0i64
+var C_TB : u64 = 0u64
+
+fn c_dnum() -> u64 {
+    let p : *u8 = C_AP as *u8
+    let mut v : u64 = 0u64
+    let mut n : u64 = 0u64
+    let mut go : u64 = 1u64
+    while go == 1u64 {
+        let c : u8 = p[C_AI]
+        let mut isd : u64 = 0u64
+        if c >= 48u8 { if c <= 57u8 { isd = 1u64 } }
+        if isd == 0u64 { go = 0u64 }
+        if isd == 1u64 {
+            v = v * 10u64 + ((c - 48u8) as u64)
+            n = n + 1u64
+            C_AI = C_AI + 1u64
+        }
+    }
+    if n == 0u64 { C_OK = 1u64 }
+    return v
+}
+
+/* one oracle term "s,m,e,b": s in {p,n,z}; m,b decimal u64; e decimal with
+ * optional leading '-'.  0 = parsed into C_TS/C_TM/C_TE/C_TB. */
+fn c_term(s: u64) -> u64 {
+    C_AP = s
+    C_AI = 0u64
+    C_OK = 0u64
+    let p : *u8 = s as *u8
+    let sc : u8 = p[0u64]
+    C_TS = 99i64
+    if sc == 112u8 { C_TS = 1i64 }
+    if sc == 110u8 { C_TS = 0i64 - 1i64 }
+    if sc == 122u8 { C_TS = 0i64 }
+    if C_TS == 99i64 { return 1u64 }
+    C_AI = 1u64
+    if p[C_AI] != 44u8 { return 1u64 }
+    C_AI = C_AI + 1u64
+    C_TM = c_dnum()
+    if C_OK != 0u64 { return 1u64 }
+    if p[C_AI] != 44u8 { return 1u64 }
+    C_AI = C_AI + 1u64
+    let mut eneg : u64 = 0u64
+    if p[C_AI] == 45u8 { eneg = 1u64   C_AI = C_AI + 1u64 }
+    let ev : u64 = c_dnum()
+    if C_OK != 0u64 { return 1u64 }
+    C_TE = ev as i64
+    if eneg == 1u64 { C_TE = 0i64 - C_TE }
+    if p[C_AI] != 44u8 { return 1u64 }
+    C_AI = C_AI + 1u64
+    C_TB = c_dnum()
+    if C_OK != 0u64 { return 1u64 }
+    if p[C_AI] != 0u8 { return 1u64 }
+    return 0u64
+}
+
+/* Path B -- THE ORACLE DOOR: the claimed verdict enters; the kernel re-derives;
+ * only agreement deposits.  argc/argv from main (terms start at av[7]). */
+fn c_propose(argc: i32, argv: u64) -> u64 {
+    let av : *u64 = argv as *u64
+    let swr : u64 = c_sweep(1u64)
+    if swr != 0u64 { cs_ps("ledger not standing: heal first\n" as u64)   return 1u64 }
+    let cp : *u8 = av[6u64] as *u8
+    let cc : u8 = cp[0u64]
+    let mut claim : i64 = 99i64
+    if cc == 112u8 { claim = 1i64 }
+    if cc == 110u8 { claim = 0i64 - 1i64 }
+    if cc == 122u8 { claim = 0i64 }
+    if claim == 99i64 { cs_ps("usage: claim must be p|n|z\n" as u64)   return 2u64 }
+    pk_mint_begin(C_MAXSEQ + 1u64, pk_std_head(), 1u64, 0u64)
+    let mut t : u64 = 7u64
+    while t < (argc as u64) {
+        if c_term(av[t]) != 0u64 { cs_ps("usage: term is s,m,e,b\n" as u64)   return 2u64 }
+        if pk_mint_term(C_TS, C_TM, C_TE, C_TB) != 0i32 { cs_ps("the fold refuses: too many terms\n" as u64)   return 1u64 }
+        t = t + 1u64
+    }
+    let mr : u64 = pk_mint_close(C_PINK)
+    if mr == 2u64 { cs_ps("the kernel refuses by name (the 2^n-1 wall)\n" as u64)   return 6u64 }
+    if mr != 0u64 { cs_ps("the deposit would not mint\n" as u64)   return 1u64 }
+    let der : i64 = pk_mint_verdict()
+    if der != claim {
+        cs_ps("ORACLE REFUTED: the live kernel derives " as u64)
+        if der > 0i64 { cs_ps("p" as u64) }
+        if der < 0i64 { cs_ps("n" as u64) }
+        if der == 0i64 { cs_ps("z" as u64) }
+        cs_ps(", not the claimed " as u64)
+        putchar(cc as i32)
+        cs_ps(" -- nothing deposited\n" as u64)
+        return 1u64
+    }
+    cs_pline()
+    return 0u64
+}
+
+/* has some standing entry already grown from the pair (lo, hi)? */
+fn c_pair_used(lo: u64, hi: u64) -> u64 {
+    let mut k : u64 = 0u64
+    while k < C_NL {
+        if C_FRA[k] == lo { if C_FRB[k] == hi { return 1u64 } }
+        k = k + 1u64
+    }
+    return 0u64
+}
+
+/* Path C -- THE GROWTH STROKE: fold two standing krisis bodies into the union
+ * question, decide, deposit with provenance.  rc 0 = grew (line printed);
+ * rc 3 = the fold is exhausted; rc 1 = the ledger is not standing. */
+fn c_grow() -> u64 {
+    let swr : u64 = c_sweep(1u64)
+    if swr != 0u64 { cs_ps("ledger not standing: heal first\n" as u64)   return 1u64 }
+    let head : u64 = pk_std_head()
+    let mut i : u64 = 0u64
+    while i < C_NL {
+        let mut iok : u64 = 1u64
+        if C_KINDA[i] != 1u64 { iok = 0u64 }
+        if C_WVA[i] == 1u64 { iok = 0u64 }
+        if iok == 1u64 {
+            let mut j : u64 = i + 1u64
+            while j < C_NL {
+                let mut jok : u64 = 1u64
+                if C_KINDA[j] != 1u64 { jok = 0u64 }
+                if C_WVA[j] == 1u64 { jok = 0u64 }
+                if jok == 1u64 {
+                    let sa : u64 = C_SEQA[i]
+                    let sb : u64 = C_SEQA[j]
+                    let mut lo : u64 = sa
+                    let mut hi : u64 = sb
+                    if sb < sa { lo = sb   hi = sa }
+                    if c_pair_used(lo, hi) == 0u64 {
+                        pk_mint_begin(C_MAXSEQ + 1u64, head, 1u64, 0u64)
+                        let mut fold : u64 = 0u64
+                        if pk_parse_line(((&C_BUF) as u64) + C_LOFF[i], C_LLEN[i]) != 0u64 { fold = 1u64 }
+                        if fold == 0u64 { fold = pk_stage_append_terms() }
+                        if fold == 0u64 { if pk_parse_line(((&C_BUF) as u64) + C_LOFF[j], C_LLEN[j]) != 0u64 { fold = 1u64 } }
+                        if fold == 0u64 { fold = pk_stage_append_terms() }
+                        if fold == 0u64 {
+                            pk_mint_from_add(lo)
+                            pk_mint_from_add(hi)
+                            let mr : u64 = pk_mint_close(C_PINK)
+                            if mr == 0u64 {
+                                cs_pline()
+                                return 0u64
+                            }
+                        }
+                        /* the fold refused this pair (over cap or kernel wall): the shadow is skipped, never forced */
+                    }
+                }
+                j = j + 1u64
+            }
+        }
+        i = i + 1u64
+    }
+    return 3u64
+}
+
+/* Path D -- THE WEB ATOM: a theorem deposit the logos re-derives or refuses. */
+fn c_entail(argc: i32, argv: u64) -> u64 {
+    let av : *u64 = argv as *u64
+    let swr : u64 = c_sweep(1u64)
+    if swr != 0u64 { cs_ps("ledger not standing: heal first\n" as u64)   return 1u64 }
+    pk_mint_begin(C_MAXSEQ + 1u64, pk_std_head(), 3u64, 0u64)
+    let mut w : u64 = 0u64
+    while w < 6u64 {
+        if pk_mint_word(w, av[6u64 + w]) != 0u64 { cs_ps("usage: six lowercase words\n" as u64)   return 2u64 }
+        w = w + 1u64
+    }
+    if argc >= 13i32 {
+        C_AP = av[12u64]
+        C_AI = 0u64
+        C_OK = 0u64
+        let fseq : u64 = c_dnum()
+        if C_OK != 0u64 { cs_ps("usage: from-seq is decimal\n" as u64)   return 2u64 }
+        if pk_mint_from_add(fseq) != 0u64 { cs_ps("provenance refused\n" as u64)   return 1u64 }
+    }
+    let mr : u64 = pk_mint_close(C_PINE)
+    if mr == 7u64 { cs_ps("THE LOGOS DOES NOT DERIVE the conclusion from the premises -- nothing deposited\n" as u64)   return 1u64 }
+    if mr != 0u64 { cs_ps("the deposit would not mint\n" as u64)   return 1u64 }
+    cs_pline()
+    return 0u64
+}
+
+/* load the ledger + the three live pins (av[2]=ledger av[3]=krisis av[4]=probe av[5]=eidolos) */
+fn c_load(argv: u64) -> u64 {
+    let av : *u64 = argv as *u64
+    if c_read_file(av[2u64]) != 0u64 { cs_ps("cannot read ledger\n" as u64)   return 1u64 }
+    if c_sha8(av[3u64]) != 0u64 { cs_ps("cannot hash krisis source\n" as u64)   return 1u64 }
+    C_PINK = C_PIN
+    if c_sha8(av[4u64]) != 0u64 { cs_ps("cannot hash probe source\n" as u64)   return 1u64 }
+    C_PINP = C_PIN
+    if c_sha8(av[5u64]) != 0u64 { cs_ps("cannot hash eidolos source\n" as u64)   return 1u64 }
+    C_PINE = C_PIN
+    return 0u64
+}
+
 fn main(argc: i32, argv: u64) -> u64 {
     cs_hex_init()
     let av : *u64 = argv as *u64
@@ -318,34 +541,30 @@ fn main(argc: i32, argv: u64) -> u64 {
     }
     let m : u64 = av[1u64]
     let mp : *u8 = m as *u8
-    let mc : u8 = mp[0u64]
+    let mc0 : u8 = mp[0u64]
+    let mc1 : u8 = mp[1u64]
     C_CAP = cap_env_init()
-    if mc == 103u8 {                                          /* genesis */
+    if mc0 == 103u8 { if mc1 == 101u8 {                       /* genesis */
         if argc < 4i32 { cs_ps("usage: genesis <krisis-src> <probe-src>\n" as u64)   return 2u64 }
         if c_sha8(av[2u64]) != 0u64 { cs_ps("cannot hash krisis source\n" as u64)   return 2u64 }
         C_PINK = C_PIN
         if c_sha8(av[3u64]) != 0u64 { cs_ps("cannot hash probe source\n" as u64)   return 2u64 }
         C_PINP = C_PIN
         return c_genesis()
+    } }
+    if argc < 6i32 { cs_ps("usage: <mode> <ledger> <krisis-src> <probe-src> <eidolos-src> ...\n" as u64)   return 2u64 }
+    if c_load(argv) != 0u64 { return 2u64 }
+    if mc0 == 115u8 { return c_stand() }                      /* stand */
+    if mc0 == 114u8 { return c_reearn() }                     /* reearn */
+    if mc0 == 112u8 {                                         /* propose */
+        if argc < 8i32 { cs_ps("usage: propose <ledger> <k> <p> <e> <p|n|z> <s,m,e,b> ...\n" as u64)   return 2u64 }
+        return c_propose(argc, argv)
     }
-    if mc == 115u8 { if argc < 5i32 { cs_ps("usage: stand <ledger> <krisis-src> <probe-src>\n" as u64)   return 2u64 } }
-    if mc == 114u8 { if argc < 5i32 { cs_ps("usage: reearn <ledger> <krisis-src> <probe-src>\n" as u64)   return 2u64 } }
-    if mc == 115u8 {
-        if c_read_file(av[2u64]) != 0u64 { cs_ps("cannot read ledger\n" as u64)   return 2u64 }
-        if c_sha8(av[3u64]) != 0u64 { cs_ps("cannot hash krisis source\n" as u64)   return 2u64 }
-        C_PINK = C_PIN
-        if c_sha8(av[4u64]) != 0u64 { cs_ps("cannot hash probe source\n" as u64)   return 2u64 }
-        C_PINP = C_PIN
-        return c_stand()
+    if mc0 == 103u8 { if mc1 == 114u8 { return c_grow() } }   /* grow */
+    if mc0 == 101u8 {                                         /* entail */
+        if argc < 12i32 { cs_ps("usage: entail <ledger> <k> <p> <e> <w0..w5> [from-seq]\n" as u64)   return 2u64 }
+        return c_entail(argc, argv)
     }
-    if mc == 114u8 {
-        if c_read_file(av[2u64]) != 0u64 { cs_ps("cannot read ledger\n" as u64)   return 2u64 }
-        if c_sha8(av[3u64]) != 0u64 { cs_ps("cannot hash krisis source\n" as u64)   return 2u64 }
-        C_PINK = C_PIN
-        if c_sha8(av[4u64]) != 0u64 { cs_ps("cannot hash probe source\n" as u64)   return 2u64 }
-        C_PINP = C_PIN
-        return c_reearn()
-    }
-    cs_ps("usage: [genesis|stand|reearn] ...\n" as u64)
+    cs_ps("usage: [genesis|stand|reearn|propose|grow|entail] ...\n" as u64)
     return 2u64
 }

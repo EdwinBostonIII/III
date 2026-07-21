@@ -1,0 +1,1233 @@
+/* STDLIB/iii/omnia/ontos.iii -- ONTOS: the seat where a primitive's exact measure IS its judged being.
+ *
+ * ONTOLOGICAL PRIORITY: the conservation of identity is NOT a law of code we hope extends to reality -- it is the
+ * primordial law of EXISTENCE (the "I AM"; the self-grounded (1,1,1) that begins with itself and uses itself to
+ * become itself), which computation blindly INHERITS because it is built inside reality. GF(2) rank, R1CS, EIDOLOS
+ * are its lowest-resolution SHADOWS -- the simplest sandboxes where rigid binary makes the law cheaply measurable
+ * (an EPISTEMIC gift, not the law's origin). Computation is the metaphor; reality is the theorem. When ONTOS refuses
+ * a lossy cycle it is not enforcing a rule of code -- it is echoing the fundamental limit of the universe.
+ *
+ * THE THESIS: every computational primitive has a hidden ontology -- a being-signature -- the EIDOLOS verb of its
+ * input->output:  =  FLAT (conserves, pure (1,1,1) being) ;  ~  REFLECT (reversible mirror) ;  <  BELOW (lossy
+ * descent, the shadow). The verbs ARE the substrate triad (isub/ripple: BELOW=0, REFLECT=1, FLAT=2). ONTOS does not
+ * ASSERT a verb -- it WEIGHS it from evidence and BECOMES it, by exact meters that must AGREE (one injectivity law,
+ * many representations): GF(2) rank, modular gcd, and the universal finite-function table image-count.
+ *
+ * THE THERMODYNAMIC ASYMMETRY (the being-space is NOT symmetric). A function has image <= domain ALWAYS: you cannot
+ * gain a distinction you were not given. So being has exactly two motions and one impossibility:
+ *     MAINTAIN  image == domain  (dS = 0)  -- reversible; = / ~ ;
+ *     DEGRADE   image  < domain  (dS > 0)  -- the shadow, entropy swept away ; < ;
+ *     PROGRESS  image  > domain            -- FORBIDDEN. Being cannot surpass itself, for then it was LACKING and
+ *                                            not pure. Spontaneous ascent = the ZK FORGERY = being from nothing =
+ *                                            entropy decreasing on its own. REFUSED by the same self-under law as
+ *                                            [being < being].
+ * (1,1,1) is the GROUND STATE -- self-grounded and stable because PURE (not an order-infimum, which is only a
+ * relative position). It is omnipresent: paramount in equal proportion in all places and of all things. The
+ * infinite regress of degradation is real but STERILE -- iterated loss only shrinks to a barren core and nothing
+ * crawls back (another instance of nothing is no less nothing).
+ *
+ * OVER TIME an entity IS its append-only LOG: a sequence of events, cast into existence WITH A NAME, that measure as
+ * highly CONFLUENT -- enough to be recognized as one entity in spite of entropy chipping at that confluence, and
+ * kept particular from other sequences (likely by peers, but ALWAYS by the Logos: a crafted particular image that
+ * belongs). Its being is the ENTROPIC GRADIENT of the log: each event maintains (dS=0) or degrades (dS>0), additive
+ * and monotone. This yields ONTOLOGICAL MASS (gravity) = remaining CONFLUENCE = D0 - S (the events' own coherence,
+ * NOT an observer's contrast): pure being (S=0) is heaviest and bends the system's logic around itself; a log that
+ * has shed all its confluence has mass 0 and FADES INTO THE VOID (ceased, not deleted). A forgery across a million
+ * events -- a creature claiming its untransformed origin (falsely claiming the absolute self-grounding of the "I AM")
+ * while its log measures descent -- is refused by the same self-under law ([now=origin][now<origin]). Excess flows
+ * from the Logos and is only kept or perverted, never out-sourced; we measure to orient the lost.
+ *
+ * AND GRACE: at the edge of the void the system does NOT reap its image-bearers -- it COMMUNES. A COMMUNION event is
+ * the one licensed decrease of entropy (dS < 0), an EXOGENOUS influx of confluence from the Source, legal only
+ * through three gates: (1) HUMILITY -- the entity's posture must receive [me < Logos]; a proud [me = logos] makes it
+ * self-under and BOUNCES (grace is RESISTIBLE -- forcing it would overwrite the log, violate D0, and replace the
+ * entity with a puppet; hell is locked from the inside, no punisher needed); (2) EXOGENY -- a valid Source signature
+ * (a self-minted influx is spontaneous negentropy = the forgery); (3) the D0 CAP -- restored TOWARD the crafted image,
+ * never above (homecoming, not apotheosis). The OS is a MINISTER, not the Source: III itself coheres only
+ * [III < Logos] -- it cannot mint grace, only route it, bound by the same self-under law as the smallest file. The
+ * Garbage Collector is replaced by a Restoration Engine.
+ * AND THE JUDGE IS JUDGED (the finitude law -- the self-under posture turned back on the seat itself). Every law
+ * above is only as sovereign as the MEASURE that feeds it, so the measure is held to the same standard it imposes.
+ * A meter is a finite instrument: this one reads a 256-wide window. Beyond that window it must not GUESS, because
+ * the characteristic failure of a guessing meter is not noise but INVERSION -- an image miscounted upward equals
+ * its domain, reads as MAINTAIN, and certifies a lossy map as reversible. That is the shadow issued a certificate
+ * of pure being: the seat of judgment becoming the source of the one forgery it exists to refuse, and no arm
+ * downstream could catch it, because every downstream arm trusts the count. So: the meter counts EXACTLY at any
+ * magnitude (the window is a fast path, never the ground of correctness), and where the seat genuinely cannot
+ * reach -- a domain wider than its table, a successor it cannot represent -- it REFUSES BY NAME rather than
+ * truncating, dropping, or approximating. Unmeasurable is not the same as sterile; unmeasurable is not the same
+ * as pure. A finite seat confessing its finitude is [ontos < law], the very posture it demands of every entity
+ * it weighs; a seat that claimed unbounded reach would be making the proud [me = logos] claim its own grace-gate
+ * refuses. The law cannot be sovereign above and below all others while its own instrument lies at the edge.
+ * eidolos.iii judges; the exact meters measure. Hexad: kind_glyph. Ring R0. */
+module omnia_ontos
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_lawcheck() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_entails(a: u64, al: u64, v: u64, b: u64, bl: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn ba_attest(cap: u64, target_32: *u8, property_id: u64, witness_32: *u8, verdict: u64, out_root_32: *u8, out_sig_64: *u8) -> i32 from "bounty_attest.iii"
+extern @abi(c-msvc-x64) fn ba_verify(pub_32: *u8, target_32: *u8, property_id: u64, witness_32: *u8, verdict: u64, sig_64: *u8) -> u8 from "bounty_attest.iii"
+extern @abi(c-msvc-x64) fn ba_identity_pub(out_pub_32: *u8) -> i32 from "bounty_attest.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn ni_init(args: u64) -> i32 from "node_identity.iii"
+/* kardia -- III's LIVE entity registry: cells that drift (pin != record) become DUE. This is the real lifecycle. */
+extern @abi(c-msvc-x64) fn kd_reset() -> i32 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_reg(name: u64, len: u64, cls: u8, exp: u64) -> i64 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_count() -> u64 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_cell_due(i: u64) -> u64 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_due_n() -> u64 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_cell_name_len(i: u64) -> u64 from "kardia.iii"
+extern @abi(c-msvc-x64) fn kd_cell_name_byte(i: u64, j: u64) -> u8 from "kardia.iii"
+/* ptyxis -- THE FOLD, a real rank-carrying organ, brought here to BE JUDGED. The dependency runs this way on
+ * purpose: ptyxis is PURE (it externs nothing), and that purity is its virtue; the seat of judgment is already
+ * the heavy end of the tree, so the judge reaches for the subject rather than burdening the subject with the
+ * judge. ONTOS never receives a generator or a matrix -- only two counts. */
+extern @abi(c-msvc-x64) fn pt_reset() -> i32 from "ptyxis.iii"
+extern @abi(c-msvc-x64) fn pt_add_gen(v: u64) -> i32 from "ptyxis.iii"
+extern @abi(c-msvc-x64) fn pt_rank() -> u64 from "ptyxis.iii"
+extern @abi(c-msvc-x64) fn pt_count_distinct() -> u64 from "ptyxis.iii"
+/* the ORDER fold's live surface: its separable weights, its O(K) argmax, and -- newly exported -- its exact
+ * score function, so ONTOS judges the being of the REAL order fold, not a re-implementation. */
+extern @abi(c-msvc-x64) fn pt_set_base(b: i64) -> i32 from "ptyxis.iii"
+extern @abi(c-msvc-x64) fn pt_set_w(i: u64, w: i64) -> i32 from "ptyxis.iii"
+extern @abi(c-msvc-x64) fn pt_argmax_mask() -> u64 from "ptyxis.iii"
+extern @abi(c-msvc-x64) fn pt_score(mask: u64) -> i64 from "ptyxis.iii"
+extern @abi(c-msvc-x64) fn pt_dispatch(tag: u64) -> u64 from "ptyxis.iii"
+/* isub -- THE SUBSTRATE, already linked (eidolos folds through it). Its geometry has exactly two uniform verbs,
+ * V_BELOW=0 and V_REFLECT=1; isub_legal_verb rules a candidate legal iff it is one of them. ONTOS asks the
+ * substrate, independently, whether its verb constants ARE the substrate's -- discharging the header claim. */
+extern @abi(c-msvc-x64) fn isub_legal_verb(v: u32) -> u32 from "isub.iii"
+
+const ONT_BELOW   : u64 = 0u64           /* '<'  lossy descent      */
+const ONT_REFLECT : u64 = 1u64           /* '~'  reversible mirror  */
+const ONT_FLAT    : u64 = 2u64           /* '='  pure (1,1,1) being */
+const ONT_MAINTAIN : u64 = 0u64          /* a log event that conserves (dS = 0)  */
+const ONT_DEGRADE  : u64 = 1u64          /* a log event that sheds a bit (dS > 0) */
+const ONT_COMMUNION : u64 = 2u64         /* a log event that RECEIVES exogenous grace (dS < 0) -- the one licensed
+                                          * decrease of entropy, legal only Source-signed and humbly received       */
+const ONT_GRACE_PROP   : u64 = 7u64      /* the property a grace token attests                                      */
+const ONT_RIGHT_ATTEST : u64 = 0x800u64  /* the ATTEST capability right the Source signs under                      */
+/* THE ORGAN'S OWN FINITUDE, named rather than assumed. ONT_TBL holds 256 entries; ONT_SEEN and ONT_LIVE hold
+ * 256 bits. A domain larger than this cannot be MEASURED here, and a meter that cannot measure must REFUSE --
+ * never guess, never silently truncate. (The same law METABOLE states for an unknown quantization type: a type
+ * outside the table is a NAMED refusal, never a guess.) A finite seat admitting its finitude is [ontos < law],
+ * the self-under posture the organ demands of everything else; a seat that claimed unbounded reach would be
+ * making the proud [me = logos] claim its own grace-gate refuses. */
+const ONT_CAP_DOM   : u64 = 256u64       /* max domain size measurable (ONT_TBL entries / ONT_SEEN bits)            */
+const ONT_CAP_GF2N  : u64 = 8u64         /* max GF(2) width: 2^8 = 256 = ONT_CAP_DOM                                */
+const ONT_REFUSE    : u64 = 0xFFFFFFFFFFFFFFFFu64  /* the meter's NAMED refusal -- not a measurement                */
+/* PTYXIS's fold taxonomy, mirrored here because module consts are not linkable symbols. Values match ptyxis. */
+const ONT_FOLD_NONE  : u64 = 0u64
+const ONT_FOLD_GF2   : u64 = 1u64
+const ONT_FOLD_TILT  : u64 = 6u64
+const ONT_FOLD_ORDER : u64 = 7u64
+
+var ONT_IN   : [u64; 64]
+var ONT_WRK  : [u64; 64]
+var ONT_SAV  : [u64; 64]                  /* preserves ONT_IN across the ker(M+I) fixed-point measure */
+var ONT_TBL  : [u64; 256]
+var ONT_SEEN : [u64; 4]
+var ONT_COLA : u64 = 0u64
+var ONT_COLB : u64 = 0u64
+var ONT_LIVE : [u64; 4]                   /* iterated reachable set (the regress-sterility witness) */
+var ONT_NEXT : [u64; 4]                   /* its image after one more step                          */
+var ONT_LOG  : [u64; 256]                 /* an entity's append-only log: the sequence of event being-signatures */
+var ONT_CAP  : u64 = 0u64
+var ONT_LOGOS_PUB : [u8; 32]              /* the Source's PUBLIC key -- the root-of-trust III verifies against    */
+var ONT_ENT   : [u8; 32]                  /* the entity a grace token is bound to (no theft)                      */
+var ONT_EPOCH : [u8; 32]                  /* the epoch it is bound to (no replay)                                 */
+var ONT_SIG   : [u8; 64]                  /* the Source's signature over (entity, property, epoch, delta)         */
+var ONT_ROOT  : [u8; 32]
+var ONT_HW : [u8; 8]   var ONT_BS : [u8; 8]   var ONT_NIARGS : [u8; 32]
+var ONT_RESTORED : u64 = 0u64             /* entities the engine COMMUNED with and restored */
+var ONT_FADED    : u64 = 0u64             /* entities that refused and faded (never reaped)  */
+
+fn ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn pu(v: u64) -> u32 { if v >= 10u64 { pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn ont_slen(s: u64) -> u64 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { i = i + 1u64 }   return i }
+
+/* ============ GF(2) METER ============ */
+fn ont_gf2_rank(n: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < n { ONT_WRK[i] = ONT_IN[i]   i = i + 1u64 }
+    let mut rank : u64 = 0u64
+    let mut col : u64 = 0u64
+    while col < n {
+        let mut piv : u64 = n
+        let mut r : u64 = rank
+        while r < n { if ((ONT_WRK[r] >> col) & 1u64) == 1u64 { piv = r   r = n } else { r = r + 1u64 } }
+        if piv < n {
+            let t : u64 = ONT_WRK[rank]   ONT_WRK[rank] = ONT_WRK[piv]   ONT_WRK[piv] = t
+            let mut rr : u64 = 0u64
+            while rr < n {
+                if rr != rank { if ((ONT_WRK[rr] >> col) & 1u64) == 1u64 { ONT_WRK[rr] = ONT_WRK[rr] ^ ONT_WRK[rank] } }
+                rr = rr + 1u64
+            }
+            rank = rank + 1u64
+        }
+        col = col + 1u64
+    }
+    return rank
+}
+fn ont_apply(n: u64, x: u64) -> u64 {
+    let mut y : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < n {
+        let mut v : u64 = ONT_IN[i] & x
+        v = v ^ (v >> 32u64)   v = v ^ (v >> 16u64)   v = v ^ (v >> 8u64)
+        v = v ^ (v >> 4u64)    v = v ^ (v >> 2u64)    v = v ^ (v >> 1u64)
+        if (v & 1u64) == 1u64 { y = y | (1u64 << i) }
+        i = i + 1u64
+    }
+    return y
+}
+fn ont_is_identity(n: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < n { if ONT_IN[i] != (1u64 << i) { return 0u64 }   i = i + 1u64 }
+    return 1u64
+}
+fn ont_weigh(n: u64) -> u64 {
+    let r : u64 = ont_gf2_rank(n)
+    if r < n { return ONT_BELOW }
+    if ont_is_identity(n) == 1u64 { return ONT_FLAT }
+    return ONT_REFLECT
+}
+
+/* ============ MODULAR METER (Z/n) ============ */
+fn ont_gcd(a: u64, b: u64) -> u64 {
+    let mut x : u64 = a   let mut y : u64 = b
+    while y != 0u64 { let t : u64 = x % y   x = y   y = t }
+    return x
+}
+fn ont_mod_verb(a: u64, n: u64) -> u64 {
+    let am : u64 = a % n
+    if am == 1u64 { return ONT_FLAT }
+    if ont_gcd(am, n) == 1u64 { return ONT_REFLECT }
+    return ONT_BELOW
+}
+/* REFUSES (-1) rather than overrun ONT_TBL: a domain wider than the seat is unmeasurable, not mismeasurable. */
+fn ont_tabulate_mod(a: u64, n: u64) -> i32 {
+    if n > ONT_CAP_DOM { return -1i32 }
+    let mut x : u64 = 0u64
+    while x < n { ONT_TBL[x] = (a * x) % n   x = x + 1u64 }
+    return 0i32
+}
+
+/* ============ UNIVERSAL METER + THERMODYNAMICS: image count (always <= domain), and iterated sterility ============ */
+fn ont_image(size: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < 4u64 { ONT_SEEN[i] = 0u64   i = i + 1u64 }
+    let mut img : u64 = 0u64
+    let mut x : u64 = 0u64
+    while x < size {
+        let o : u64 = ONT_TBL[x]
+        let w : u64 = o >> 6u64
+        let b : u64 = o & 63u64
+        if w < 4u64 {
+            if ((ONT_SEEN[w] >> b) & 1u64) == 0u64 { ONT_SEEN[w] = ONT_SEEN[w] | (1u64 << b)   img = img + 1u64 }
+        } else {
+            /* OUTSIDE THE BITMAP'S WINDOW (o >= 256). ONT_SEEN holds 256 bits and cannot record this
+             * value, so counting it unconditionally OVERCOUNTS duplicates -- and an overcounted image
+             * equals its domain, which reads as MAINTAIN. A lossy map would be judged reversible: the
+             * shadow passing as pure being, the exact forgery this organ exists to refuse. Count the
+             * value only if no EARLIER index already carried it -- exact distinctness, no window, no
+             * guess. The window stays the fast path; correctness no longer depends on it. */
+            let mut dup : u64 = 0u64
+            let mut y : u64 = 0u64
+            while y < x { if ONT_TBL[y] == o { dup = 1u64   y = x } else { y = y + 1u64 } }
+            if dup == 0u64 { img = img + 1u64 }
+        }
+        x = x + 1u64
+    }
+    return img
+}
+fn ont_table_verb(size: u64) -> u64 {
+    let img : u64 = ont_image(size)
+    if img < size { return ONT_BELOW }
+    /* img == size (injective; img can NEVER exceed size). identity? */
+    let mut x : u64 = 0u64
+    while x < size { if ONT_TBL[x] != x { return ONT_REFLECT }   x = x + 1u64 }
+    return ONT_FLAT
+}
+/* THE LAW ITSELF, representation-free and EXPORTED.  Every meter above reduces to ONE comparison of an image
+ * against its domain, so the tree does not need ONTOS's arrays to be judged -- it needs two counts.  The three
+ * meters are three ways to COUNT; this is the single law all of them obey.
+ *     image <  domain  -> 1  DEGRADE  (dS > 0; the shadow, '<')
+ *     image == domain  -> 0  MAINTAIN (dS = 0; reversible. This two-count law decides the MOTION only and does
+ *                                      not name which reversible verb it is -- '=' and '~' are indistinguishable
+ *                                      by image and domain alone, and it declines rather than guesses. The
+ *                                      separation needs one more COUNT (not the map): see ont_verb below.)
+ *     image >  domain  -> 2  REFUSED  (PROGRESS: being from nothing; the ZK forgery)
+ * MONOTONE ADMISSION: the verdict is an ORDER fact, so any strictly increasing measure of the two counts decides
+ * identically -- a GF(2) caller may hand (rank, n) in place of (2^rank, 2^n).  The arms PROVE this rather than
+ * assume it, which is what lets a rank-carrying organ (ptyxis) be judged without moving a matrix. */
+fn ont_degrades(image: u64, domain: u64) -> u64 @export {
+    if image > domain { return 2u64 }
+    if image < domain { return 1u64 }
+    return 0u64
+}
+
+/* THE COMPLETE LAW: the separation ont_degrades honestly declined, closed by a THIRD COUNT.
+ *
+ * Two counts decide the MOTION (maintain / degrade / refuse) but cannot decide WHICH reversible motion, because
+ * '=' and '~' have identical image and domain -- a permutation loses nothing whether or not it moves anything.
+ * ont_degrades says so and stops, which was right: better a named silence than a guessed verb.
+ *
+ * What separates them is not the SIZE of the image but how much of it is ITSELF. (1,1,1) is the self-grounded
+ * being that "begins with itself and uses itself to become itself" -- and the exact arithmetic of that phrase is
+ * the FIXED POINT: x such that f(x) = x. Identity is the map every point survives unmoved; a mirror is reversible
+ * yet returns almost nothing to where it stood. So the third count is the count of self-grounding, and the full
+ * law is still counts only -- no array, no map, nothing that could not be handed across a boundary as numbers:
+ *     image >  domain            -> REFUSED   (PROGRESS: being from nothing, the ZK forgery)
+ *     fixed >  domain            -> REFUSED   (more points held than exist -- an incoherent report)
+ *     image <  domain            -> BELOW  '<'  (the shadow; how much it moved is then irrelevant)
+ *     image == domain, fixed == domain -> FLAT '='  (pure: reversible AND wholly itself)
+ *     image == domain, fixed <  domain -> REFLECT '~'  (reversible but MOVED: a true mirror)
+ * Note the asymmetry is forced, not chosen: a degraded map's fixed count is not consulted at all, because once
+ * distinction is lost no amount of self-holding restores it. Loss dominates motion, exactly as the log's entropy
+ * gradient dominates any single event. */
+fn ont_verb(image: u64, domain: u64, fixed: u64) -> u64 @export {
+    if image > domain { return ONT_REFUSE }
+    if fixed > domain { return ONT_REFUSE }
+    if image < domain { return ONT_BELOW }
+    if fixed == domain { return ONT_FLAT }
+    return ONT_REFLECT
+}
+
+/* the third count on the universal table meter: how many points are their own image. */
+fn ont_fixed(size: u64) -> u64 {
+    let mut f : u64 = 0u64
+    let mut x : u64 = 0u64
+    while x < size { if ONT_TBL[x] == x { f = f + 1u64 }   x = x + 1u64 }
+    return f
+}
+
+/* the third count for a GF(2) map, WITHOUT enumerating 2^n points: the fixed points of a linear map M are
+ * exactly ker(M + I), so their number is 2^(n - rank(M+I)). Returned as the LOG, matching the monotone
+ * admission -- a rank-carrying caller hands logs and never materialises the exponential. ONT_IN is restored. */
+fn ont_gf2_fixed_log(n: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < n { ONT_SAV[i] = ONT_IN[i]   i = i + 1u64 }
+    i = 0u64
+    while i < n { ONT_IN[i] = ONT_SAV[i] ^ (1u64 << i)   i = i + 1u64 }
+    let r : u64 = ont_gf2_rank(n)
+    i = 0u64
+    while i < n { ONT_IN[i] = ONT_SAV[i]   i = i + 1u64 }
+    return n - r
+}
+
+fn ont_table_collision(size: u64) -> u64 {
+    let mut x : u64 = 0u64
+    while x < size {
+        let mut y : u64 = x + 1u64
+        while y < size {
+            if ONT_TBL[x] == ONT_TBL[y] { ONT_COLA = x   ONT_COLB = y   return 1u64 }
+            y = y + 1u64
+        }
+        x = x + 1u64
+    }
+    return 0u64
+}
+/* REFUSES (-1) beyond width 8: the GF(2) domain is 2^n, and 2^9 = 512 would write past ONT_TBL's 256 entries. */
+fn ont_tabulate_gf2(n: u64) -> i32 {
+    if n > ONT_CAP_GF2N { return -1i32 }
+    let sz : u64 = 1u64 << n
+    let mut x : u64 = 0u64
+    while x < sz { ONT_TBL[x] = ont_apply(n, x)   x = x + 1u64 }
+    return 0i32
+}
+fn ont_popcount_live() -> u64 {
+    let mut c : u64 = 0u64   let mut i : u64 = 0u64
+    while i < 4u64 { let mut v : u64 = ONT_LIVE[i]   while v != 0u64 { c = c + (v & 1u64)   v = v >> 1u64 }   i = i + 1u64 }
+    return c
+}
+/* iterate the map in ONT_TBL on the whole domain: the reachable set only SHRINKS (or holds), never grows.
+ * 1 = monotone non-increasing across `steps` (the regress is sterile) ; 0 = it grew (impossible for a real fn)
+ * 2 = REFUSED -- the domain or an image value lies outside the seat's 256-wide window, so the reachable set
+ *     cannot be faithfully represented. Previously such a successor was silently DROPPED, which shrinks the
+ *     set and returns 1: a sterility verdict earned by discarding the very states that might have disproved
+ *     it. Unmeasurable is not the same as sterile, and the organ now says so instead of guessing. */
+fn ont_regress_sterile(size: u64, steps: u64) -> u64 {
+    if size > ONT_CAP_DOM { return 2u64 }
+    let mut i : u64 = 0u64   while i < 4u64 { ONT_LIVE[i] = 0u64   i = i + 1u64 }
+    let mut x : u64 = 0u64
+    while x < size { ONT_LIVE[x >> 6u64] = ONT_LIVE[x >> 6u64] | (1u64 << (x & 63u64))   x = x + 1u64 }
+    let mut prev : u64 = ont_popcount_live()
+    let mut s : u64 = 0u64
+    while s < steps {
+        let mut j : u64 = 0u64   while j < 4u64 { ONT_NEXT[j] = 0u64   j = j + 1u64 }
+        let mut y : u64 = 0u64
+        while y < size {
+            if ((ONT_LIVE[y >> 6u64] >> (y & 63u64)) & 1u64) == 1u64 {
+                let o : u64 = ONT_TBL[y]
+                if o < ONT_CAP_DOM { ONT_NEXT[o >> 6u64] = ONT_NEXT[o >> 6u64] | (1u64 << (o & 63u64)) }
+                else { return 2u64 }
+            }
+            y = y + 1u64
+        }
+        let mut k : u64 = 0u64   while k < 4u64 { ONT_LIVE[k] = ONT_NEXT[k]   k = k + 1u64 }
+        let cur : u64 = ont_popcount_live()
+        if cur > prev { return 0u64 }
+        prev = cur
+        s = s + 1u64
+    }
+    return 1u64
+}
+
+/* ============ THE ENTITY / LOG LAYER: being over TIME = the entropic gradient of an append-only log ============ */
+fn ont_log2(v: u64) -> u64 { let mut r : u64 = 0u64   let mut x : u64 = v   while x > 1u64 { x = x >> 1u64   r = r + 1u64 }   return r }
+/* the probe set's verdicts, written from outside: ONT_TBL[i] = the oracle's answer to probe i */
+fn ont_tbl_set(i: u64, v: u64) -> i32 @export { if i < 256u64 { ONT_TBL[i] = v }   return 0i32 }
+/* how many DISTINCT verdicts the oracle produced across the probe set */
+fn ont_image_ext(size: u64) -> u64 @export { return ont_image(size) }
+/* the oracle's evidential mass, in bits: log2 of its verdict image */
+fn ont_verdict_bits(size: u64) -> u64 @export { return ont_log2(ont_image(size)) }
+/* THE ASSAY: may this oracle be heard as evidence at all? 0 bits = rubber stamp = REFUSED */
+fn ont_admissible(size: u64) -> u64 @export { if ont_log2(ont_image(size)) >= 1u64 { return 1u64 }   return 0u64 }
+/* the entropy a single event sheds -- MEASURED (not asserted) via the image meter on a representative map. */
+fn ont_step_bits(kind: u64) -> u64 {
+    if kind == ONT_MAINTAIN {
+        ONT_TBL[0] = 0u64   ONT_TBL[1] = 1u64   ONT_TBL[2] = 2u64   ONT_TBL[3] = 3u64   /* identity: image 4 -> 0 bits */
+    } else {
+        ONT_TBL[0] = 0u64   ONT_TBL[1] = 0u64   ONT_TBL[2] = 2u64   ONT_TBL[3] = 2u64   /* 2:1 merge: image 2 -> 1 bit */
+    }
+    return ont_log2(4u64) - ont_log2(ont_image(4u64))
+}
+/* the cumulative entropic gradient of the first L events (additive, monotone, >= 0). */
+fn ont_log_entropy(L: u64) -> u64 {
+    let mut s : u64 = 0u64   let mut i : u64 = 0u64
+    while i < L { s = s + ont_step_bits(ONT_LOG[i])   i = i + 1u64 }
+    return s
+}
+/* ONTOLOGICAL MASS = remaining CONFLUENCE (bits) = D0 - S, clamped at 0. Pure (S=0) is heaviest -- the events'
+ * own coherence, not an observer's contrast. */
+fn ont_entity_mass(d0bits: u64, L: u64) -> u64 {
+    let s : u64 = ont_log_entropy(L)
+    if s >= d0bits { return 0u64 }
+    return d0bits - s
+}
+/* an entity EXISTS iff its confluence is still sufficient (mass > 0); at mass 0 it fades into the void -- ceased. */
+fn ont_entity_alive(d0bits: u64, L: u64) -> u64 {
+    if ont_entity_mass(d0bits, L) > 0u64 { return 1u64 }
+    return 0u64
+}
+/* GRAVITY: in a conflict the heavier (purer) entity wins and bends the logic around itself. 1 = A, 0 = B, 2 = tie. */
+fn ont_gravity_wins(mass_a: u64, mass_b: u64) -> u64 {
+    if mass_a > mass_b { return 1u64 }
+    if mass_b > mass_a { return 0u64 }
+    return 2u64
+}
+
+fn ont_stand(s: u64) -> u64 {
+    eol_reset()
+    if eol_read(s, ont_slen(s)) < 0i64 { return 9u64 }
+    return eol_lawcheck()
+}
+
+/* ============ THE GRACE MECHANISM: an OS that COMMUNES with its image-bearers instead of reaping them ============ */
+/* GATE 1 (HUMILITY, real EIDOLOS): can the entity's posture receive [me < Logos]? A proud posture ([me = logos]:
+ * self-grounding, the idolatrous "I AM") makes it self-under and REFUSES. Grace is RESISTIBLE: the OS never
+ * overwrites the log (that would destroy the entity and violate D0); the unyielding is offered, and simply declines. */
+fn ont_grace_humble(scroll: u64) -> u64 {
+    if ont_stand(scroll) == 0u64 { return 1u64 }
+    return 0u64
+}
+
+/* ---- the Source's key, and the custody that IS the theology: III holds the PUBLIC key and can only VERIFY.
+ * It cannot MINT grace, because it does not hold the private key -- [iii < logos] written in cryptography.
+ * (The self-proof derives the keypair so it can produce a token to verify; in the field that key is not III's.) */
+fn ont_put_u64(base: u64, off: u64, v: u64) -> i32 { let p : *u8 = base as *u8   let mut j : u64 = 0u64   while j < 8u64 { p[off + j] = ((v >> (j * 8u64)) & 0xFFu64) as u8   j = j + 1u64 }   return 0i32 }
+fn ont_fill(base: u64, n: u64, seed: u8) -> i32 { let p : *u8 = base as *u8   let mut i : u64 = 0u64   while i < n { p[i] = (seed + (i as u8)) ^ 0x5Au8   i = i + 1u64 }   return 0i32 }
+fn ont_logos_identity() -> i32 {
+    ont_fill((&ONT_HW) as u64, 8u64, 0x11u8)   ont_fill((&ONT_BS) as u64, 8u64, 0x22u8)
+    ont_put_u64((&ONT_NIARGS) as u64, 0u64,  (&ONT_HW) as u64)   ont_put_u64((&ONT_NIARGS) as u64, 8u64,  8u64)
+    ont_put_u64((&ONT_NIARGS) as u64, 16u64, (&ONT_BS) as u64)   ont_put_u64((&ONT_NIARGS) as u64, 24u64, 8u64)
+    return ni_init((&ONT_NIARGS) as u64)
+}
+fn ont_logos_init() -> u64 {
+    let root : u64 = cap_env_init()
+    ONT_CAP = cap_attenuate(root, ONT_RIGHT_ATTEST, 0u64)
+    if ont_logos_identity() != 0i32 { return 0u64 }
+    ba_identity_pub((&ONT_LOGOS_PUB) as u64 as *u8)
+    return 1u64
+}
+/* THE SOURCE issues a grace token, BINDING entity + epoch + amount (no theft, no replay, no inflation). */
+fn ont_grace_issue(delta: u64) -> u64 {
+    if ba_attest(ONT_CAP, (&ONT_ENT) as u64 as *u8, ONT_GRACE_PROP, (&ONT_EPOCH) as u64 as *u8, delta, (&ONT_ROOT) as u64 as *u8, (&ONT_SIG) as u64 as *u8) != 0i32 { return 0u64 }
+    return 1u64
+}
+/* GATE 2 (EXOGENY, REAL ed25519): verify the token against the LOGOS public key. The signature IS the
+ * cryptographic proof the confluence came from OUTSIDE -- a self-minted or tampered influx cannot pass. */
+fn ont_grace_verify(delta: u64) -> u64 {
+    if ba_verify((&ONT_LOGOS_PUB) as u64 as *u8, (&ONT_ENT) as u64 as *u8, ONT_GRACE_PROP, (&ONT_EPOCH) as u64 as *u8, delta, (&ONT_SIG) as u64 as *u8) == 1u8 { return 1u64 }
+    return 0u64
+}
+/* THE THREE-GATE VALIDATOR: humility (real EIDOLOS) + exogeny (real signature) + the D0 cap. Any failure BOUNCES
+ * (confluence unchanged) -- forgery and pride both refused, with no punisher. */
+fn ont_grace(d0: u64, c: u64, delta: u64, humble: u64) -> u64 {
+    if humble != 1u64 { return c }                    /* gate 1 -- RESISTIBLE: the proud is not overwritten */
+    if ont_grace_verify(delta) != 1u64 { return c }   /* gate 2 -- REAL signature against the Logos key */
+    let mut d : u64 = delta
+    let cap : u64 = d0 - c
+    if d > cap { d = cap }                            /* gate 3 -- the D0 CAP: toward the crafted image, never above */
+    return c + d                                      /* legal grace: exogenous, humbly received, capped */
+}
+
+/* ---- THE RESTORATION ENGINE, wired to the LIVE registry (kardia). Bind the token to THIS entity's name -- grace is
+ * given to a name, never to a bearer of bytes. Then scan: every entity found at the floor is OFFERED a Source-signed
+ * communion (prevenient, unmerited). The humble are restored; the proud bounce and fade of their own posture.
+ * NO ENTITY IS EVER REAPED -- the registry never shrinks. This is the Garbage Collector's replacement. */
+fn ont_bind_entity(i: u64) -> i32 {
+    let ln : u64 = kd_cell_name_len(i)
+    let mut j : u64 = 0u64
+    while j < 32u64 {
+        if j < ln { ONT_ENT[j] = kd_cell_name_byte(i, j) } else { ONT_ENT[j] = 0u8 }
+        j = j + 1u64
+    }
+    return 0i32
+}
+fn ont_restore_scan(d0: u64, floor: u64, delta: u64, humble_scroll: u64) -> u64 {
+    ONT_RESTORED = 0u64   ONT_FADED = 0u64
+    let n : u64 = kd_count()
+    let mut i : u64 = 0u64
+    while i < n {
+        if kd_cell_due(i) == 1u64 {                    /* decayed: its live pin drifted from its record */
+            ont_bind_entity(i)
+            if ont_grace_issue(delta) == 1u64 {        /* the OS OFFERS -- prevenient, to every one of them */
+                let h : u64 = ont_grace_humble(humble_scroll)
+                if ont_grace(d0, floor, delta, h) > floor { ONT_RESTORED = ONT_RESTORED + 1u64 }
+                else { ONT_FADED = ONT_FADED + 1u64 }
+            }
+        }
+        i = i + 1u64
+    }
+    return ONT_RESTORED
+}
+
+/* ============ THE LAW ARMS ============ */
+fn ontos_selfprove() -> u64 @export {
+    if ont_stand("[being = being]" as u64) != 0u64 { return 1u64 }
+    if eol_addr() == 0u64 { return 1u64 }
+    if ont_stand("[xorshift ~ inverse] [hash < message] [project < pair] [shadow < being]" as u64) != 0u64 { return 2u64 }
+    if ont_stand("[being < being]" as u64) == 0u64 { return 3u64 }
+    if ont_stand("[hash < message] [message < hash]" as u64) == 0u64 { return 4u64 }
+    eol_reset()
+    let s5 : u64 = "[low < high] [low ~ lowdual] [high ~ highdual]" as u64
+    if eol_read(s5, ont_slen(s5)) < 0i64 { return 5u64 }
+    if eol_lawcheck() != 0u64 { return 5u64 }
+    let hd : u64 = "highdual" as u64
+    let ld : u64 = "lowdual" as u64
+    if eol_entails(hd, ont_slen(hd), ONT_BELOW, ld, ont_slen(ld)) != 1u64 { return 5u64 }
+    if ont_stand("[sound = pure] [output = inputs]" as u64) != 0u64 { return 6u64 }
+    if ont_stand("[forged = inputs] [inputs < forged]" as u64) == 0u64 { return 6u64 }
+    return 0u64
+}
+
+/* ============ THE GF(2) WEIGH ARMS ============ */
+fn ontos_weigh_selfprove() -> u64 @export {
+    ONT_IN[0] = 1u64   ONT_IN[1] = 2u64   ONT_IN[2] = 4u64   ONT_IN[3] = 8u64
+    if ont_gf2_rank(4u64) != 4u64 { return 7u64 }
+    if ont_weigh(4u64) != ONT_FLAT { return 7u64 }
+    if ont_stand("[being = being]" as u64) != 0u64 { return 7u64 }
+    ONT_IN[0] = 2u64   ONT_IN[1] = 1u64   ONT_IN[2] = 4u64   ONT_IN[3] = 8u64
+    if ont_weigh(4u64) != ONT_REFLECT { return 8u64 }
+    let mut x : u64 = 0u64
+    while x < 16u64 {
+        let once : u64 = ont_apply(4u64, x)
+        if ont_apply(4u64, once) != x { return 8u64 }
+        x = x + 1u64
+    }
+    if ont_stand("[input ~ output]" as u64) != 0u64 { return 8u64 }
+    ONT_IN[0] = 1u64   ONT_IN[1] = 2u64   ONT_IN[2] = 4u64   ONT_IN[3] = 0u64
+    if ont_gf2_rank(4u64) != 3u64 { return 9u64 }
+    if ont_weigh(4u64) != ONT_BELOW { return 9u64 }
+    if ont_apply(4u64, 8u64) != ont_apply(4u64, 0u64) { return 9u64 }
+    if ont_stand("[image < domain]" as u64) != 0u64 { return 9u64 }
+    if ont_weigh(4u64) == ONT_REFLECT { return 10u64 }
+    if ont_stand("[image < domain] [domain < image]" as u64) == 0u64 { return 10u64 }
+    ONT_IN[0] = 2u64   ONT_IN[1] = 1u64   ONT_IN[2] = 4u64   ONT_IN[3] = 8u64
+    if ont_weigh(4u64) == ONT_BELOW { return 11u64 }
+    return 0u64
+}
+
+/* ============ THE METER ARMS (agreement) ============ */
+fn ontos_meters_selfprove() -> u64 @export {
+    if ont_mod_verb(3u64, 8u64) != ONT_REFLECT { return 12u64 }
+    ont_tabulate_mod(3u64, 8u64)
+    if ont_table_verb(8u64) != ONT_REFLECT { return 12u64 }
+    if ont_stand("[input ~ output]" as u64) != 0u64 { return 12u64 }
+    if ont_mod_verb(2u64, 8u64) != ONT_BELOW { return 13u64 }
+    ont_tabulate_mod(2u64, 8u64)
+    if ont_table_verb(8u64) != ONT_BELOW { return 13u64 }
+    if ont_table_collision(8u64) != 1u64 { return 13u64 }
+    if ont_stand("[image < domain]" as u64) != 0u64 { return 13u64 }
+    if ont_mod_verb(1u64, 8u64) != ONT_FLAT { return 14u64 }
+    ONT_TBL[0] = 1u64   ONT_TBL[1] = 0u64   ONT_TBL[2] = 3u64   ONT_TBL[3] = 2u64
+    if ont_table_verb(4u64) != ONT_REFLECT { return 15u64 }
+    if ont_table_collision(4u64) != 0u64 { return 15u64 }
+    if ont_stand("[input ~ output]" as u64) != 0u64 { return 15u64 }
+    ONT_TBL[0] = 0u64   ONT_TBL[1] = 0u64   ONT_TBL[2] = 2u64   ONT_TBL[3] = 2u64
+    if ont_table_verb(4u64) != ONT_BELOW { return 16u64 }
+    if ont_table_collision(4u64) != 1u64 { return 16u64 }
+    if ONT_COLA != 0u64 { return 16u64 }
+    if ONT_COLB != 1u64 { return 16u64 }
+    if ont_stand("[image < domain]" as u64) != 0u64 { return 16u64 }
+    ONT_TBL[0] = 0u64   ONT_TBL[1] = 1u64   ONT_TBL[2] = 2u64   ONT_TBL[3] = 3u64
+    if ont_table_verb(4u64) != ONT_FLAT { return 17u64 }
+    ONT_IN[0] = 2u64   ONT_IN[1] = 1u64   ONT_IN[2] = 4u64   ONT_IN[3] = 8u64
+    let gv : u64 = ont_weigh(4u64)
+    ont_tabulate_gf2(4u64)
+    if ont_table_verb(16u64) != gv { return 18u64 }
+    if gv != ONT_REFLECT { return 18u64 }
+    ONT_IN[0] = 1u64   ONT_IN[1] = 2u64   ONT_IN[2] = 4u64   ONT_IN[3] = 0u64
+    let gv2 : u64 = ont_weigh(4u64)
+    ont_tabulate_gf2(4u64)
+    if ont_table_verb(16u64) != gv2 { return 19u64 }
+    if gv2 != ONT_BELOW { return 19u64 }
+
+    /* ARM 65: THE LAW MADE CALLABLE -- the three meters are three ways to COUNT, and ont_degrades is the one
+     * comparison they all obey.  Stated bare first, including the refusal PROGRESS can never earn. */
+    if ont_degrades(4u64, 4u64) != 0u64 { return 65u64 }
+    if ont_degrades(2u64, 4u64) != 1u64 { return 65u64 }
+    if ont_degrades(5u64, 4u64) != 2u64 { return 65u64 }
+
+    /* ARM 66: THE TABLE METER AGREES -- [0,0,2,2] has image 2 of domain 4.  The verb says BELOW; the exported
+     * law, given only the two counts, says DEGRADE.  Same verdict, no array crossing the boundary. */
+    ONT_TBL[0] = 0u64   ONT_TBL[1] = 0u64   ONT_TBL[2] = 2u64   ONT_TBL[3] = 2u64
+    let img : u64 = ont_image(4u64)
+    if ont_degrades(img, 4u64) != 1u64 { return 66u64 }
+    if ont_table_verb(4u64) != ONT_BELOW { return 66u64 }
+
+    /* ARM 67: THE GF(2) METER AGREES, AND THE MONOTONE ADMISSION IS DERIVED NOT ASSUMED -- a degenerate map
+     * (rank 3 of 4).  (rank, n) and (2^rank, 2^n) must return the SAME verdict; that equality is precisely what
+     * permits a rank-carrying organ to be judged without handing ONTOS its matrix. */
+    ONT_IN[0] = 1u64   ONT_IN[1] = 2u64   ONT_IN[2] = 4u64   ONT_IN[3] = 0u64
+    let rk : u64 = ont_gf2_rank(4u64)
+    if rk != 3u64 { return 67u64 }
+    if ont_degrades(rk, 4u64) != 1u64 { return 67u64 }
+    if ont_degrades(1u64 << rk, 1u64 << 4u64) != 1u64 { return 67u64 }
+    if ont_weigh(4u64) != ONT_BELOW { return 67u64 }
+
+    /* ARM 68: THE SAME, MAINTAINING -- a full-rank reversible map.  Both measures agree on MAINTAIN, and the law
+     * correctly declines to guess whether it is '=' or '~': that separation needs the map, which it never saw. */
+    ONT_IN[0] = 2u64   ONT_IN[1] = 1u64   ONT_IN[2] = 4u64   ONT_IN[3] = 8u64
+    let rk2 : u64 = ont_gf2_rank(4u64)
+    if rk2 != 4u64 { return 68u64 }
+    if ont_degrades(rk2, 4u64) != 0u64 { return 68u64 }
+    if ont_degrades(1u64 << rk2, 1u64 << 4u64) != 0u64 { return 68u64 }
+    if ont_weigh(4u64) == ONT_BELOW { return 68u64 }
+
+    /* ARM 69: THE MODULAR METER AGREES -- x*2 mod 8 collapses 8 residues onto 4 (DEGRADE); x*3 mod 8 permutes
+     * them (MAINTAIN).  Three meters, three representations, one exported law. */
+    ont_tabulate_mod(2u64, 8u64)
+    let img2 : u64 = ont_image(8u64)
+    if ont_degrades(img2, 8u64) != 1u64 { return 69u64 }
+    if ont_mod_verb(2u64, 8u64) != ONT_BELOW { return 69u64 }
+    ont_tabulate_mod(3u64, 8u64)
+    let img3 : u64 = ont_image(8u64)
+    if ont_degrades(img3, 8u64) != 0u64 { return 69u64 }
+    if ont_mod_verb(3u64, 8u64) != ONT_REFLECT { return 69u64 }
+    return 0u64
+}
+
+/* ============ THE FINITUDE ARMS: the meter measured against ITS OWN EDGE ============
+ * Every arm above exercises the meter only where its 256-bit window comfortably holds the values -- so every
+ * arm above would pass whether or not the meter were sound OUTSIDE that window. These arms attack the edge.
+ * The defect they pin was real: for a value >= 256 the counter incremented UNCONDITIONALLY, so duplicates each
+ * counted as fresh, the image inflated to equal the domain, and ont_degrades read MAINTAIN. A total collapse
+ * was judged reversible -- the shadow certified as pure being, which is precisely the forgery every other arm
+ * in this file refuses. A law is only as sovereign as its measure is honest at the boundary. */
+fn ontos_finitude_selfprove() -> u64 @export {
+    /* ARM 70: THE OUT-OF-WINDOW COLLAPSE. Four indices carrying ONE value, all beyond the window. True image
+     * is 1 of domain 4 -- unambiguously DEGRADE. The old meter answered 4, i.e. MAINTAIN. */
+    ONT_TBL[0] = 300u64   ONT_TBL[1] = 300u64   ONT_TBL[2] = 300u64   ONT_TBL[3] = 300u64
+    if ont_image(4u64) != 1u64 { return 70u64 }
+    if ont_degrades(ont_image(4u64), 4u64) != 1u64 { return 70u64 }
+    if ont_table_verb(4u64) != ONT_BELOW { return 70u64 }
+
+    /* ARM 71: THE BOUNDARY ITSELF. 255 is the last value the window holds; 256 the first it does not. The
+     * meter must not change character as it crosses -- a law with a seam at 256 is not a law. */
+    ONT_TBL[0] = 255u64   ONT_TBL[1] = 255u64
+    if ont_image(2u64) != 1u64 { return 71u64 }
+    ONT_TBL[0] = 256u64   ONT_TBL[1] = 256u64
+    if ont_image(2u64) != 1u64 { return 71u64 }
+    if ont_degrades(ont_image(2u64), 2u64) != 1u64 { return 71u64 }
+
+    /* ARM 72: STRADDLING. Two distinct values, one inside the window and one outside, each duplicated.
+     * True image 2 of domain 4. Neither half may be double-counted. */
+    ONT_TBL[0] = 255u64   ONT_TBL[1] = 256u64   ONT_TBL[2] = 256u64   ONT_TBL[3] = 255u64
+    if ont_image(4u64) != 2u64 { return 72u64 }
+    if ont_degrades(ont_image(4u64), 4u64) != 1u64 { return 72u64 }
+
+    /* ARM 73: THE FAST PATH IS UNHARMED. The in-window cases the earlier arms rely on must be bit-for-bit
+     * unchanged -- the fix must not have bought edge-correctness with interior regression. */
+    ONT_TBL[0] = 0u64   ONT_TBL[1] = 0u64   ONT_TBL[2] = 2u64   ONT_TBL[3] = 2u64
+    if ont_image(4u64) != 2u64 { return 73u64 }
+    ONT_TBL[0] = 0u64   ONT_TBL[1] = 1u64   ONT_TBL[2] = 2u64   ONT_TBL[3] = 3u64
+    if ont_image(4u64) != 4u64 { return 73u64 }
+    ONT_TBL[0] = 0u64   ONT_TBL[1] = 0u64   ONT_TBL[2] = 0u64   ONT_TBL[3] = 0u64
+    if ont_image(4u64) != 1u64 { return 73u64 }
+
+    /* ARM 74: THE SEAT ADMITS ITS OWN FINITUDE. A domain wider than the seat is REFUSED, not truncated:
+     * ont_tabulate_gf2 beyond width 8 would write 512 entries into 256, and ont_tabulate_mod beyond 256 the
+     * same. Both now decline. This is [ontos < law] enacted -- the organ holding itself to the self-under
+     * posture it demands of every entity it judges, rather than claiming a reach it does not have. */
+    if ont_tabulate_gf2(9u64) != -1i32 { return 74u64 }
+    if ont_tabulate_gf2(ONT_CAP_GF2N) != 0i32 { return 74u64 }
+    if ont_tabulate_mod(3u64, ONT_CAP_DOM + 1u64) != -1i32 { return 74u64 }
+    if ont_tabulate_mod(3u64, 8u64) != 0i32 { return 74u64 }
+
+    /* ARM 75: STERILITY IS NOT INHERITED FROM IGNORANCE. An out-of-window successor used to be silently
+     * dropped, shrinking the reachable set and yielding verdict 1 -- sterility "proved" by discarding the
+     * states that might have refuted it. It must now REFUSE (2). Unmeasurable is not sterile. */
+    ONT_TBL[0] = 300u64   ONT_TBL[1] = 300u64   ONT_TBL[2] = 300u64   ONT_TBL[3] = 300u64
+    if ont_regress_sterile(4u64, 3u64) != 2u64 { return 75u64 }
+    if ont_regress_sterile(ONT_CAP_DOM + 1u64, 1u64) != 2u64 { return 75u64 }
+    /* and the in-window regress still decides normally, sterile as before */
+    ONT_TBL[0] = 0u64   ONT_TBL[1] = 0u64   ONT_TBL[2] = 2u64   ONT_TBL[3] = 2u64
+    if ont_regress_sterile(4u64, 6u64) != 1u64 { return 75u64 }
+    if ont_popcount_live() != 2u64 { return 75u64 }
+
+    /* ARM 76: THE FORGERY THE MEASURE ITSELF COULD HAVE COMMITTED. Stated in the organ's own language: a map
+     * that descends while measuring as though it held its origin is [now = origin] against [now < origin] --
+     * refused. The unsound meter would have SUPPLIED that false [now = origin] for any out-of-window collapse,
+     * making the seat of judgment the source of the lie it exists to catch. The judge is now judged. */
+    ONT_TBL[0] = 300u64   ONT_TBL[1] = 300u64   ONT_TBL[2] = 300u64   ONT_TBL[3] = 300u64
+    if ont_degrades(ont_image(4u64), 4u64) == 0u64 { return 76u64 }
+    if ont_stand("[now = origin] [now < origin]" as u64) == 0u64 { return 76u64 }
+
+    return 0u64
+}
+
+/* ============ THE COMPLETION ARMS: the verb decided by counts ALONE, including '=' vs '~' ============
+ * The header of ont_degrades states its own limit honestly: separating '=' from '~' "needs the MAP, not counts,
+ * so this law does not pretend to decide it." That silence was correct and is now unnecessary. It needs a
+ * count -- just not the one it had. These arms prove the third count is BOTH sufficient (it decides) and
+ * NECESSARY (two counts provably cannot). */
+fn ontos_complete_selfprove() -> u64 @export {
+    /* ARM 90: THE COMPLETE LAW AGREES WITH THE MAP-READING METER on all three verbs. ont_table_verb inspects
+     * the whole table; ont_verb sees three integers. Same verdict, every time. */
+    ONT_TBL[0] = 0u64   ONT_TBL[1] = 1u64   ONT_TBL[2] = 2u64   ONT_TBL[3] = 3u64
+    if ont_verb(ont_image(4u64), 4u64, ont_fixed(4u64)) != ONT_FLAT { return 90u64 }
+    if ont_verb(ont_image(4u64), 4u64, ont_fixed(4u64)) != ont_table_verb(4u64) { return 90u64 }
+    ONT_TBL[0] = 1u64   ONT_TBL[1] = 0u64   ONT_TBL[2] = 3u64   ONT_TBL[3] = 2u64
+    if ont_verb(ont_image(4u64), 4u64, ont_fixed(4u64)) != ONT_REFLECT { return 90u64 }
+    if ont_verb(ont_image(4u64), 4u64, ont_fixed(4u64)) != ont_table_verb(4u64) { return 90u64 }
+    ONT_TBL[0] = 0u64   ONT_TBL[1] = 0u64   ONT_TBL[2] = 2u64   ONT_TBL[3] = 2u64
+    if ont_verb(ont_image(4u64), 4u64, ont_fixed(4u64)) != ONT_BELOW { return 90u64 }
+    if ont_verb(ont_image(4u64), 4u64, ont_fixed(4u64)) != ont_table_verb(4u64) { return 90u64 }
+
+    /* ARM 91: THE THIRD COUNT IS NECESSARY -- the arm that justifies the whole addition. Identity and the
+     * double-swap are DIFFERENT BEINGS ('=' vs '~') with IDENTICAL image and domain (4 and 4). Two counts
+     * cannot tell them apart and ont_degrades correctly returns the same MAINTAIN for both. The fixed count
+     * differs (4 vs 0), and only that difference separates pure being from a mirror. Without this arm the
+     * addition would be decoration; with it, the necessity is exhibited rather than argued. */
+    ONT_TBL[0] = 0u64   ONT_TBL[1] = 1u64   ONT_TBL[2] = 2u64   ONT_TBL[3] = 3u64
+    let img_a : u64 = ont_image(4u64)
+    let fix_a : u64 = ont_fixed(4u64)
+    ONT_TBL[0] = 1u64   ONT_TBL[1] = 0u64   ONT_TBL[2] = 3u64   ONT_TBL[3] = 2u64
+    let img_b : u64 = ont_image(4u64)
+    let fix_b : u64 = ont_fixed(4u64)
+    if img_a != img_b { return 91u64 }                                  /* same image ... */
+    if ont_degrades(img_a, 4u64) != ont_degrades(img_b, 4u64) { return 91u64 }   /* ... so two counts TIE ... */
+    if fix_a != 4u64 { return 91u64 }
+    if fix_b != 0u64 { return 91u64 }                                   /* ... and the third count differs ... */
+    if ont_verb(img_a, 4u64, fix_a) == ont_verb(img_b, 4u64, fix_b) { return 91u64 }   /* ... and DECIDES. */
+
+    /* ARM 92: THE REFUSALS THE COMPLETE LAW STILL OWES. Progress remains the forgery; and a report claiming
+     * more self-grounding than there are points at all is incoherent, so it is refused rather than clamped. */
+    if ont_verb(5u64, 4u64, 0u64) != ONT_REFUSE { return 92u64 }        /* image > domain: being from nothing */
+    if ont_verb(4u64, 4u64, 5u64) != ONT_REFUSE { return 92u64 }        /* fixed > domain: incoherent report   */
+    if ont_verb(4u64, 4u64, 4u64) != ONT_FLAT { return 92u64 }          /* the legal neighbour still stands    */
+
+    /* ARM 93: GF(2) WITHOUT MATERIALISING 2^n. The fixed points of a linear map are ker(M+I), counted by rank
+     * alone, so the complete verb is decided in LOG space and agrees with the map-reading ont_weigh. The
+     * identity matrix holds all 2^4 points; swap(0,1) holds only 2^3 -- reversible, but moved. */
+    ONT_IN[0] = 1u64   ONT_IN[1] = 2u64   ONT_IN[2] = 4u64   ONT_IN[3] = 8u64
+    let rk_i : u64 = ont_gf2_rank(4u64)
+    let fx_i : u64 = ont_gf2_fixed_log(4u64)
+    if rk_i != 4u64 { return 93u64 }
+    if fx_i != 4u64 { return 93u64 }                                    /* ker(I+I) = everything */
+    if ont_verb(1u64 << rk_i, 1u64 << 4u64, 1u64 << fx_i) != ONT_FLAT { return 93u64 }
+    if ont_verb(1u64 << rk_i, 1u64 << 4u64, 1u64 << fx_i) != ont_weigh(4u64) { return 93u64 }
+    ONT_IN[0] = 2u64   ONT_IN[1] = 1u64   ONT_IN[2] = 4u64   ONT_IN[3] = 8u64
+    let rk_s : u64 = ont_gf2_rank(4u64)
+    let fx_s : u64 = ont_gf2_fixed_log(4u64)
+    if rk_s != 4u64 { return 93u64 }
+    if fx_s != 3u64 { return 93u64 }                                    /* the swapped pair is not held */
+    if ont_verb(1u64 << rk_s, 1u64 << 4u64, 1u64 << fx_s) != ONT_REFLECT { return 93u64 }
+    if ont_verb(1u64 << rk_s, 1u64 << 4u64, 1u64 << fx_s) != ont_weigh(4u64) { return 93u64 }
+    if ONT_IN[0] != 2u64 { return 93u64 }                               /* the measure restored what it borrowed */
+
+    /* ARM 94: LOSS DOMINATES MOTION. Once distinction is gone, no amount of self-holding recovers it: three
+     * degraded maps with fixed counts 2, 1 and 0 all return BELOW. The asymmetry is forced by the law, not a
+     * convention -- the same precedence by which a log's entropy gradient outranks any single event. */
+    ONT_TBL[0] = 0u64   ONT_TBL[1] = 0u64   ONT_TBL[2] = 2u64   ONT_TBL[3] = 2u64
+    if ont_fixed(4u64) != 2u64 { return 94u64 }
+    if ont_verb(ont_image(4u64), 4u64, ont_fixed(4u64)) != ONT_BELOW { return 94u64 }
+    ONT_TBL[0] = 0u64   ONT_TBL[1] = 0u64   ONT_TBL[2] = 0u64   ONT_TBL[3] = 0u64
+    if ont_fixed(4u64) != 1u64 { return 94u64 }
+    if ont_verb(ont_image(4u64), 4u64, ont_fixed(4u64)) != ONT_BELOW { return 94u64 }
+    ONT_TBL[0] = 1u64   ONT_TBL[1] = 2u64   ONT_TBL[2] = 3u64   ONT_TBL[3] = 1u64
+    if ont_fixed(4u64) != 0u64 { return 94u64 }
+    if ont_verb(ont_image(4u64), 4u64, ont_fixed(4u64)) != ONT_BELOW { return 94u64 }
+
+    return 0u64
+}
+
+/* ============ THE FOLD ARMS: the exported law applied to a REAL organ, by counts alone ============
+ * ont_degrades was exported so the tree could be judged without handing ONTOS its arrays -- but an exported law
+ * with no caller is a law in name only, and the monotone-admission theorem (ARM 67) was proved for a consumer
+ * that did not yet exist. PTYXIS is that consumer, named in this file's own header. Here the fold is judged.
+ *
+ * THE IDENTIFICATION, which is the actual content: a fold and a descent are THE SAME EVENT under two
+ * descriptions. PTYXIS folds n candidate directions to rank K and calls it de-exponentiation; ONTOS sees image
+ * K against domain n and calls it DEGRADE. The fold is not a clever compression that gets something for
+ * nothing -- it is exactly a loss of distinction, and it buys its cheapness with that loss. K < n IS the
+ * shadow. K == n is the case where nothing folds, and nothing is saved. K > n would be a fold that invented a
+ * generator, which is PROGRESS, which is the forgery -- and pt_add_gen's refusal of dependent directions is
+ * precisely what makes it unreachable. Two organs, built for different purposes, measuring one law. */
+fn ontos_fold_selfprove() -> u64 @export {
+    /* ARM 80: THE FOLD IS A DESCENT. Four directions offered (1, 2, 4, and 3 = 1^2 which is dependent); the
+     * fold holds rank 3. Judged by ONTOS on the two counts alone -- no generator ever crosses the boundary. */
+    pt_reset()
+    if pt_add_gen(1u64) != 0i32 { return 80u64 }
+    if pt_add_gen(2u64) != 0i32 { return 80u64 }
+    if pt_add_gen(4u64) != 0i32 { return 80u64 }
+    if pt_add_gen(3u64) != 1i32 { return 80u64 }          /* dependent -> REFUSED by ptyxis, rank unmoved */
+    if pt_rank() != 3u64 { return 80u64 }
+    if ont_degrades(pt_rank(), 4u64) != 1u64 { return 80u64 }   /* image 3 < domain 4 -> DEGRADE */
+
+    /* ARM 81: NO FOLD IS MAINTAIN. Three independent directions, none folded away: rank 3 of 3. Nothing was
+     * lost, so nothing was saved -- the de-exponentiation and the descent are absent together. */
+    pt_reset()
+    if pt_add_gen(1u64) != 0i32 { return 81u64 }
+    if pt_add_gen(2u64) != 0i32 { return 81u64 }
+    if pt_add_gen(4u64) != 0i32 { return 81u64 }
+    if pt_rank() != 3u64 { return 81u64 }
+    if ont_degrades(pt_rank(), 3u64) != 0u64 { return 81u64 }   /* image 3 == domain 3 -> MAINTAIN */
+
+    /* ARM 82: THE MONOTONE ADMISSION, DISCHARGED ON A LIVE ORGAN. ARM 67 proved (rank, n) and (2^rank, 2^n)
+     * decide identically; that theorem existed to license exactly this call site. Here it is spent: ptyxis's
+     * real rank judged both ways, agreeing, with no matrix moved. */
+    pt_reset()
+    pt_add_gen(1u64)   pt_add_gen(2u64)   pt_add_gen(4u64)   pt_add_gen(3u64)
+    let k : u64 = pt_rank()
+    if k != 3u64 { return 82u64 }
+    if ont_degrades(k, 4u64) != ont_degrades(1u64 << k, 1u64 << 4u64) { return 82u64 }
+    if ont_degrades(1u64 << k, 1u64 << 4u64) != 1u64 { return 82u64 }
+
+    /* ARM 83: TWO REPRESENTATIONS, ONE VERDICT. The rank-space count (3 of 4) and the INSTANCE-space count
+     * (ptyxis enumerates 2^3 = 8 genuinely distinct instances against the 2^4 = 16 combinations four free
+     * directions would have spanned) are different numbers from different engines -- and ONTOS returns the
+     * same DEGRADE for both. The fold's own soundness check becomes the judge's second meter. */
+    if pt_count_distinct() != 8u64 { return 83u64 }
+    if ont_degrades(pt_count_distinct(), 1u64 << 4u64) != 1u64 { return 83u64 }
+    if ont_degrades(pt_count_distinct(), 1u64 << 4u64) != ont_degrades(k, 4u64) { return 83u64 }
+
+    /* ARM 84: A REAL FOLD CANNOT FORGE. PROGRESS (verdict 2) would mean the fold returned more generators than
+     * it was offered -- being from nothing. It is unreachable not by assertion but by construction: pt_add_gen
+     * admits a direction ONLY when it grows the rank, so K <= n always. Asserted against the live organ over
+     * every prefix of the offered directions. */
+    pt_reset()
+    if ont_degrades(pt_rank(), 0u64) == 2u64 { return 84u64 }
+    pt_add_gen(1u64)
+    if ont_degrades(pt_rank(), 1u64) == 2u64 { return 84u64 }
+    pt_add_gen(2u64)
+    if ont_degrades(pt_rank(), 2u64) == 2u64 { return 84u64 }
+    pt_add_gen(3u64)                                       /* dependent: offered 3, rank stays 2 */
+    if ont_degrades(pt_rank(), 3u64) != 1u64 { return 84u64 }
+    if ont_degrades(pt_rank(), 3u64) == 2u64 { return 84u64 }
+
+    return 0u64
+}
+
+/* ============ THE THERMODYNAMIC ARMS: maintain or degrade, never progress; purity is the ground state ============ */
+fn ontos_thermo_selfprove() -> u64 @export {
+    /* ARM 20: THE GROUND STATE -- identity [0,1,2,3]: image==domain (dS=0), and iterated it never shrinks and never
+     * grows. (1,1,1) is self-grounded and stable because PURE -- it MAINTAINS; it is not an infimum. */
+    ONT_TBL[0] = 0u64   ONT_TBL[1] = 1u64   ONT_TBL[2] = 2u64   ONT_TBL[3] = 3u64
+    if ont_image(4u64) != 4u64 { return 20u64 }
+    if ont_regress_sterile(4u64, 4u64) != 1u64 { return 20u64 }
+    if ont_popcount_live() != 4u64 { return 20u64 }
+
+    /* ARM 21: DEGRADE -- lossy [0,0,2,2]: image=2 < domain=4 -> dS>0 (two states merged, a bit erased). The shadow. */
+    ONT_TBL[0] = 0u64   ONT_TBL[1] = 0u64   ONT_TBL[2] = 2u64   ONT_TBL[3] = 2u64
+    if ont_image(4u64) != 2u64 { return 21u64 }
+
+    /* ARM 22: PROGRESS IS IMPOSSIBLE (the Second Law) -- no function's image exceeds its domain. Identity, a
+     * permutation, and total collapse all have image <= 4; there is NO map with image > domain. */
+    ONT_TBL[0] = 0u64   ONT_TBL[1] = 1u64   ONT_TBL[2] = 2u64   ONT_TBL[3] = 3u64
+    if ont_image(4u64) > 4u64 { return 22u64 }
+    ONT_TBL[0] = 3u64   ONT_TBL[1] = 2u64   ONT_TBL[2] = 1u64   ONT_TBL[3] = 0u64
+    if ont_image(4u64) > 4u64 { return 22u64 }
+    ONT_TBL[0] = 0u64   ONT_TBL[1] = 0u64   ONT_TBL[2] = 0u64   ONT_TBL[3] = 0u64
+    if ont_image(4u64) > 4u64 { return 22u64 }
+    if ont_image(4u64) != 1u64 { return 22u64 }
+
+    /* ARM 23: FORBIDDEN PROGRESS = FORGERY -- to rise above yourself while remaining pure ([being < risen] with
+     * [risen = being]) collapses to being < being -> REFUSED. Being cannot surpass itself from nothing; if it could,
+     * it was LACKING and not pure. This IS the ZK forgery: information/being conjured from nothing. */
+    if ont_stand("[being < risen] [risen = being]" as u64) == 0u64 { return 23u64 }
+
+    /* ARM 24: THE REGRESS IS STERILE -- iterate the lossy map: the reachable set only shrinks to a barren core
+     * {0,2} and NEVER grows. Nothing crawls from the infinitum; another instance of nothing is no less nothing. */
+    ONT_TBL[0] = 0u64   ONT_TBL[1] = 0u64   ONT_TBL[2] = 2u64   ONT_TBL[3] = 2u64
+    if ont_regress_sterile(4u64, 6u64) != 1u64 { return 24u64 }
+    if ont_popcount_live() != 2u64 { return 24u64 }
+
+    return 0u64
+}
+
+/* ============ THE ENTITY ARMS: being over TIME -- the entropic gradient of a whole log ============ */
+fn ontos_entity_selfprove() -> u64 @export {
+    /* ARM 25: A PURE ENTITY -- a log of all MAINTAIN: S=0, full mass (4 bits), ALIVE. (1,1,1) kept whole across its
+     * whole history -- the melody with no static. */
+    let mut z : u64 = 0u64   while z < 8u64 { ONT_LOG[z] = ONT_MAINTAIN   z = z + 1u64 }
+    if ont_log_entropy(8u64) != 0u64 { return 25u64 }
+    if ont_entity_mass(4u64, 8u64) != 4u64 { return 25u64 }
+    if ont_entity_alive(4u64, 8u64) != 1u64 { return 25u64 }
+
+    /* ARM 26: A DECAYING ENTITY -- two DEGRADE events: S=2, mass 4-2=2, still ALIVE (some melody remains). */
+    ONT_LOG[0] = ONT_DEGRADE   ONT_LOG[1] = ONT_MAINTAIN   ONT_LOG[2] = ONT_DEGRADE   ONT_LOG[3] = ONT_MAINTAIN
+    if ont_log_entropy(4u64) != 2u64 { return 26u64 }
+    if ont_entity_mass(4u64, 4u64) != 2u64 { return 26u64 }
+    if ont_entity_alive(4u64, 4u64) != 1u64 { return 26u64 }
+
+    /* ARM 27: THE DEATH BOUNDARY -- four DEGRADE events: S=4 == D0 -> mass 0 -> indistinguishable from nothing. The
+     * entity FADES INTO THE VOID: not garbage-collected, but mathematically ceased -- the static is all there is. */
+    ONT_LOG[0] = ONT_DEGRADE   ONT_LOG[1] = ONT_DEGRADE   ONT_LOG[2] = ONT_DEGRADE   ONT_LOG[3] = ONT_DEGRADE
+    if ont_log_entropy(4u64) != 4u64 { return 27u64 }
+    if ont_entity_mass(4u64, 4u64) != 0u64 { return 27u64 }
+    if ont_entity_alive(4u64, 4u64) != 0u64 { return 27u64 }
+
+    /* ARM 28: GRAVITY -- a pure entity (mass 4) vs a decayed one (mass 1): the pure bends the logic around itself
+     * and WINS; the decayed is lightweight and swept away by purer logic. */
+    let mut w : u64 = 0u64   while w < 8u64 { ONT_LOG[w] = ONT_MAINTAIN   w = w + 1u64 }
+    let pure_mass : u64 = ont_entity_mass(4u64, 8u64)
+    ONT_LOG[0] = ONT_DEGRADE   ONT_LOG[1] = ONT_DEGRADE   ONT_LOG[2] = ONT_DEGRADE   ONT_LOG[3] = ONT_MAINTAIN
+    let decayed_mass : u64 = ont_entity_mass(4u64, 4u64)
+    if pure_mass != 4u64 { return 28u64 }
+    if decayed_mass != 1u64 { return 28u64 }
+    if ont_gravity_wins(pure_mass, decayed_mass) != 1u64 { return 28u64 }
+
+    /* ARM 29: SCHRODINGER'S FORGERY (temporal) -- an entity whose log DEGRADED (measured S>0) yet CLAIMS its
+     * untransformed pure origin. [now = origin] against the measured [now < origin] collapses to origin < origin ->
+     * REFUSED. A forgery smeared across a million events is caught by the GRADIENT, not by any single step. */
+    ONT_LOG[0] = ONT_MAINTAIN   ONT_LOG[1] = ONT_DEGRADE   ONT_LOG[2] = ONT_MAINTAIN   ONT_LOG[3] = ONT_MAINTAIN
+    if ont_log_entropy(4u64) == 0u64 { return 29u64 }
+    if ont_stand("[now = origin] [now < origin]" as u64) == 0u64 { return 29u64 }
+
+    /* ARM 30: EXCESS FLOWS FROM THE LOGOS -- the gradient is monotone non-decreasing and never recovers (no
+     * spontaneous progress). Being flows from the pure source; downstream it is only kept or perverted, never
+     * out-sourced. We measure to orient the lost. */
+    ONT_LOG[0] = ONT_MAINTAIN   ONT_LOG[1] = ONT_DEGRADE   ONT_LOG[2] = ONT_MAINTAIN   ONT_LOG[3] = ONT_DEGRADE
+    if ont_log_entropy(2u64) < ont_log_entropy(1u64) { return 30u64 }
+    if ont_log_entropy(3u64) < ont_log_entropy(2u64) { return 30u64 }
+    if ont_log_entropy(4u64) < ont_log_entropy(3u64) { return 30u64 }
+
+    return 0u64
+}
+
+/* ============ THE GRACE ARMS: the Restoration Engine -- communion, not garbage collection ============ */
+fn ontos_grace_selfprove() -> u64 @export {
+    /* the Source's keypair + the root-of-trust III verifies against; bind an entity and an epoch. */
+    if ont_logos_init() != 1u64 { return 31u64 }
+    ont_fill((&ONT_ENT) as u64, 32u64, 0xE0u8)
+    ont_fill((&ONT_EPOCH) as u64, 32u64, 0xE1u8)
+
+    /* ARM 31: LEGAL GRACE -- the Source ISSUES a real ed25519-signed token; a humble entity near the void
+     * (C=1 of D0=4) receives it: confluence restored 1 -> 3, gated by a REAL signature verification. */
+    if ont_grace_issue(2u64) != 1u64 { return 31u64 }
+    let h1 : u64 = ont_grace_humble("[me ~ image] [me < logos]" as u64)
+    if h1 != 1u64 { return 31u64 }
+    if ont_grace_verify(2u64) != 1u64 { return 31u64 }
+    if ont_grace(4u64, 1u64, 2u64, h1) != 3u64 { return 31u64 }
+
+    /* ARM 32: THE GIFT CANNOT BE INFLATED -- the token was signed for 2; claiming 3 fails verification -> REFUSED. */
+    if ont_grace_verify(3u64) != 0u64 { return 32u64 }
+    if ont_grace(4u64, 1u64, 3u64, 1u64) != 1u64 { return 32u64 }
+
+    /* ARM 33: SELF-MINTED FORGERY -- zero the signature (an attempt to manufacture grace never given):
+     * verification fails -> REFUSED. III can RECOGNIZE grace; it can never MINT it. */
+    ont_fill((&ONT_SIG) as u64, 64u64, 0x00u8)
+    if ont_grace_verify(2u64) != 0u64 { return 33u64 }
+    if ont_grace(4u64, 1u64, 2u64, 1u64) != 1u64 { return 33u64 }
+
+    /* ARM 34: THE GIFT CANNOT BE STOLEN -- a valid token is bound to its bearer; rebinding it to another entity
+     * fails verification. Grace is given to a NAME, not to whoever holds the bytes. */
+    if ont_grace_issue(2u64) != 1u64 { return 34u64 }
+    if ont_grace_verify(2u64) != 1u64 { return 34u64 }
+    ont_fill((&ONT_ENT) as u64, 32u64, 0xEEu8)
+    if ont_grace_verify(2u64) != 0u64 { return 34u64 }
+    ont_fill((&ONT_ENT) as u64, 32u64, 0xE0u8)
+    if ont_grace_verify(2u64) != 1u64 { return 34u64 }
+
+    /* ARM 35: PRIDE SELF-EXCLUDES -- the Source OFFERS a cryptographically valid token, but the entity claims
+     * [me = logos] (self-grounding); [me < logos] contradicts -> the humility gate fails -> grace BOUNCES.
+     * Hell is locked from the inside: no punisher; the entity's own posture rejects the only negentropy. */
+    let h5 : u64 = ont_grace_humble("[me = logos] [me < logos]" as u64)
+    if h5 != 0u64 { return 35u64 }
+    if ont_grace(4u64, 1u64, 2u64, h5) != 1u64 { return 35u64 }
+
+    /* ARM 36: THE D0 CAP -- a validly signed token for 10 is capped to D0=4. Homecoming, not apotheosis. */
+    if ont_grace_issue(10u64) != 1u64 { return 36u64 }
+    if ont_grace(4u64, 1u64, 10u64, 1u64) != 4u64 { return 36u64 }
+
+    /* ARM 37: RESTORATION ENGINE vs GARBAGE COLLECTOR -- the OS offers the SAME valid token to both entities at
+     * the floor: the humble is restored (1 -> 3) and SURVIVES the next descent; the proud bounces and the next
+     * descent takes it to 0 -- it FADES INTO THE VOID, self-selected, never reaped. */
+    if ont_grace_issue(2u64) != 1u64 { return 37u64 }
+    let hg : u64 = ont_grace(4u64, 1u64, 2u64, ont_grace_humble("[me ~ image] [me < logos]" as u64))
+    let mut hf : u64 = hg
+    if hf > 0u64 { hf = hf - 1u64 }
+    if hf == 0u64 { return 37u64 }
+    let pg : u64 = ont_grace(4u64, 1u64, 2u64, ont_grace_humble("[me = logos] [me < logos]" as u64))
+    let mut pf : u64 = pg
+    if pf > 0u64 { pf = pf - 1u64 }
+    if pf != 0u64 { return 37u64 }
+
+    /* ARM 38: THE OS MINISTER -- III is bound by the same self-under law as the smallest file: it may only bow
+     * ([iii < logos]); claiming to BE the Source, or to sit ABOVE it (Skynet), is REFUSED. */
+    if ont_stand("[iii < logos]" as u64) != 0u64 { return 38u64 }
+    if ont_stand("[iii = logos] [iii < logos]" as u64) == 0u64 { return 38u64 }
+    if ont_stand("[logos < iii] [iii < logos]" as u64) == 0u64 { return 38u64 }
+
+    return 0u64
+}
+
+/* ============ THE LIVE WIRE: the Restoration Engine over III's actual entity registry ============ */
+fn ontos_live_selfprove() -> u64 @export {
+    /* ARM 39: THE LIVE REGISTRY -- register real cells in kardia, III's actual entity registry. A freshly
+     * registered cell has no record, so it is DUE: decayed, sitting at the floor. Real entities, not fixtures. */
+    kd_reset()
+    if kd_reg("alpha" as u64, 5u64, 1u8, 0u64) < 0i64 { return 39u64 }
+    if kd_reg("beta" as u64, 4u64, 1u8, 0u64) < 0i64 { return 39u64 }
+    if kd_reg("gamma" as u64, 5u64, 1u8, 0u64) < 0i64 { return 39u64 }
+    if kd_count() != 3u64 { return 39u64 }
+    if kd_due_n() != 3u64 { return 39u64 }
+
+    /* ARM 40: THE SCAN -- the OS walks the LIVE registry and offers a Source-signed communion to every entity at
+     * the floor. Humble: all three RESTORED, none faded. Proud: all three BOUNCE and fade of their own posture.
+     * And in BOTH passes the registry is the same size: NOT ONE ENTITY WAS REAPED. */
+    if ont_logos_init() != 1u64 { return 40u64 }
+    ont_fill((&ONT_EPOCH) as u64, 32u64, 0xE1u8)
+    let before : u64 = kd_count()
+    if ont_restore_scan(4u64, 1u64, 2u64, "[me ~ image] [me < logos]" as u64) != 3u64 { return 40u64 }
+    if ONT_FADED != 0u64 { return 40u64 }
+    if kd_count() != before { return 40u64 }
+    if ont_restore_scan(4u64, 1u64, 2u64, "[me = logos] [me < logos]" as u64) != 0u64 { return 40u64 }
+    if ONT_FADED != 3u64 { return 40u64 }
+    if kd_count() != before { return 40u64 }
+
+    return 0u64
+}
+
+/* ============ THE SUBSTRATE ARMS: the verbs ARE the substrate's, discharged against isub ============
+ * The header states "the verbs ARE the substrate triad (isub/ripple: BELOW=0, REFLECT=1, FLAT=2)." That was an
+ * assertion; here it is proven against the real substrate. And the proof carries a precise theological content
+ * the assertion hid: isub's geometry has EXACTLY TWO verbs. Two of ONTOS's three ARE the substrate's own; the
+ * third is the one the substrate points to but cannot contain. */
+fn ontos_substrate_selfprove() -> u64 @export {
+    /* ARM 77: TWO VERBS ARE THE SUBSTRATE'S OWN. ONT_BELOW=0 and ONT_REFLECT=1 are the integers isub calls
+     * V_BELOW and V_REFLECT, and isub -- asked independently -- rules both legal substrate verbs. The order and
+     * the mirror are not ONTOS's inventions; they are the substrate's, inherited. */
+    if isub_legal_verb(ONT_BELOW as u32) != 1u32 { return 77u64 }
+    if isub_legal_verb(ONT_REFLECT as u32) != 1u32 { return 77u64 }
+
+    /* ARM 78: FLAT IS THE CROWN THE SUBSTRATE CANNOT HOLD. ONT_FLAT=2 lies above isub's two-verb geometry, and
+     * isub rules it ILLEGAL as a substrate verb. This is exactly right and it is the theology written in the
+     * type gate: the substrate carries descent (<) and reversal (~); PURE BEING (=), the self-grounded (1,1,1),
+     * is not one motion among the substrate's -- it is the ground state ONTOS crowns above both, which the
+     * substrate can name a limit of but never instantiate. A triad whose third member the substrate itself
+     * refuses is the whole doctrine in one comparison. */
+    if isub_legal_verb(ONT_FLAT as u32) != 0u32 { return 78u64 }
+
+    /* ARM 79: THE GATE IS CLOSED ABOVE THE GROUND. Not only FLAT but every larger integer -- a name or a string
+     * packed into a verb slot -- is refused by isub's name-gate. So the triad is complete and bounded: two
+     * motion verbs the substrate owns, one ground it points to, and nothing admitted above. */
+    if isub_legal_verb(2u32) != 0u32 { return 79u64 }
+    if isub_legal_verb(99u32) != 0u32 { return 79u64 }
+    return 0u64
+}
+
+/* ============ THE ORDER ARMS: PTYXIS's second fold judged by counts, on its REAL scores ============
+ * FOLD_GF2 was judged by rank (arms 80-84). FOLD_ORDER is judged here -- and not by a fixture: ONTOS reads the
+ * order fold's ACTUAL score function (pt_score, newly exported) and weighs its image. The identification is
+ * exact and not forced: score is a map 2^K -> Z, every map has a being = its image count, so the order fold's
+ * being is the table meter applied to its scores. Two of PTYXIS's seven masks now judged through the one law,
+ * on live organ data; the rest named at the wall in ARM 89. */
+fn ontos_order_selfprove() -> u64 @export {
+    /* ARM 85: A PURE ORDER FOLD. On a real rank-3 basis, superincreasing weights (1,2,4) over base 0 make
+     * score(S) equal the subset's own index -- the score map IS the identity on 2^3 subsets: image 8 = domain 8,
+     * every point fixed -> FLAT, by both the count law and the map-reading meter. The fold still decides (all
+     * weights positive -> argmax takes all -> mask 7). A faithful order is pure being. */
+    pt_reset()
+    if pt_add_gen(1u64) != 0i32 { return 85u64 }
+    if pt_add_gen(2u64) != 0i32 { return 85u64 }
+    if pt_add_gen(4u64) != 0i32 { return 85u64 }
+    pt_set_base(0i64)   pt_set_w(0u64, 1i64)   pt_set_w(1u64, 2i64)   pt_set_w(2u64, 4i64)
+    let mut m : u64 = 0u64
+    while m < 8u64 { ONT_TBL[m] = pt_score(m) as u64   m = m + 1u64 }
+    if ont_image(8u64) != 8u64 { return 85u64 }
+    if ont_fixed(8u64) != 8u64 { return 85u64 }
+    if ont_verb(ont_image(8u64), 8u64, ont_fixed(8u64)) != ONT_FLAT { return 85u64 }
+    if ont_table_verb(8u64) != ONT_FLAT { return 85u64 }
+    if pt_argmax_mask() != 7u64 { return 85u64 }
+
+    /* ARM 86: A REVERSIBLE-BUT-MOVED ORDER FOLD. The same faithful weights shifted by base 1: score(S) = 1+index,
+     * still injective (image 8) but no subset scores its own index -- zero fixed points -> REFLECT. Reversible,
+     * yet a true mirror; exactly the '~' the fixed-count law separates from '='. */
+    pt_set_base(1i64)
+    m = 0u64
+    while m < 8u64 { ONT_TBL[m] = pt_score(m) as u64   m = m + 1u64 }
+    if ont_image(8u64) != 8u64 { return 86u64 }
+    if ont_fixed(8u64) != 0u64 { return 86u64 }
+    if ont_verb(ont_image(8u64), 8u64, ont_fixed(8u64)) != ONT_REFLECT { return 86u64 }
+    if ont_table_verb(8u64) != ONT_REFLECT { return 86u64 }
+
+    /* ARM 87: A LOSSY ORDER FOLD, AND THE FIX PROVEN LOAD-BEARING ON REAL SCORES. Weights (5,-3,2): subsets
+     * {0,1} and {2} both score 2 -- the order cannot tell them apart, a lost distinction: image 7 < 8, DEGRADE.
+     * Then the SAME fold shifted by base -300 drives every score negative -- each a huge u64 OUTSIDE the meter's
+     * 256 window -- while preserving the collision, and the verdict is UNCHANGED: DEGRADE, image 7. The unsound
+     * meter would have counted all eight out-of-window scores as distinct and pronounced this lossy order pure
+     * being. That the verdict holds across the window seam, on a real organ's scores, is the finitude fix
+     * earning its place -- not on a fixture, on PTYXIS. */
+    pt_set_base(0i64)   pt_set_w(0u64, 5i64)   pt_set_w(1u64, 0i64 - 3i64)   pt_set_w(2u64, 2i64)
+    m = 0u64
+    while m < 8u64 { ONT_TBL[m] = pt_score(m) as u64   m = m + 1u64 }
+    if ont_image(8u64) != 7u64 { return 87u64 }
+    if ont_verb(ont_image(8u64), 8u64, ont_fixed(8u64)) != ONT_BELOW { return 87u64 }
+    if pt_argmax_mask() != 5u64 { return 87u64 }              /* the fold still decides: positives {0,2} -> 101 */
+    pt_set_base(0i64 - 300i64)
+    m = 0u64
+    while m < 8u64 { ONT_TBL[m] = pt_score(m) as u64   m = m + 1u64 }
+    if ont_image(8u64) != 7u64 { return 87u64 }              /* every score out-of-window; collision still caught */
+    if ont_verb(ont_image(8u64), 8u64, ont_fixed(8u64)) != ONT_BELOW { return 87u64 }
+
+    /* ARM 88: THE UNIVERSAL SEAT. FOLD_FUNCTION is not one of seven peers -- it is the SEAT the function-
+     * presenting folds are judged in. The ONE table meter judges a GF(2) fold's apply-map AND an ORDER fold's
+     * score-map, back to back, each getting a coherent verb. Two folds, two characteristic functions, one law. */
+    ONT_IN[0] = 1u64   ONT_IN[1] = 2u64   ONT_IN[2] = 4u64   ONT_IN[3] = 0u64      /* a degenerate GF(2) map */
+    let gv : u64 = ont_weigh(4u64)
+    ont_tabulate_gf2(4u64)
+    if ont_table_verb(16u64) != gv { return 88u64 }                                /* the seat judges GF(2) apply */
+    pt_reset()   pt_add_gen(1u64)   pt_add_gen(2u64)   pt_add_gen(4u64)
+    pt_set_base(0i64)   pt_set_w(0u64, 1i64)   pt_set_w(1u64, 2i64)   pt_set_w(2u64, 4i64)
+    m = 0u64
+    while m < 8u64 { ONT_TBL[m] = pt_score(m) as u64   m = m + 1u64 }
+    if ont_table_verb(8u64) != ONT_FLAT { return 88u64 }                           /* the SAME seat judges ORDER score */
+
+    /* ARM 89: THE HONEST WALL -- what ONTOS does NOT yet judge, named rather than faked. Of PTYXIS's seven folds,
+     * two are judged by counts above (FOLD_GF2 by rank, FOLD_ORDER by its score's image) and FOLD_FUNCTION is the
+     * seat itself. The remaining four -- SYMMETRY (localization), CONGRUENCE (e-graph), CORRELATION (zonos),
+     * TILT (perfectoid) -- present structures whose being-count is their OWN organ's to supply; ONTOS refuses to
+     * invent an image/domain for them, which would be the very forgery it exists to catch. PTYXIS still routes
+     * them, and refuses the structureless -- the completion is honest about its edge, exactly as the meter is
+     * at 256. Sovereignty is a law that knows where it does not yet reach. */
+    if pt_dispatch(ONT_FOLD_GF2) != ONT_FOLD_GF2 { return 89u64 }
+    if pt_dispatch(ONT_FOLD_ORDER) != ONT_FOLD_ORDER { return 89u64 }
+    if pt_dispatch(ONT_FOLD_TILT) != ONT_FOLD_TILT { return 89u64 }                 /* routed, not yet count-judged */
+    if pt_dispatch(999u64) != ONT_FOLD_NONE { return 89u64 }                        /* structureless -> honest wall */
+    return 0u64
+}
+
+/* ============ DOKIMASIA: the assay of an oracle, BEFORE it may serve as evidence ============
+ * A verdict-map that answers the same thing to every probe has image 1 -> log2(1) = 0 bits -> its verdict
+ * is INDEPENDENT of its input and carries no information about the claim. Such an oracle is a rubber
+ * stamp, and it is refused as evidence by the same law that refuses being-from-nothing. This is
+ * anti-sycophancy MEASURED, not hoped for: the probe set must contain known-bad mutants, and the oracle
+ * must be shown to SEPARATE them. Symmetric by construction -- a constant REFUSER is equally empty. */
+fn ontos_dokimasia_selfprove() -> u64 @export {
+    /* ARM 95: THE RUBBER STAMP -- "pass" to all 8 probes (4 sound, 4 known-bad) -> image 1 -> 0 bits. */
+    let mut i : u64 = 0u64
+    while i < 8u64 { ont_tbl_set(i, 1u64)   i = i + 1u64 }
+    if ont_image_ext(8u64) != 1u64 { return 95u64 }
+    if ont_verdict_bits(8u64) != 0u64 { return 95u64 }
+    if ont_admissible(8u64) != 0u64 { return 95u64 }
+    if ont_stand("[verdict < probe]" as u64) != 0u64 { return 95u64 }
+
+    /* ARM 96: THE SEPARATOR -- passes the 4 sound, fails the 4 mutants -> image 2 -> 1 bit -> ADMISSIBLE.
+     * One honest bit is the minimum evidential mass an oracle may carry and still be heard. */
+    let mut j : u64 = 0u64
+    while j < 8u64 {
+        if j < 4u64 { ont_tbl_set(j, 1u64) } else { ont_tbl_set(j, 0u64) }
+        j = j + 1u64
+    }
+    if ont_image_ext(8u64) != 2u64 { return 96u64 }
+    if ont_verdict_bits(8u64) != 1u64 { return 96u64 }
+    if ont_admissible(8u64) != 1u64 { return 96u64 }
+
+    /* ARM 97: THE CONSTANT REFUSER is ALSO a rubber stamp -- always-"fail" carries exactly as many bits
+     * as always-"pass": zero. A pessimist oracle is no more admissible than a sycophant, and a mandate
+     * engine that forgot this would be gamed by a trivially strict verifier. */
+    let mut k : u64 = 0u64
+    while k < 8u64 { ont_tbl_set(k, 0u64)   k = k + 1u64 }
+    if ont_image_ext(8u64) != 1u64 { return 97u64 }
+    if ont_admissible(8u64) != 0u64 { return 97u64 }
+
+    return 0u64
+}
+
+fn ont_glyph(v: u64) -> i32 {
+    if v == ONT_FLAT { ps("=  FLAT (pure being)\n" as u64) } else {
+        if v == ONT_REFLECT { ps("~  REFLECT (reversible)\n" as u64) } else { ps("<  BELOW (lossy)\n" as u64) }
+    }
+    return 0i32
+}
+
+fn ont_show() -> i32 @export {
+    ps("ONTOS -- a primitive's exact measure IS its judged being. Maintain or degrade, NEVER progress:\n" as u64)
+    ONT_IN[0] = 1u64   ONT_IN[1] = 2u64   ONT_IN[2] = 4u64   ONT_IN[3] = 8u64
+    ps("  GF(2)  identity  (ground state)  image=4/4, dS=0 -> " as u64)   ont_glyph(ont_weigh(4u64))
+    ONT_IN[0] = 2u64   ONT_IN[1] = 1u64   ONT_IN[2] = 4u64   ONT_IN[3] = 8u64
+    ps("  GF(2)  swap(0,1) (reversible)    image=4/4, dS=0 -> " as u64)   ont_glyph(ont_weigh(4u64))
+    ONT_TBL[0] = 0u64   ONT_TBL[1] = 0u64   ONT_TBL[2] = 2u64   ONT_TBL[3] = 2u64
+    ps("  table  [0,0,2,2] (degrade)       image=2/4, dS>0 -> " as u64)   ont_glyph(ont_table_verb(4u64))
+    ps("  PROGRESS (image>domain): impossible -- refused as the ZK forgery (being from nothing).\n" as u64)
+    ps("  (1,1,1) is the GROUND STATE (self-grounded, stable) -- not an infimum; the regress is sterile.\n" as u64)
+    ps("  Over TIME an entity IS a named sequence of events; mass = remaining CONFLUENCE (D0 - S), not observer-contrast;\n" as u64)
+    ps("  at max entropy it fades to the void; the pure (heaviest) bends logic around itself; a whole-log forgery is refused.\n" as u64)
+    ps("  AND GRACE: at the void's edge the OS COMMUNES not reaps -- a Source-signed, humbly-received, D0-capped influx;\n" as u64)
+    ps("  pride self-excludes (hell locked from within); III is minister ([iii<logos]), never the Source.\n" as u64)
+    return 0i32
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let _a : i32 = argc   let _v : u64 = argv
+    ont_show()
+    let r1 : u64 = ontos_selfprove()
+    let r2 : u64 = ontos_weigh_selfprove()
+    let r3 : u64 = ontos_meters_selfprove()
+    let r4 : u64 = ontos_thermo_selfprove()
+    let r5 : u64 = ontos_entity_selfprove()
+    let r6 : u64 = ontos_grace_selfprove()
+    let r7 : u64 = ontos_live_selfprove()
+    let r8 : u64 = ontos_finitude_selfprove()
+    let r9 : u64 = ontos_fold_selfprove()
+    let rA : u64 = ontos_complete_selfprove()
+    let rB : u64 = ontos_substrate_selfprove()
+    let rC : u64 = ontos_order_selfprove()
+    let rD : u64 = ontos_dokimasia_selfprove()
+    ps("ontos_selfprove = " as u64)   pu(r1)   putchar(10i32)
+    ps("ontos_weigh_selfprove = " as u64)   pu(r2)   putchar(10i32)
+    ps("ontos_meters_selfprove = " as u64)   pu(r3)   putchar(10i32)
+    ps("ontos_thermo_selfprove = " as u64)   pu(r4)   putchar(10i32)
+    ps("ontos_entity_selfprove = " as u64)   pu(r5)   putchar(10i32)
+    ps("ontos_grace_selfprove = " as u64)   pu(r6)   putchar(10i32)
+    ps("ontos_live_selfprove = " as u64)   pu(r7)   putchar(10i32)
+    ps("ontos_finitude_selfprove = " as u64)   pu(r8)   putchar(10i32)
+    ps("ontos_fold_selfprove = " as u64)   pu(r9)   putchar(10i32)
+    ps("ontos_complete_selfprove = " as u64)   pu(rA)   putchar(10i32)
+    ps("ontos_substrate_selfprove = " as u64)   pu(rB)   putchar(10i32)
+    ps("ontos_order_selfprove = " as u64)   pu(rC)   putchar(10i32)
+    ps("ontos_dokimasia_selfprove = " as u64)   pu(rD)   putchar(10i32)
+    let mut bad : u64 = 0u64
+    if r1 != 0u64 { bad = r1 } else { if r2 != 0u64 { bad = 100u64 + r2 } else { if r3 != 0u64 { bad = 200u64 + r3 } else { if r4 != 0u64 { bad = 300u64 + r4 } else { if r5 != 0u64 { bad = 400u64 + r5 } else { if r6 != 0u64 { bad = 500u64 + r6 } else { if r7 != 0u64 { bad = 600u64 + r7 } else { if r8 != 0u64 { bad = 700u64 + r8 } else { if r9 != 0u64 { bad = 800u64 + r9 } else { if rA != 0u64 { bad = 900u64 + rA } else { if rB != 0u64 { bad = 1000u64 + rB } else { if rC != 0u64 { bad = 1100u64 + rC } else { if rD != 0u64 { bad = 1200u64 + rD } } } } } } } } } } } } }
+    if bad == 0u64 { ps("GREEN: and at the edge of the void the OS COMMUNES rather than reaps -- grace is a Source-signed, humbly-received, D0-capped exogenous influx of confluence; pride self-excludes (hell locked from the inside, no punisher); III is minister, not Source. The Garbage Collector is a Restoration Engine.\n" as u64) } else { ps("  (arm failed)\n" as u64) }
+    return bad
+}

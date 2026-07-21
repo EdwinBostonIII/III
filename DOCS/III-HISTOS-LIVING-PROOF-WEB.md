@@ -1,8 +1,8 @@
 # HISTOS — the living proof web
 
-*Status: STAGE 1 LANDED + GATED (`STDLIB/scripts/histos_gate.sh`, exit 0, byte-deterministic).
-Stages 2 (real-artifact mutation) and 3 (kardia cross-session permanence) follow. Built on the
-resealed compiler `ec0ad523`. Spec: `DOCS/superpowers/specs/2026-07-21-living-proof-web-design.md`.*
+*Status: STAGES 1 + 2 LANDED + GATED (`STDLIB/scripts/histos_gate.sh`, exit 0, byte-deterministic).
+Stage 3 (kardia cross-session permanence) follows. Built on the resealed compiler `ec0ad523`.
+Spec: `DOCS/superpowers/specs/2026-07-21-living-proof-web-design.md`.*
 
 ## What it is
 
@@ -71,12 +71,26 @@ to test its refusal:
 Composes only `horos.iii` (`hr_register`/`hr_discharge`/`hr_find`); weaving is idempotent (an
 existing stone is reused, so the narrative and the judge can both weave in one process).
 
-## Stage 2 (next): the same, on real artifacts
+## Stage 2 (landed): the same, on real artifacts
 
-`histos_gate.sh` will additionally build the four organs' real selfprove executables, feed their
-true verdicts into the web (all green), then **mutate `kr_sign` in source, rebuild, and observe
-the real transitive reddening** — krisis and membrane red from their real runs, the witness's own
-real selfprove still green, the web reddening it and naming krisis. Then restore and reconfirm.
+`histos_web_probe.iii` runs the four organs' REAL selfproves (`ethos_r1_selfprove`,
+`pb_attn_selfprove`, `kr_selfprove`, a bigint KAT) and feeds their true verdicts into the web.
+The gate builds it twice: once against the true krisis, once against a krisis whose `kr_sign` is
+mutated to a constant tie (injected on a COPY — the tracked source is never touched). The
+asserted result:
+
+```
+true:  web: behavioral_witness GREEN (own-cell GREEN) rooted-at none
+mut :  web: behavioral_witness RED  (own-cell GREEN) rooted-at krisis
+       real cells: witness=green membrane=red krisis=red bigint=green
+```
+
+The mutant reddens krisis and membrane from their **real** runs (membrane's engine A uses
+`kr_sign`; engine B does not, so they disagree and `pb_head_order_trusted` REFUSES), the
+witness's **real** pure-law selfprove still passes (own-cell GREEN), and the WEB reddens the
+witness, naming the DEEPEST red (`krisis`) as the origin. Real artifacts, real mutation, correct
+root-cause. `histos_reddened_by` seeks the deepest red on the failing path, so it names the
+origin even when intermediate nodes (membrane) are red in their own right.
 
 ## Stage 3 (next): permanence, reverification-gated
 

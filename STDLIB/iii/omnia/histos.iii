@@ -136,12 +136,15 @@ fn hs_stand_rec(idx: u64, fuel: u64) -> u64 {
 }
 fn histos_stand(idx: u64) -> u64 @export { return hs_stand_rec(idx, 4096u64) }
 
-/* THE NAMED ROOT: the first node on the failing path whose OWN cell is red (or which carries an
- * undischarged edge).  This is what per-cell drift cannot say -- WHY a green-celled node is red. */
+/* THE NAMED ROOT: the DEEPEST red node on the failing path -- the origin, the node that is red
+ * but none of whose dependencies is red.  Dependencies are checked FIRST, so if a green-celled
+ * node depends on a red one we recurse toward the true cause rather than stopping at the nearest
+ * red.  (In the real mutation, membrane's OWN cell is red too, because it really runs the engine
+ * -- but krisis is the origin, and that is what must be named.)  An undischarged edge localizes
+ * the fault at the node carrying it.  This is what per-cell drift cannot say -- WHY a node is red. */
 fn hs_root_rec(idx: u64, fuel: u64) -> u64 {
     if fuel == 0u64 { return "fuel_exhausted" as u64 }
     if idx >= HS_NN { return "out_of_range" as u64 }
-    if HS_VERD[idx] != HS_GREEN { return HS_NAME[idx] }        /* this node is itself the fault */
     let mut e : u64 = 0u64
     while e < HS_EN {
         if HS_EFROM[e] == idx {
@@ -150,6 +153,8 @@ fn hs_root_rec(idx: u64, fuel: u64) -> u64 {
         }
         e = e + 1u64
     }
+    /* no red dependency: the origin is this node's own cell (if red) */
+    if HS_VERD[idx] != HS_GREEN { return HS_NAME[idx] }
     return "none" as u64
 }
 fn histos_reddened_by(idx: u64) -> u64 @export { return hs_root_rec(idx, 4096u64) }

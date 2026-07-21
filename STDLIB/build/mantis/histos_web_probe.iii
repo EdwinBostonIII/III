@@ -1,0 +1,87 @@
+/* histos_web_probe.iii -- HISTOS stage 2: the web fed by REAL organ verdicts.
+ *
+ * Weaves the MVP exact-order chain, runs each of the four organs' ACTUAL selfprove (no
+ * injection), sets each node's cell from its real result, and reports the web's stand. The gate
+ * runs this twice: once linked against the true krisis (all green), once against a krisis whose
+ * kr_sign is mutated to a constant tie -- where krisis and membrane redden from their REAL runs,
+ * the witness's REAL selfprove (the pure law) still passes, and the WEB reddens the witness,
+ * rooted at krisis. Real artifacts; not injected. */
+module histos_web_probe
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+/* the loom */
+extern @abi(c-msvc-x64) fn histos_weave_mvp() -> u64 from "histos.iii"
+extern @abi(c-msvc-x64) fn hs_set_verdict(idx: u64, v: u64) -> i32 from "histos.iii"
+extern @abi(c-msvc-x64) fn hs_verdict(idx: u64) -> u64 from "histos.iii"
+extern @abi(c-msvc-x64) fn histos_stand(idx: u64) -> u64 from "histos.iii"
+extern @abi(c-msvc-x64) fn histos_reddened_by(idx: u64) -> u64 from "histos.iii"
+/* the four organs' REAL selfproves */
+extern @abi(c-msvc-x64) fn ethos_r1_selfprove() -> u64 from "ethos_r1_probe.iii"   /* witness  (pure law) */
+extern @abi(c-msvc-x64) fn pb_attn_selfprove() -> u64 from "probole.iii"           /* membrane */
+extern @abi(c-msvc-x64) fn kr_selfprove() -> u64 from "krisis.iii"                 /* krisis   */
+/* the exact substrate, for the bigint node's KAT */
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(arena: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii"
+
+fn ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn pz(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn pverd(v: u64) -> u32 { if v == 0u64 { ps("green" as u64) } else { ps("red" as u64) }   return 1u32 }
+
+/* the bigint node's cell: 2+2 == 4 AND 4 > 3, in exact bigint (exercises bigint_cmp) */
+fn bigint_kat() -> u64 {
+    let ar : u64 = arena_new(4096u64)
+    if ar == 0u64 { return 1u64 }
+    let two : u64 = bigint_from_u64(ar, 2u64)
+    let four : u64 = bigint_add(ar, two, two)
+    let three : u64 = bigint_from_u64(ar, 3u64)
+    let fourlit : u64 = bigint_from_u64(ar, 4u64)
+    let mut rc : u64 = 0u64
+    if bigint_cmp(four, three) <= 0i32 { rc = 1u64 }
+    if bigint_cmp(four, fourlit) != 0i32 { rc = 1u64 }
+    bigint_drop_arena(ar)
+    arena_drop(ar)
+    return rc
+}
+
+fn set_cell(idx: u64, v: u64) -> i32 {
+    if v == 0u64 { hs_set_verdict(idx, 0u64) } else { hs_set_verdict(idx, 1u64) }
+    return 0i32
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let _a : i32 = argc   let _v : u64 = argv
+    let c : u64 = histos_weave_mvp()
+    if c != 0u64 { ps("weave failed code " as u64)   return 9u64 }
+
+    /* REAL runs -- no injection */
+    let vw : u64 = ethos_r1_selfprove()
+    let vm : u64 = pb_attn_selfprove()
+    let vk : u64 = kr_selfprove()
+    let vb : u64 = bigint_kat()
+    set_cell(0u64, vw)
+    set_cell(1u64, vm)
+    set_cell(2u64, vk)
+    set_cell(3u64, vb)
+
+    ps("real cells: witness=" as u64)   pverd(vw)
+    ps(" membrane=" as u64)             pverd(vm)
+    ps(" krisis=" as u64)               pverd(vk)
+    ps(" bigint=" as u64)               pverd(vb)
+    putchar(10i32)
+
+    ps("web: behavioral_witness " as u64)
+    let st : u64 = histos_stand(0u64)
+    if st == 0u64 { ps("GREEN" as u64) } else { ps("RED" as u64) }
+    ps(" (own-cell " as u64)
+    if hs_verdict(0u64) == 0u64 { ps("GREEN" as u64) } else { ps("RED" as u64) }
+    ps(") rooted-at " as u64)
+    pz(histos_reddened_by(0u64))
+    putchar(10i32)
+
+    if st == 0u64 { return 0u64 }
+    return 2u64
+}

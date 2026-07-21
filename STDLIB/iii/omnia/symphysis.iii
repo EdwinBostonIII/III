@@ -1,0 +1,71 @@
+/* STDLIB/iii/omnia/symphysis.iii -- SYMPHYSIS (the GROWING-TOGETHER): the one fold, proven across the REAL
+ * organs, as a condition of its OWN motion (it runs itself -- no probe).
+ *
+ * We assume the events universe: an ENTITY is the FOLD of its event-log.  This organ does not re-implement the
+ * mathematics with toys -- it COMPOSES the actual, already-gated organs of III and proves they are ONE fold on
+ * their OWN real computations:
+ *   CASSANDRA (oneiros)  the events universe itself: 2^K timelines from K GF(2) colors, derive-don't-store,
+ *                        least-action, zero-rewind collapse.  Its derive IS the PTYXIS fold (bit-exact, up to
+ *                        the proven admix bijection) -- confirmed here on the shared structure.
+ *   MERIS (aether)       real Nekrasov partition functions: the SYMMETRY fold (localization -> closed form).
+ *   KYMA (aether)        real exact quantum amplitudes: the GF(2) stabilizer fragment + the Toffoli/T magic.
+ *   KLISI (aether)       real perfectoid tilt: the TILT fold (infinite tower -> finite shadow).
+ *   LEIMMA (omnia)       real homology: the REDUCE fold, and the fold-DEFECT it cannot remove.
+ *
+ * Truth is a CONDITION OF MOTION: symphysis_selfprove runs every real organ's own self-proof (each green = its
+ * real math works) AND witnesses the fold-identity between the abstract fold (PTYXIS) and the real events organ
+ * (CASSANDRA) bit-for-bit.  main() IS the organ running itself; the exit code is the verdict.  NIH; composes
+ * only landed organs.  Ring R0. */
+module symphysis
+
+/* the abstract fold */
+extern @abi(c-msvc-x64) fn pt_reset() -> i32 from "ptyxis.iii"
+extern @abi(c-msvc-x64) fn pt_add_gen(v: u64) -> i32 from "ptyxis.iii"
+extern @abi(c-msvc-x64) fn pt_derive(mask: u64) -> u64 from "ptyxis.iii"
+/* the REAL events-universe organ (Schrodinger's colors) + its bijection */
+extern @abi(c-msvc-x64) fn cass_reset(acc: u64) -> i32 from "cassandra.iii"
+extern @abi(c-msvc-x64) fn cass_add_color(delta: u64) -> u64 from "cassandra.iii"
+extern @abi(c-msvc-x64) fn cass_derive(mask: u64) -> u64 from "cassandra.iii"
+extern @abi(c-msvc-x64) fn cass_count() -> u64 from "cassandra.iii"
+extern @abi(c-msvc-x64) fn cass_selfproof() -> u64 from "cassandra.iii"
+extern @abi(c-msvc-x64) fn adx_init() -> u32 from "admix.iii"
+extern @abi(c-msvc-x64) fn adx_ready() -> u8 from "admix.iii"
+extern @abi(c-msvc-x64) fn admix(x: u64) -> u64 from "admix.iii"
+/* the REAL mathematical-field organs, each a fold instance, each self-proving on real math */
+extern @abi(c-msvc-x64) fn ms_selfprove() -> u64 from "meris.iii"
+extern @abi(c-msvc-x64) fn ky_selfprove() -> u64 from "kyma.iii"
+extern @abi(c-msvc-x64) fn kl_selfprove() -> u64 from "klisi.iii"
+extern @abi(c-msvc-x64) fn leimma_selfprove() -> u64 from "leimma.iii"
+
+var SY_ACC : u64 = 11400714819323198485u64   /* a real base state (golden-ratio bits) */
+
+fn symphysis_selfprove() -> u64 @export {
+    /* THE FOLD-IDENTITY, REAL + BIT-EXACT: cassandra's real derive-don't-store IS the PTYXIS fold, up to the
+     * proven admix bijection.  Same K event-deltas (distinct pivots -> both bases store them identically), so
+     * for EVERY one of the 2^K timelines: cass_derive(m) == admix(acc ^ pt_derive(m)). */
+    if adx_ready() == 0u8 { adx_init() }
+    pt_reset()
+    cass_reset(SY_ACC)
+    pt_add_gen(1u64)   pt_add_gen(2u64)   pt_add_gen(4u64)
+    cass_add_color(1u64)   cass_add_color(2u64)   cass_add_color(4u64)
+    if cass_count() != 3u64 { return 1u64 }
+    let mut m : u64 = 0u64
+    while m < 8u64 {
+        if cass_derive(m) != admix(SY_ACC ^ pt_derive(m)) { return 2u64 }   /* the SAME fold, on real organs */
+        m = m + 1u64
+    }
+    /* THE REAL EVENTS-UNIVERSE ORGAN proves itself: 2^K from K, orthogonality-capped, no rewind, least-action. */
+    if cass_selfproof() != 0u64 { return 3u64 }
+    /* THE FOLD ACROSS REAL FIELDS: each organ, a fold instance, self-proves on its own real mathematics. */
+    if ms_selfprove() != 0u64 { return 4u64 }        /* Nekrasov localization (SYMMETRY) */
+    if ky_selfprove() != 0u64 { return 5u64 }        /* exact quantum: GF(2) stabilizer + Toffoli/T magic */
+    if kl_selfprove() != 0u64 { return 6u64 }        /* perfectoid tilt (TILT) */
+    if leimma_selfprove() != 0u64 { return 7u64 }    /* homology: the REDUCE fold + the defect */
+    return 0u64
+}
+
+/* the organ runs itself -- no probe.  exit 0 = one fold, proven across the real organs of III. */
+fn main(argc: i32, argv: u64) -> u64 {
+    let _a : i32 = argc   let _v : u64 = argv
+    return symphysis_selfprove()
+}

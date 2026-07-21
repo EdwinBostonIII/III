@@ -1,0 +1,204 @@
+/* STDLIB/iii/omnia/zygos.iii -- ZYGOS (the balance): the organ that IS the verdict of whether a signed
+ * structure's frustration can be gauged away.  It does not perform a "balance check"; it embodies the balance.
+ *
+ * HONEST SCOPE (stated, not smuggled).  The general fermion sign problem is NP-hard (Troyer-Wiese, PRL 2005);
+ * NOTHING here touches that.  ZYGOS decides EXACTLY the GAUGE-REMOVABLE sub-case: a hopping model whose sign
+ * obstruction is an on-site +/-1 transformation c_i -> s_i c_i is sign-free iff its sign graph is BALANCED
+ * (Harary 1953).  Balance is a GF(2) fact: writing +/- as 0/1, the model is curable iff the system
+ *   for every edge uv:  x_u XOR x_v = b_uv
+ * is CONSISTENT.  Consistent -> the solution x IS the curing gauge.  Inconsistent -> a cycle with an odd number
+ * of negative edges IS the obstruction (a frustration no local gauge removes).
+ *
+ * THE DISCOVERY, HONESTLY MODEST.  For a specific non-obvious model, ZYGOS produces the SPECIFIC curing gauge or
+ * the SPECIFIC frustrated cycle -- a previously-unavailable object you can check by hand.  Case C's signs come
+ * from a multiplicative hash, so its verdict is COMPUTED, not constructed-in: neither author nor reader knows it
+ * until the fold speaks, and the witness is verified regardless.
+ *
+ * NO SELF-GRADING.  Two INDEPENDENT GF(2) methods must agree in every case: (1) constructive gauge propagation
+ * (gives the witness), (2) incidence-rank via PTYXIS's fold (pt_recognise_gf2) -- balanced iff rank[M|b]==rank[M].
+ * A witness is never trusted: a gauge is re-checked against every edge; a cycle is re-checked closed and negative.
+ * A FALSIFIER arm corrupts a gauge bit and demands the checker redden.  Self-reliant; exit code is the verdict.
+ * Composes omnia/ptyxis.  Ring R0. */
+module zygos
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn pt_recognise_gf2(ptr: u64, n: u64) -> u64 from "ptyxis.iii"
+
+const ZG_NV : u64 = 16u64                    /* a 4x4 grid: 16 sites, 24 bonds, 9 plaquettes */
+var ZG_EU : [u64; 64]   var ZG_EV : [u64; 64]   var ZG_EB : [u64; 64]   var ZG_NE : u64 = 0u64
+var ZG_X : [u64; 32]    var ZG_AS : [u64; 32]                          /* gauge + assigned flags */
+var ZG_PAR : [u64; 32]  var ZG_PE : [u64; 32]   var ZG_DEP : [u64; 32] /* spanning-tree back-pointers */
+var ZG_CYC : [u64; 64]  var ZG_NCYC : u64 = 0u64   var ZG_DEG : [u64; 32]
+var ZG_ROWS : [u64; 64]
+
+fn zg_pow2(k: u64) -> u64 { let mut r : u64 = 1u64   let mut i : u64 = 0u64   while i < k { r = r + r   i = i + 1u64 }   return r }
+fn zg_par(v0: u64) -> u64 { let mut v : u64 = v0   let mut p : u64 = 0u64   while v != 0u64 { p = p ^ (v & 1u64)   v = v >> 1u64 }   return p }
+fn zg_pu(v: u64) -> u32 { if v >= 10u64 { zg_pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn zg_ps(sp: u64) -> u32 { let p : *u8 = sp as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn zg_pbits(v: u64, n: u64) -> u32 { let mut i : u64 = 0u64   while i < n { putchar((48u64 + ((v >> i) & 1u64)) as i32)   i = i + 1u64 }   return 1u32 }
+
+fn zg_reset() -> i32 { ZG_NE = 0u64   return 0i32 }
+fn zg_add(u: u64, v: u64, b: u64) -> i32 { ZG_EU[ZG_NE] = u   ZG_EV[ZG_NE] = v   ZG_EB[ZG_NE] = b   ZG_NE = ZG_NE + 1u64   return 0i32 }
+
+fn zg_gsign(v: u64) -> u64 { return zg_par(v) }                                   /* a hidden gauge (index parity) */
+fn zg_hashsign(u: u64, v: u64) -> u64 { return zg_par(((u + 1u64) * (v + 1u64) * 2654435761u64) & 4294967295u64) }
+
+/* build the 4x4 grid.  mode 0: balanced (b = g_u XOR g_v).  mode 1: balanced then ONE bond flipped.  mode 2:
+ * signs from the multiplicative hash (verdict genuinely unknown until the fold decides). */
+fn zg_grid(mode: u64) -> i32 {
+    zg_reset()
+    let mut r : u64 = 0u64
+    while r < 4u64 {
+        let mut c : u64 = 0u64
+        while c < 4u64 {
+            let a : u64 = r * 4u64 + c
+            if c < 3u64 {
+                let mut bb : u64 = 0u64
+                if mode == 2u64 { bb = zg_hashsign(a, a + 1u64) } else { bb = zg_gsign(a) ^ zg_gsign(a + 1u64) }
+                zg_add(a, a + 1u64, bb)
+            }
+            if r < 3u64 {
+                let mut bb2 : u64 = 0u64
+                if mode == 2u64 { bb2 = zg_hashsign(a, a + 4u64) } else { bb2 = zg_gsign(a) ^ zg_gsign(a + 4u64) }
+                zg_add(a, a + 4u64, bb2)
+            }
+            c = c + 1u64
+        }
+        r = r + 1u64
+    }
+    if mode == 1u64 { ZG_EB[0] = ZG_EB[0] ^ 1u64 }                                /* inject one frustration */
+    return 0i32
+}
+
+/* METHOD 1 (constructive): propagate the gauge from site 0; record the spanning tree.  Returns #sites reached. */
+fn zg_assign() -> u64 {
+    let mut i : u64 = 0u64
+    while i < ZG_NV { ZG_AS[i] = 0u64   i = i + 1u64 }
+    ZG_X[0] = 0u64   ZG_AS[0] = 1u64   ZG_DEP[0] = 0u64   ZG_PAR[0] = 0u64   ZG_PE[0] = 999u64
+    let mut changed : u64 = 1u64
+    while changed == 1u64 {
+        changed = 0u64
+        let mut e : u64 = 0u64
+        while e < ZG_NE {
+            let u : u64 = ZG_EU[e]   let v : u64 = ZG_EV[e]   let b : u64 = ZG_EB[e]
+            if ZG_AS[u] == 1u64 { if ZG_AS[v] == 0u64 {
+                ZG_X[v] = ZG_X[u] ^ b   ZG_AS[v] = 1u64   ZG_PAR[v] = u   ZG_PE[v] = e   ZG_DEP[v] = ZG_DEP[u] + 1u64   changed = 1u64
+            } }
+            if ZG_AS[v] == 1u64 { if ZG_AS[u] == 0u64 {
+                ZG_X[u] = ZG_X[v] ^ b   ZG_AS[u] = 1u64   ZG_PAR[u] = v   ZG_PE[u] = e   ZG_DEP[u] = ZG_DEP[v] + 1u64   changed = 1u64
+            } }
+            e = e + 1u64
+        }
+    }
+    let mut cnt : u64 = 0u64   i = 0u64
+    while i < ZG_NV { if ZG_AS[i] == 1u64 { cnt = cnt + 1u64 }   i = i + 1u64 }
+    return cnt
+}
+/* re-check the gauge against EVERY edge (independent of how it was found): 0 = balanced, else 1+first bad edge */
+fn zg_check() -> u64 {
+    let mut e : u64 = 0u64
+    while e < ZG_NE { if (ZG_X[ZG_EU[e]] ^ ZG_X[ZG_EV[e]]) != ZG_EB[e] { return e + 1u64 }   e = e + 1u64 }
+    return 0u64
+}
+/* the fundamental cycle of a frustrated bond = that bond + the tree path between its ends */
+fn zg_extract_cycle(e0: u64) -> i32 {
+    ZG_NCYC = 0u64   ZG_CYC[ZG_NCYC] = e0   ZG_NCYC = ZG_NCYC + 1u64
+    let mut a : u64 = ZG_EU[e0]   let mut b : u64 = ZG_EV[e0]
+    while ZG_DEP[a] > ZG_DEP[b] { ZG_CYC[ZG_NCYC] = ZG_PE[a]   ZG_NCYC = ZG_NCYC + 1u64   a = ZG_PAR[a] }
+    while ZG_DEP[b] > ZG_DEP[a] { ZG_CYC[ZG_NCYC] = ZG_PE[b]   ZG_NCYC = ZG_NCYC + 1u64   b = ZG_PAR[b] }
+    while a != b {
+        ZG_CYC[ZG_NCYC] = ZG_PE[a]   ZG_NCYC = ZG_NCYC + 1u64   a = ZG_PAR[a]
+        ZG_CYC[ZG_NCYC] = ZG_PE[b]   ZG_NCYC = ZG_NCYC + 1u64   b = ZG_PAR[b]
+    }
+    return 0i32
+}
+fn zg_cycle_sign() -> u64 { let mut s : u64 = 0u64   let mut i : u64 = 0u64   while i < ZG_NCYC { s = s ^ ZG_EB[ZG_CYC[i]]   i = i + 1u64 }   return s }
+fn zg_cycle_closed() -> u64 {
+    let mut i : u64 = 0u64
+    while i < ZG_NV { ZG_DEG[i] = 0u64   i = i + 1u64 }
+    i = 0u64
+    while i < ZG_NCYC { let e : u64 = ZG_CYC[i]   ZG_DEG[ZG_EU[e]] = ZG_DEG[ZG_EU[e]] + 1u64   ZG_DEG[ZG_EV[e]] = ZG_DEG[ZG_EV[e]] + 1u64   i = i + 1u64 }
+    i = 0u64
+    while i < ZG_NV { if (ZG_DEG[i] & 1u64) == 1u64 { return 0u64 }   i = i + 1u64 }
+    return 1u64
+}
+/* METHOD 2 (independent): incidence-rank via PTYXIS.  balanced iff rank[M|b] == rank[M]. */
+fn zg_rank_plain() -> u64 { let mut e : u64 = 0u64   while e < ZG_NE { ZG_ROWS[e] = zg_pow2(ZG_EU[e]) ^ zg_pow2(ZG_EV[e])   e = e + 1u64 }   return pt_recognise_gf2((&ZG_ROWS) as u64, ZG_NE) }
+fn zg_rank_aug() -> u64 { let mut e : u64 = 0u64   while e < ZG_NE { ZG_ROWS[e] = zg_pow2(ZG_EU[e]) ^ zg_pow2(ZG_EV[e]) ^ (ZG_EB[e] * zg_pow2(20u64))   e = e + 1u64 }   return pt_recognise_gf2((&ZG_ROWS) as u64, ZG_NE) }
+fn zg_gaugeword() -> u64 { let mut w : u64 = 0u64   let mut i : u64 = 0u64   while i < ZG_NV { w = w ^ (ZG_X[i] * zg_pow2(i))   i = i + 1u64 }   return w }
+
+/* ================= THE VERDICT (the organ runs itself; exit 0 = the decider is sound + witnesses verified) === */
+fn zygos_selfprove() -> u64 @export {
+    /* ---- CASE A: balanced by construction -> a curing gauge exists and cures EVERY bond ---- */
+    zg_grid(0u64)
+    if zg_assign() != ZG_NV { return 1u64 }                      /* connected */
+    if zg_check() != 0u64 { return 2u64 }                        /* the gauge cures all 24 bonds (witness verified) */
+    if zg_rank_aug() != zg_rank_plain() { return 3u64 }          /* independent oracle: also balanced */
+    ZG_X[5] = ZG_X[5] ^ 1u64                                     /* FALSIFIER: corrupt one gauge bit ... */
+    if zg_check() == 0u64 { return 4u64 }                        /* ... the checker MUST catch it (teeth) */
+    ZG_X[5] = ZG_X[5] ^ 1u64
+
+    /* ---- CASE B: one bond flipped -> unbalanced, and the exhibited cycle is a VERIFIED negative cycle ---- */
+    zg_grid(1u64)
+    zg_assign()
+    let vB : u64 = zg_check()
+    if vB == 0u64 { return 5u64 }                                /* must now be unbalanced */
+    if zg_rank_aug() == zg_rank_plain() { return 6u64 }          /* independent oracle agrees: unbalanced */
+    zg_extract_cycle(vB - 1u64)
+    if zg_cycle_closed() != 1u64 { return 7u64 }                 /* the obstruction is a genuine closed cycle ... */
+    if zg_cycle_sign() != 1u64 { return 8u64 }                   /* ... with an odd # of negative bonds: frustration */
+
+    /* ---- CASE C: signs from a hash -> the verdict is COMPUTED, not pre-known; the witness is verified ---- */
+    zg_grid(2u64)
+    if zg_assign() != ZG_NV { return 9u64 }
+    let vC : u64 = zg_check()
+    let rp : u64 = zg_rank_plain()   let ra : u64 = zg_rank_aug()
+    if vC == 0u64 {
+        if ra != rp { return 10u64 }                             /* both methods say balanced */
+    } else {
+        if ra == rp { return 11u64 }                             /* both methods say unbalanced */
+        zg_extract_cycle(vC - 1u64)
+        if zg_cycle_closed() != 1u64 { return 12u64 }
+        if zg_cycle_sign() != 1u64 { return 13u64 }              /* the exhibited obstruction is verified negative */
+    }
+    return 0u64
+}
+
+fn zygos_show() -> i32 @export {
+    zg_ps("SIGN-PROBLEM DECIDER  (gauge-removable sub-case; Harary balance via the GF(2) fold)\n" as u64)
+    zg_ps("  scope: decides on-site +/-1 gauge-removability EXACTLY; makes NO claim on the NP-hard general case\n" as u64)
+    /* A */
+    zg_grid(0u64)   zg_assign()
+    zg_ps("[A] 4x4 grid, 24 bonds, balanced-by-construction:  curing gauge x = " as u64)   zg_pbits(zg_gaugeword(), 16u64)
+    zg_ps("  bonds-violated-under-gauge = " as u64)   zg_pu(zg_check())   zg_ps("  -> SIGN-FREE\n" as u64)
+    /* B */
+    zg_grid(1u64)   zg_assign()   let vB : u64 = zg_check()   zg_extract_cycle(vB - 1u64)
+    zg_ps("[B] one bond flipped -> UNBALANCED.  frustrated cycle (" as u64)   zg_pu(ZG_NCYC)   zg_ps(" bonds): " as u64)
+    let mut i : u64 = 0u64
+    while i < ZG_NCYC { let e : u64 = ZG_CYC[i]   zg_pu(ZG_EU[e])   zg_ps("-" as u64)   zg_pu(ZG_EV[e])   zg_ps(" " as u64)   i = i + 1u64 }
+    zg_ps(" sign(product)=" as u64)   if zg_cycle_sign() == 1u64 { zg_ps("NEGATIVE (verified)\n" as u64) } else { zg_ps("positive\n" as u64) }
+    /* C -- the genuine unknown */
+    zg_grid(2u64)   zg_assign()   let vC : u64 = zg_check()
+    let rp : u64 = zg_rank_plain()   let ra : u64 = zg_rank_aug()
+    zg_ps("[C] signs from multiplicative hash (verdict UNKNOWN until now):  " as u64)
+    if vC == 0u64 {
+        zg_ps("BALANCED -> SIGN-FREE.  discovered curing gauge x = " as u64)   zg_pbits(zg_gaugeword(), 16u64)
+        zg_ps("  (both fold-methods agree: rank " as u64)   zg_pu(ra)   zg_ps("==" as u64)   zg_pu(rp)   zg_ps(")\n" as u64)
+    } else {
+        zg_extract_cycle(vC - 1u64)
+        zg_ps("UNBALANCED -> NOT gauge-curable.  discovered frustrated cycle (" as u64)   zg_pu(ZG_NCYC)   zg_ps(" bonds): " as u64)
+        i = 0u64
+        while i < ZG_NCYC { let e : u64 = ZG_CYC[i]   zg_pu(ZG_EU[e])   zg_ps("-" as u64)   zg_pu(ZG_EV[e])   zg_ps(" " as u64)   i = i + 1u64 }
+        zg_ps(" sign=NEGATIVE(verified), independent rank " as u64)   zg_pu(ra)   zg_ps(">" as u64)   zg_pu(rp)   zg_ps("\n" as u64)
+    }
+    return 0i32
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let _a : i32 = argc   let _v : u64 = argv
+    zygos_show()
+    let r : u64 = zygos_selfprove()
+    zg_ps("zygos_selfprove = " as u64)   zg_pu(r)
+    if r == 0u64 { zg_ps("  GREEN: decider sound, both fold-methods agree, every witness verified.\n" as u64) } else { zg_ps("  (arm failed)\n" as u64) }
+    return r
+}

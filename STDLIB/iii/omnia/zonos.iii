@@ -1,0 +1,391 @@
+/* STDLIB/iii/omnia/zonos.iii -- ZONOS: AFFINE-FORM (zonotope) ARITHMETIC.  (M1, the named next stair.)
+ *
+ * The naive interval charges every operation's error as INDEPENDENT and worst-case, so correlated errors
+ * INFLATE instead of cancelling -- the layer-3 election explosion (SYNODOS: shadow 2^4, full straddle).
+ * The affine form fixes this at the representation: a value is an EXACT dyadic CENTER plus a sum of shared
+ * NOISE SYMBOLS,   x^ = x0 + Sum_i x_i * eps_i,   eps_i in [-1,1].  Two forms that share a symbol stay
+ * CORRELATED through every op, so  x^ - x^ = 0  EXACTLY (the eps_i coefficients cancel) where the interval
+ * gives radius 2r.  Linear ops (add/sub/scale) are exact and cancellation-preserving; a nonlinear op
+ * (mul) pushes its second-order residual to ONE fresh noise symbol (a rigorous bound).  zn_hull DEGRADES
+ * to an interval, so  exact  subset-of  zonos-hull  subset-of  old-interval  keeps every containment tooth
+ * biting -- ZONOS is not an island, it is the interval walk with the correlation kept.
+ *
+ * NIH: composes ONLY III's own dyadic-float arithmetic (peras pr_x_df*: signed-magnitude, directed rounding).
+ * Names are zn_-prefixed and DISTINCT from the compiler's affine-INDEX machinery (aff_/absint) -- different
+ * domain (numeric enclosure, not array-bounds), no conceptual or symbol collision.
+ * Determinism: integer/dyadic only; the noise-symbol counter is the only state.  Ring R0. */
+module zonos
+
+extern @abi(c-msvc-x64) fn pr_x_dfm() -> u64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_x_dfe() -> i64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_x_dfadd(ma: u64, ea: i64, mb: u64, eb: i64, up: u64) -> i32 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_x_dfsub(ma: u64, ea: i64, mb: u64, eb: i64, up: u64) -> i32 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_x_dfmul(ma: u64, ea: i64, mb: u64, eb: i64, up: u64) -> i32 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_x_dfcmp(ma: u64, ea: i64, mb: u64, eb: i64) -> i64 from "peras.iii"
+extern @abi(c-msvc-x64) fn pr_x_dfn2(hi: u64, lo: u64, eb: i64, up: u64) -> i32 from "peras.iii"
+
+const ZN_NZ_C : u64 = 32u64                 /* max noise symbols per form */
+/* 16 forms (0..13 caller, 14/15 reserved scratch for zn_mul) */
+var ZN_CS : [i64; 16]                       /* center sign  (0 = exact zero) */
+var ZN_CM : [u64; 16]                       /* center mantissa */
+var ZN_CE : [i64; 16]                       /* center exponent (value = sign * mant * 2^exp) */
+var ZN_NN : [u64; 16]                       /* live noise-term count */
+var ZN_TID : [u64; 512]                     /* term symbol id     [f*32+k] */
+var ZN_TS  : [i64; 512]                     /* term coeff sign */
+var ZN_TM  : [u64; 512]                     /* term coeff mantissa */
+var ZN_TE  : [i64; 512]                     /* term coeff exponent */
+var ZN_SYM : u64 = 0u64                     /* fresh noise-symbol counter (the only state) */
+var ZN_UB  : [u64; 32]                      /* merge marker (b-terms consumed) */
+
+/* signed-dyadic result of the last helper op */
+var ZN_RS : i64 = 0i64
+var ZN_RM : u64 = 0u64
+var ZN_RE : i64 = 0i64
+/* radius (magnitude) of the last zn_rad_of */
+var ZN_RADM : u64 = 0u64
+var ZN_RADE : i64 = 0i64
+
+/* ---- signed-dyadic arithmetic on top of the magnitude df ops ---- */
+fn zn_sd_add(sa: i64, ma: u64, ea: i64, sb: i64, mb: u64, eb: i64, up: u64) -> i32 {
+    if sa == 0i64 { ZN_RS = sb   ZN_RM = mb   ZN_RE = eb   return 0i32 }
+    if sb == 0i64 { ZN_RS = sa   ZN_RM = ma   ZN_RE = ea   return 0i32 }
+    if sa == sb {
+        pr_x_dfadd(ma, ea, mb, eb, up)
+        ZN_RS = sa   ZN_RM = pr_x_dfm()   ZN_RE = pr_x_dfe()
+        return 0i32
+    }
+    let c : i64 = pr_x_dfcmp(ma, ea, mb, eb)
+    if c == 0i64 { ZN_RS = 0i64   ZN_RM = 0u64   ZN_RE = 0i64   return 0i32 }   /* EXACT cancellation */
+    if c > 0i64 {
+        pr_x_dfsub(ma, ea, mb, eb, up)
+        ZN_RS = sa   ZN_RM = pr_x_dfm()   ZN_RE = pr_x_dfe()
+        return 0i32
+    }
+    pr_x_dfsub(mb, eb, ma, ea, up)
+    ZN_RS = sb   ZN_RM = pr_x_dfm()   ZN_RE = pr_x_dfe()
+    return 0i32
+}
+fn zn_sd_mul(sa: i64, ma: u64, ea: i64, sb: i64, mb: u64, eb: i64, up: u64) -> i32 {
+    if sa == 0i64 { ZN_RS = 0i64   ZN_RM = 0u64   ZN_RE = 0i64   return 0i32 }
+    if sb == 0i64 { ZN_RS = 0i64   ZN_RM = 0u64   ZN_RE = 0i64   return 0i32 }
+    pr_x_dfmul(ma, ea, mb, eb, up)
+    ZN_RM = pr_x_dfm()   ZN_RE = pr_x_dfe()
+    ZN_RS = 1i64
+    if sa != sb { ZN_RS = 0i64 - 1i64 }
+    return 0i32
+}
+
+/* normalize a raw m*2^e to the df form (top-bit-set mantissa) in ZN_RM/ZN_RE */
+fn zn_nz(m: u64, e: i64) -> i32 {
+    pr_x_dfn2(0u64, m, e, 0u64)
+    ZN_RM = pr_x_dfm()   ZN_RE = pr_x_dfe()
+    return 0i32
+}
+/* compare a df value (m,e) against a RAW literal (rm*2^re): -1/0/+1 */
+fn zn_cmp_raw(m: u64, e: i64, rm: u64, re: i64) -> i64 {
+    pr_x_dfn2(0u64, rm, re, 0u64)
+    return pr_x_dfcmp(m, e, pr_x_dfm(), pr_x_dfe())
+}
+
+/* ---- form construction ---- */
+fn zn_push(f: u64, id: u64, s: i64, m: u64, e: i64) -> i32 {
+    if s == 0i64 { return 0i32 }
+    let n : u64 = ZN_NN[f]
+    if n >= ZN_NZ_C { return 1i32 }
+    let b : u64 = f * ZN_NZ_C
+    ZN_TID[b + n] = id   ZN_TS[b + n] = s   ZN_TM[b + n] = m   ZN_TE[b + n] = e
+    ZN_NN[f] = n + 1u64
+    return 0i32
+}
+fn zn_reset() -> i32 @export {
+    ZN_SYM = 0u64
+    let mut f : u64 = 0u64
+    while f < 16u64 { ZN_CS[f] = 0i64   ZN_CM[f] = 0u64   ZN_CE[f] = 0i64   ZN_NN[f] = 0u64   f = f + 1u64 }
+    return 0i32
+}
+fn zn_center(f: u64, cs: i64, cm: u64, ce: i64) -> i32 @export {
+    ZN_CS[f] = cs   ZN_NN[f] = 0u64
+    if cs == 0i64 { ZN_CM[f] = 0u64   ZN_CE[f] = 0i64   return 0i32 }
+    zn_nz(cm, ce)   ZN_CM[f] = ZN_RM   ZN_CE[f] = ZN_RE   return 0i32
+}
+/* center + ONE fresh noise symbol of magnitude (rm,re) -- an interval turned affine form */
+fn zn_from_rad(f: u64, cs: i64, cm: u64, ce: i64, rm: u64, re: i64) -> i32 @export {
+    zn_center(f, cs, cm, ce)
+    if rm != 0u64 {
+        zn_nz(rm, re)
+        let id : u64 = ZN_SYM   ZN_SYM = ZN_SYM + 1u64   zn_push(f, id, 1i64, ZN_RM, ZN_RE)
+    }
+    return 0i32
+}
+/* push one more FRESH noise symbol onto a form; returns its id */
+fn zn_add_noise(f: u64, rm: u64, re: i64) -> u64 @export {
+    zn_nz(rm, re)
+    let id : u64 = ZN_SYM   ZN_SYM = ZN_SYM + 1u64   zn_push(f, id, 1i64, ZN_RM, ZN_RE)   return id
+}
+
+/* push a noise term with a CALLER-CHOSEN symbol id (raw magnitude, normalized) -- lets forms SHARE
+ * a symbol (correlation) so it cancels through the walk.  This is the seam's correlation carrier. */
+fn zn_push_ex(f: u64, id: u64, s: i64, m: u64, e: i64) -> i32 @export {
+    if s == 0i64 { return 0i32 }
+    zn_nz(m, e)
+    return zn_push(f, id, s, ZN_RM, ZN_RE)
+}
+/* THE SEAM (interval -> ZONOS): lift [lo,hi] to center=(lo+hi)/2 + one FRESH noise = (hi-lo)/2. */
+fn zn_lift_iv(f: u64, ls: i64, lm: u64, le: i64, hs: i64, hm: u64, he: i64) -> i32 @export {
+    zn_sd_add(hs, hm, he, ls, lm, le, 0u64)               /* hi + lo */
+    let cs : i64 = ZN_RS   let cm : u64 = ZN_RM   let ce : i64 = ZN_RE - 1i64   /* /2 (exact) */
+    zn_sd_add(hs, hm, he, 0i64 - ls, lm, le, 1u64)        /* hi - lo (>=0), rounded up */
+    let rm : u64 = ZN_RM   let re : i64 = ZN_RE - 1i64
+    ZN_CS[f] = cs   ZN_CM[f] = cm   ZN_CE[f] = ce   ZN_NN[f] = 0u64
+    if rm != 0u64 { let id : u64 = ZN_SYM   ZN_SYM = ZN_SYM + 1u64   zn_push(f, id, 1i64, rm, re) }
+    return 0i32
+}
+/* copy a form (dst gets src's center + every noise term) */
+fn zn_copy(dst: u64, src: u64) -> i32 @export {
+    ZN_CS[dst] = ZN_CS[src]   ZN_CM[dst] = ZN_CM[src]   ZN_CE[dst] = ZN_CE[src]   ZN_NN[dst] = 0u64
+    let bs : u64 = src * ZN_NZ_C
+    let mut k : u64 = 0u64
+    while k < ZN_NN[src] { zn_push(dst, ZN_TID[bs+k], ZN_TS[bs+k], ZN_TM[bs+k], ZN_TE[bs+k])   k = k + 1u64 }
+    return 0i32
+}
+
+/* ---- the affine operations (dst must differ from a and b, and from 14/15 in zn_mul) ---- */
+fn zn_add(dst: u64, a: u64, b: u64) -> i32 @export {
+    zn_sd_add(ZN_CS[a], ZN_CM[a], ZN_CE[a], ZN_CS[b], ZN_CM[b], ZN_CE[b], 0u64)
+    ZN_CS[dst] = ZN_RS   ZN_CM[dst] = ZN_RM   ZN_CE[dst] = ZN_RE
+    ZN_NN[dst] = 0u64
+    let ba : u64 = a * ZN_NZ_C
+    let bb : u64 = b * ZN_NZ_C
+    let mut j : u64 = 0u64
+    while j < ZN_NN[b] { ZN_UB[j] = 0u64   j = j + 1u64 }
+    let mut k : u64 = 0u64
+    while k < ZN_NN[a] {
+        let ida : u64 = ZN_TID[ba + k]
+        let mut found : u64 = 0u64
+        let mut bj : u64 = 0u64
+        j = 0u64
+        while j < ZN_NN[b] {
+            if ZN_TID[bb + j] == ida { found = 1u64   bj = j }
+            j = j + 1u64
+        }
+        if found == 1u64 {
+            zn_sd_add(ZN_TS[ba+k], ZN_TM[ba+k], ZN_TE[ba+k], ZN_TS[bb+bj], ZN_TM[bb+bj], ZN_TE[bb+bj], 1u64)
+            ZN_UB[bj] = 1u64
+            zn_push(dst, ida, ZN_RS, ZN_RM, ZN_RE)
+        }
+        if found == 0u64 { zn_push(dst, ida, ZN_TS[ba+k], ZN_TM[ba+k], ZN_TE[ba+k]) }
+        k = k + 1u64
+    }
+    j = 0u64
+    while j < ZN_NN[b] {
+        if ZN_UB[j] == 0u64 { zn_push(dst, ZN_TID[bb+j], ZN_TS[bb+j], ZN_TM[bb+j], ZN_TE[bb+j]) }
+        j = j + 1u64
+    }
+    return 0i32
+}
+/* dst = a - b : identical merge with b's signs negated (so shared symbols cancel) */
+fn zn_sub(dst: u64, a: u64, b: u64) -> i32 @export {
+    zn_sd_add(ZN_CS[a], ZN_CM[a], ZN_CE[a], 0i64 - ZN_CS[b], ZN_CM[b], ZN_CE[b], 0u64)
+    ZN_CS[dst] = ZN_RS   ZN_CM[dst] = ZN_RM   ZN_CE[dst] = ZN_RE
+    ZN_NN[dst] = 0u64
+    let ba : u64 = a * ZN_NZ_C
+    let bb : u64 = b * ZN_NZ_C
+    let mut j : u64 = 0u64
+    while j < ZN_NN[b] { ZN_UB[j] = 0u64   j = j + 1u64 }
+    let mut k : u64 = 0u64
+    while k < ZN_NN[a] {
+        let ida : u64 = ZN_TID[ba + k]
+        let mut found : u64 = 0u64
+        let mut bj : u64 = 0u64
+        j = 0u64
+        while j < ZN_NN[b] {
+            if ZN_TID[bb + j] == ida { found = 1u64   bj = j }
+            j = j + 1u64
+        }
+        if found == 1u64 {
+            zn_sd_add(ZN_TS[ba+k], ZN_TM[ba+k], ZN_TE[ba+k], 0i64 - ZN_TS[bb+bj], ZN_TM[bb+bj], ZN_TE[bb+bj], 1u64)
+            ZN_UB[bj] = 1u64
+            zn_push(dst, ida, ZN_RS, ZN_RM, ZN_RE)
+        }
+        if found == 0u64 { zn_push(dst, ida, ZN_TS[ba+k], ZN_TM[ba+k], ZN_TE[ba+k]) }
+        k = k + 1u64
+    }
+    j = 0u64
+    while j < ZN_NN[b] {
+        if ZN_UB[j] == 0u64 { zn_push(dst, ZN_TID[bb+j], 0i64 - ZN_TS[bb+j], ZN_TM[bb+j], ZN_TE[bb+j]) }
+        j = j + 1u64
+    }
+    return 0i32
+}
+/* dst = k * a  (scalar dyadic k = (ks,km,ke)); center and every coeff scaled -- exact, no new symbol */
+fn zn_scale(dst: u64, a: u64, ks: i64, km: u64, ke: i64) -> i32 @export {
+    zn_sd_mul(ZN_CS[a], ZN_CM[a], ZN_CE[a], ks, km, ke, 1u64)
+    ZN_CS[dst] = ZN_RS   ZN_CM[dst] = ZN_RM   ZN_CE[dst] = ZN_RE
+    ZN_NN[dst] = 0u64
+    let ba : u64 = a * ZN_NZ_C
+    let mut k : u64 = 0u64
+    while k < ZN_NN[a] {
+        zn_sd_mul(ZN_TS[ba+k], ZN_TM[ba+k], ZN_TE[ba+k], ks, km, ke, 1u64)
+        zn_push(dst, ZN_TID[ba+k], ZN_RS, ZN_RM, ZN_RE)
+        k = k + 1u64
+    }
+    return 0i32
+}
+/* radius = Sum |coeff|, rounded UP (sound); into ZN_RADM/ZN_RADE */
+fn zn_rad_of(f: u64) -> i32 @export {
+    let mut rm : u64 = 0u64
+    let mut re : i64 = 0i64
+    let mut has : u64 = 0u64
+    let bb : u64 = f * ZN_NZ_C
+    let mut k : u64 = 0u64
+    while k < ZN_NN[f] {
+        if ZN_TS[bb + k] != 0i64 {
+            let cm : u64 = ZN_TM[bb + k]
+            let ce : i64 = ZN_TE[bb + k]
+            /* accumulate-branch BEFORE init-branch: prevents same-iteration double count */
+            if has == 1u64 { pr_x_dfadd(rm, re, cm, ce, 1u64)   rm = pr_x_dfm()   re = pr_x_dfe() }
+            if has == 0u64 { rm = cm   re = ce   has = 1u64 }
+        }
+        k = k + 1u64
+    }
+    ZN_RADM = rm   ZN_RADE = re
+    return 0i32
+}
+/* hull endpoints (signed) into ZN_RS/ZN_RM/ZN_RE : center +/- radius, rounded outward */
+fn zn_hull_hi(f: u64) -> i32 @export {
+    zn_rad_of(f)
+    zn_sd_add(ZN_CS[f], ZN_CM[f], ZN_CE[f], 1i64, ZN_RADM, ZN_RADE, 1u64)
+    return 0i32
+}
+fn zn_hull_lo(f: u64) -> i32 @export {
+    zn_rad_of(f)
+    zn_sd_add(ZN_CS[f], ZN_CM[f], ZN_CE[f], 0i64 - 1i64, ZN_RADM, ZN_RADE, 1u64)
+    return 0i32
+}
+/* dst = a * b : center a0*b0 ; linear (a0*b_i + b0*a_i) ; one fresh symbol rad(a)*rad(b) (up) */
+fn zn_mul(dst: u64, a: u64, b: u64) -> i32 @export {
+    zn_rad_of(a)   let ram : u64 = ZN_RADM   let rae : i64 = ZN_RADE
+    zn_rad_of(b)   let rbm : u64 = ZN_RADM   let rbe : i64 = ZN_RADE
+    zn_scale(14u64, a, ZN_CS[b], ZN_CM[b], ZN_CE[b])
+    zn_scale(15u64, b, ZN_CS[a], ZN_CM[a], ZN_CE[a])
+    zn_add(dst, 14u64, 15u64)
+    zn_sd_mul(ZN_CS[a], ZN_CM[a], ZN_CE[a], ZN_CS[b], ZN_CM[b], ZN_CE[b], 1u64)
+    ZN_CS[dst] = ZN_RS   ZN_CM[dst] = ZN_RM   ZN_CE[dst] = ZN_RE
+    if ram != 0u64 {
+        if rbm != 0u64 {
+            pr_x_dfmul(ram, rae, rbm, rbe, 1u64)
+            let qm : u64 = pr_x_dfm()   let qe : i64 = pr_x_dfe()
+            let id : u64 = ZN_SYM   ZN_SYM = ZN_SYM + 1u64
+            zn_push(dst, id, 1i64, qm, qe)
+        }
+    }
+    return 0i32
+}
+/* dst = condense(a): keep the first `keep` symbols, aggregate the rest's magnitude into ONE fresh
+ * symbol (sound: the aggregate bounds the dropped terms; bounds the symbol count for a deep walk) */
+fn zn_condense(dst: u64, a: u64, keep: u64) -> i32 @export {
+    ZN_CS[dst] = ZN_CS[a]   ZN_CM[dst] = ZN_CM[a]   ZN_CE[dst] = ZN_CE[a]   ZN_NN[dst] = 0u64
+    let ba : u64 = a * ZN_NZ_C
+    let mut k : u64 = 0u64
+    while k < ZN_NN[a] {
+        if k < keep { zn_push(dst, ZN_TID[ba+k], ZN_TS[ba+k], ZN_TM[ba+k], ZN_TE[ba+k]) }
+        k = k + 1u64
+    }
+    let mut sm : u64 = 0u64
+    let mut se : i64 = 0i64
+    let mut has : u64 = 0u64
+    k = keep
+    while k < ZN_NN[a] {
+        if ZN_TS[ba+k] != 0i64 {
+            let cm : u64 = ZN_TM[ba+k]
+            let ce : i64 = ZN_TE[ba+k]
+            if has == 1u64 { pr_x_dfadd(sm, se, cm, ce, 1u64)   sm = pr_x_dfm()   se = pr_x_dfe() }
+            if has == 0u64 { sm = cm   se = ce   has = 1u64 }
+        }
+        k = k + 1u64
+    }
+    if has == 1u64 { let id : u64 = ZN_SYM   ZN_SYM = ZN_SYM + 1u64   zn_push(dst, id, 1i64, sm, se) }
+    return 0i32
+}
+/* readers */
+fn zn_nn(f: u64) -> u64 @export { return ZN_NN[f] }
+fn zn_rs() -> i64 @export { return ZN_RS }
+fn zn_rm() -> u64 @export { return ZN_RM }
+fn zn_re() -> i64 @export { return ZN_RE }
+fn zn_center_m(f: u64) -> u64 @export { return ZN_CM[f] }
+fn zn_center_s(f: u64) -> i64 @export { return ZN_CS[f] }
+fn zn_rad_m(f: u64) -> u64 @export { zn_rad_of(f)   return ZN_RADM }
+fn zn_radm_v() -> u64 @export { return ZN_RADM }        /* last radius mantissa (no recompute) */
+fn zn_rade_v() -> i64 @export { return ZN_RADE }        /* last radius exponent (no recompute) */
+
+/* ================= THE GATE (pure, RED->GREEN, negatives, deterministic) =================
+ * All values exact small dyadics (exp 0) so every op is exact -- the teeth are rigorous.
+ * Returns 0 green, else the failing arm code. */
+fn zn_selfprove() -> u64 @export {
+    /* ARM 1 -- CANCELLATION (the whole point): x - x = 0 EXACTLY (radius 0), where an interval
+     * would give radius 2.  x = 0 + eps0*1.  (df mantissas are NORMALIZED -> compare by VALUE.) */
+    zn_reset()
+    zn_from_rad(0u64, 0i64, 0u64, 0i64, 1u64, 0i64)   /* x = 0 +- 1 (symbol 0) */
+    zn_sub(2u64, 0u64, 0u64)
+    if zn_nn(2u64) != 0u64 { return 1u64 }             /* the shared symbol cancelled: no terms */
+    zn_rad_of(2u64)
+    if ZN_RADM != 0u64 { return 2u64 }                 /* radius exactly 0 (value 0 -> mantissa 0) */
+
+    /* ARM 2 -- CORRELATED: (a + b) - a = b EXACTLY (interval would inflate to 3).
+     * a = 2 +- 1 (sym0),  b = 3 +- 1 (sym1). */
+    zn_reset()
+    zn_from_rad(0u64, 1i64, 2u64, 0i64, 1u64, 0i64)    /* a */
+    zn_from_rad(1u64, 1i64, 3u64, 0i64, 1u64, 0i64)    /* b */
+    zn_add(2u64, 0u64, 1u64)                            /* t = a + b = 5 + e0 + e1 */
+    zn_sub(3u64, 2u64, 0u64)                            /* r = t - a should be b */
+    if ZN_CS[3u64] != 1i64 { return 3u64 }
+    if zn_cmp_raw(ZN_CM[3u64], ZN_CE[3u64], 3u64, 0i64) != 0i64 { return 3u64 }   /* center = 3 (= b) */
+    if zn_nn(3u64) != 1u64 { return 4u64 }             /* only sym1 survives (sym0 cancelled) */
+    zn_rad_of(3u64)
+    if zn_cmp_raw(ZN_RADM, ZN_RADE, 1u64, 0i64) != 0i64 { return 5u64 }           /* radius 1, not 3 */
+
+    /* ARM 3 -- SOUNDNESS / HULL: x = 5 +- (2 eps0 + 3 eps1); true range [0,10]. */
+    zn_reset()
+    zn_from_rad(0u64, 1i64, 5u64, 0i64, 2u64, 0i64)    /* center 5, sym0 coeff 2 */
+    zn_add_noise(0u64, 3u64, 0i64)                      /* sym1 coeff 3 */
+    zn_hull_hi(0u64)
+    if ZN_RS != 1i64 { return 6u64 }
+    if zn_cmp_raw(ZN_RM, ZN_RE, 10u64, 0i64) != 0i64 { return 7u64 }              /* hull_hi = 10 */
+    zn_hull_lo(0u64)
+    if ZN_RM != 0u64 { return 8u64 }                   /* hull_lo = 0 */
+
+    /* ARM 4 -- INDEPENDENT NO-CANCEL (mandatory negative): distinct symbols must NOT cancel.
+     * x = 0 + eps0*1 ; z = 0 + eps1*1 (independent) ; x - z keeps BOTH -> radius 2, not 0. */
+    zn_reset()
+    zn_from_rad(0u64, 0i64, 0u64, 0i64, 1u64, 0i64)    /* sym0 */
+    zn_from_rad(1u64, 0i64, 0u64, 0i64, 1u64, 0i64)    /* sym1 (fresh, distinct) */
+    zn_sub(2u64, 0u64, 1u64)
+    if zn_nn(2u64) != 2u64 { return 9u64 }             /* both survive -- no false cancellation */
+    zn_rad_of(2u64)
+    if zn_cmp_raw(ZN_RADM, ZN_RADE, 2u64, 0i64) != 0i64 { return 10u64 }          /* radius 2, not 0 */
+
+    /* ARM 5 -- MUL residual bounded + hull contains the true square.  x = 3 +- 1 (x in [2,4]);
+     * x*x center 9, linear 6*eps0, fresh residual eps_new*1 -> hull [2,16] contains x^2 in [4,16]. */
+    zn_reset()
+    zn_from_rad(0u64, 1i64, 3u64, 0i64, 1u64, 0i64)
+    zn_mul(2u64, 0u64, 0u64)
+    if ZN_CS[2u64] != 1i64 { return 11u64 }
+    if zn_cmp_raw(ZN_CM[2u64], ZN_CE[2u64], 9u64, 0i64) != 0i64 { return 11u64 }  /* center 3*3 = 9 */
+    zn_hull_hi(2u64)
+    if zn_cmp_raw(ZN_RM, ZN_RE, 16u64, 0i64) < 0i64 { return 12u64 }              /* hull_hi >= 16 */
+    zn_hull_lo(2u64)
+    if ZN_RS != 0i64 { if zn_cmp_raw(ZN_RM, ZN_RE, 4u64, 0i64) > 0i64 { return 13u64 } }  /* hull_lo <= 4 */
+
+    /* ARM 6 -- CONDENSATION sound: 4 unit symbols (radius 4) condensed to keep=1 -> 1 kept + 1
+     * aggregate = radius 4 preserved (the aggregate bounds the dropped terms). */
+    zn_reset()
+    zn_from_rad(0u64, 0i64, 0u64, 0i64, 1u64, 0i64)
+    zn_add_noise(0u64, 1u64, 0i64)
+    zn_add_noise(0u64, 1u64, 0i64)
+    zn_add_noise(0u64, 1u64, 0i64)                      /* 4 unit symbols, radius 4 */
+    zn_condense(2u64, 0u64, 1u64)
+    if zn_nn(2u64) != 2u64 { return 14u64 }            /* 1 kept + 1 aggregate */
+    zn_rad_of(2u64)
+    if zn_cmp_raw(ZN_RADM, ZN_RADE, 4u64, 0i64) != 0i64 { return 15u64 }          /* radius preserved */
+    return 0u64
+}

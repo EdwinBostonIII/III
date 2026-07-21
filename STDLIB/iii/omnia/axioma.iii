@@ -1,0 +1,174 @@
+/* STDLIB/iii/omnia/axioma.iii -- AXIOMA: the RIGOROUS reason the fold unifies fields, made a condition of motion.
+ *
+ * Last session I claimed linear algebra, coding theory, graph theory, and homology are "the same fold."  The
+ * honest, load-bearing reason is a theorem, not a metaphor: linear RANK over ANY field satisfies the MATROID
+ * RANK AXIOMS, and matroid theory (Whitney, 1935) is *precisely* the abstract structure those fields share.  So
+ * the fold's rank being a matroid rank function is WHY they unify -- and that is checkable, not assertable.
+ *
+ * The rank axioms (cryptomorphic to the matroid definition), for a rank function r on subsets of a ground set:
+ *   (R1)  r(empty) = 0.
+ *   (R2)  unit increase:   r(A) <= r(A u {x}) <= r(A) + 1.
+ *   (R3)  local submodular: r(A u {x}) = r(A) and r(A u {y}) = r(A)  =>  r(A u {x,y}) = r(A).
+ * AXIOMA verifies R1-R3 hold for the fold's rank over BOTH GF(2) (PTYXIS's pt_recognise_gf2) and GF(p) (gfp's
+ * gp_rank_mod), across hundreds of deterministic-random instances -- and asserts R3's antecedent actually FIRES
+ * (non-vacuity).  Then a weight-matrix demo: exact rank certified by TWO primes = the rank over Q, tolerance-free,
+ * where floating-point numerical rank needs an arbitrary epsilon.  Deterministic (splitmix64, no true RNG).
+ *
+ * Composes omnia/ptyxis (GF(2) rank) + omnia/gfp (GF(p) rank).  Self-reliant; exit code is the verdict.  R0. */
+module axioma
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn pt_recognise_gf2(ptr: u64, n: u64) -> u64 from "ptyxis.iii"
+extern @abi(c-msvc-x64) fn gp_rank_mod(ptr: u64, nr: u64, nc: u64, p: u64) -> u64 from "gfp.iii"
+extern @abi(c-msvc-x64) fn gfp_selfprove() -> u64 from "gfp.iii"
+
+const AX_P : u64 = 2147483647u64
+const AX_Q : u64 = 2147483629u64
+var AX_V : [u64; 8]        var AX_ROWS : [u64; 8]                  /* GF(2) ground vectors + scratch */
+var AX_PV : [u64; 32]      var AX_PROWS : [u64; 32]               /* GF(p) ground vectors (width 3) + scratch */
+var AX_W : [u64; 64]                                              /* the weight matrix */
+var AX_GF2_TRIG : u64 = 0u64     var AX_GFP_TRIG : u64 = 0u64     /* R3-antecedent fire counters (non-vacuity) */
+
+fn ax_pow2(k: u64) -> u64 { let mut r : u64 = 1u64   let mut i : u64 = 0u64   while i < k { r = r + r   i = i + 1u64 }   return r }
+fn ax_mix(s: u64) -> u64 {
+    let mut z : u64 = s + 11400714819323198485u64
+    z = (z ^ (z >> 30u64)) * 13787848793156543929u64
+    z = (z ^ (z >> 27u64)) * 10723151780598845931u64
+    return z ^ (z >> 31u64)
+}
+fn ax_pu(v: u64) -> u32 { if v >= 10u64 { ax_pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn ax_ps(sp: u64) -> u32 { let p : *u8 = sp as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+
+fn ax_gf2_rank(mask: u64, n: u64) -> u64 {
+    let mut cnt : u64 = 0u64   let mut i : u64 = 0u64
+    while i < n { if ((mask >> i) & 1u64) == 1u64 { AX_ROWS[cnt] = AX_V[i]   cnt = cnt + 1u64 }   i = i + 1u64 }
+    return pt_recognise_gf2((&AX_ROWS) as u64, cnt)
+}
+fn ax_gfp_rank(mask: u64, n: u64) -> u64 {
+    let mut cnt : u64 = 0u64   let mut i : u64 = 0u64
+    while i < n {
+        if ((mask >> i) & 1u64) == 1u64 {
+            let mut c : u64 = 0u64
+            while c < 3u64 { AX_PROWS[cnt * 3u64 + c] = AX_PV[i * 3u64 + c]   c = c + 1u64 }
+            cnt = cnt + 1u64
+        }
+        i = i + 1u64
+    }
+    return gp_rank_mod((&AX_PROWS) as u64, cnt, 3u64, AX_P)
+}
+
+/* R1-R3 for the GF(2) fold over 300 deterministic-random ground sets (6 vectors in GF(2)^4). */
+fn ax_gf2_axioms() -> u64 {
+    let N : u64 = 6u64
+    if ax_gf2_rank(0u64, N) != 0u64 { return 1u64 }                       /* R1 */
+    AX_GF2_TRIG = 0u64
+    let mut seed : u64 = 2863311530u64
+    let mut t : u64 = 0u64
+    while t < 300u64 {
+        let mut i : u64 = 0u64
+        while i < N { seed = seed + 1u64   AX_V[i] = ax_mix(seed) & 15u64   i = i + 1u64 }   /* GF(2)^4 */
+        seed = seed + 1u64   let amask : u64 = ax_mix(seed) & (ax_pow2(N) - 1u64)
+        seed = seed + 1u64   let x : u64 = ax_mix(seed) % N
+        seed = seed + 1u64   let y : u64 = ax_mix(seed) % N
+        let rA : u64 = ax_gf2_rank(amask, N)
+        let rAx : u64 = ax_gf2_rank(amask | ax_pow2(x), N)
+        let rAy : u64 = ax_gf2_rank(amask | ax_pow2(y), N)
+        let rAxy : u64 = ax_gf2_rank(amask | ax_pow2(x) | ax_pow2(y), N)
+        if rAx < rA { return 2u64 }                                       /* R2 monotone */
+        if rAx > rA + 1u64 { return 3u64 }                                /* R2 unit increase */
+        if rAy < rA { return 4u64 }
+        if rAy > rA + 1u64 { return 5u64 }
+        if rAx == rA { if rAy == rA {                                     /* R3 antecedent */
+            AX_GF2_TRIG = AX_GF2_TRIG + 1u64
+            if rAxy != rA { return 6u64 }                                 /* R3 conclusion */
+        } }
+        t = t + 1u64
+    }
+    return 0u64
+}
+/* R1-R3 for the GF(p) fold over 300 deterministic-random ground sets (6 vectors in GF(p)^3). */
+fn ax_gfp_axioms() -> u64 {
+    let N : u64 = 6u64
+    if ax_gfp_rank(0u64, N) != 0u64 { return 1u64 }                       /* R1 */
+    AX_GFP_TRIG = 0u64
+    let mut seed : u64 = 305419896u64
+    let mut t : u64 = 0u64
+    while t < 300u64 {
+        let mut i : u64 = 0u64
+        while i < N {
+            let mut c : u64 = 0u64
+            while c < 3u64 { seed = seed + 1u64   AX_PV[i * 3u64 + c] = ax_mix(seed) % AX_P   c = c + 1u64 }
+            i = i + 1u64
+        }
+        seed = seed + 1u64   let amask : u64 = ax_mix(seed) & (ax_pow2(N) - 1u64)
+        seed = seed + 1u64   let x : u64 = ax_mix(seed) % N
+        seed = seed + 1u64   let y : u64 = ax_mix(seed) % N
+        let rA : u64 = ax_gfp_rank(amask, N)
+        let rAx : u64 = ax_gfp_rank(amask | ax_pow2(x), N)
+        let rAy : u64 = ax_gfp_rank(amask | ax_pow2(y), N)
+        let rAxy : u64 = ax_gfp_rank(amask | ax_pow2(x) | ax_pow2(y), N)
+        if rAx < rA { return 2u64 }
+        if rAx > rA + 1u64 { return 3u64 }
+        if rAy < rA { return 4u64 }
+        if rAy > rA + 1u64 { return 5u64 }
+        if rAx == rA { if rAy == rA {
+            AX_GFP_TRIG = AX_GFP_TRIG + 1u64
+            if rAxy != rA { return 6u64 }
+        } }
+        t = t + 1u64
+    }
+    return 0u64
+}
+/* build a 6x6 integer weight matrix of EXACT rank 4 (rows 4,5 are exact integer combinations of rows 0..3) */
+fn ax_build_weight() -> i32 {
+    let mut i : u64 = 0u64   while i < 36u64 { AX_W[i] = 0u64   i = i + 1u64 }
+    /* rows 0..3: identity block (cols 0..3) + a tail (cols 4,5) -> independent */
+    AX_W[0] = 1u64   AX_W[4] = 7u64   AX_W[5] = 3u64                       /* r0 = (1,0,0,0,7,3) */
+    AX_W[7] = 1u64   AX_W[10] = 2u64  AX_W[11] = 9u64                      /* r1 = (0,1,0,0,2,9) */
+    AX_W[14] = 1u64  AX_W[16] = 5u64  AX_W[17] = 1u64                      /* r2 = (0,0,1,0,5,1) */
+    AX_W[21] = 1u64  AX_W[22] = 4u64  AX_W[23] = 6u64                      /* r3 = (0,0,0,1,4,6) */
+    AX_W[24] = 2u64  AX_W[25] = 3u64  AX_W[28] = 20u64  AX_W[29] = 33u64   /* r4 = 2*r0 + 3*r1 */
+    AX_W[32] = 1u64  AX_W[33] = 1u64  AX_W[34] = 9u64   AX_W[35] = 7u64    /* r5 = r2 + r3 */
+    return 0i32
+}
+
+/* ================= THE GATE ================= */
+fn axioma_selfprove() -> u64 @export {
+    if gfp_selfprove() != 0u64 { return 5u64 }                            /* the composed GF(p) engine is sound */
+    let g2 : u64 = ax_gf2_axioms()
+    if g2 != 0u64 { return 10u64 + g2 }                                   /* GF(2) rank IS a matroid rank fn */
+    if AX_GF2_TRIG < 20u64 { return 19u64 }                               /* R3 non-vacuous (fired >= 20x) */
+    let gp : u64 = ax_gfp_axioms()
+    if gp != 0u64 { return 20u64 + gp }                                   /* GF(p) rank IS a matroid rank fn */
+    if AX_GFP_TRIG < 20u64 { return 29u64 }                               /* R3 non-vacuous */
+    /* WEIGHT MATRIX: exact rank certified by two primes = rank over Q (tolerance-free) */
+    ax_build_weight()
+    if gp_rank_mod((&AX_W) as u64, 6u64, 6u64, AX_P) != 4u64 { return 30u64 }
+    if gp_rank_mod((&AX_W) as u64, 6u64, 6u64, AX_Q) != 4u64 { return 31u64 }   /* both primes agree -> rank 4/Q */
+    return 0u64
+}
+
+fn axioma_show() -> i32 @export {
+    ax_ps("WHY THE FIELDS UNIFY: linear rank over any field is a MATROID rank function (Whitney 1935).\n" as u64)
+    ax_ps("  verifying R1 r(empty)=0, R2 r(A)<=r(A+x)<=r(A)+1, R3 local-submodular -- for the fold's rank:\n" as u64)
+    let g2 : u64 = ax_gf2_axioms()
+    ax_ps("  GF(2)  (pt_recognise_gf2): 300 random sets, axioms " as u64)   if g2 == 0u64 { ax_ps("HOLD" as u64) } else { ax_ps("FAIL" as u64) }
+    ax_ps("   (R3 fired " as u64)   ax_pu(AX_GF2_TRIG)   ax_ps("x, non-vacuous)\n" as u64)
+    let gp : u64 = ax_gfp_axioms()
+    ax_ps("  GF(p)  (gp_rank_mod, p=2^31-1): 300 random sets, axioms " as u64)   if gp == 0u64 { ax_ps("HOLD" as u64) } else { ax_ps("FAIL" as u64) }
+    ax_ps("   (R3 fired " as u64)   ax_pu(AX_GFP_TRIG)   ax_ps("x)\n" as u64)
+    ax_build_weight()
+    ax_ps("WEIGHT MATRIX (6x6, exact hidden rank 4): rank over p=" as u64)   ax_pu(gp_rank_mod((&AX_W) as u64, 6u64, 6u64, AX_P))
+    ax_ps(", over q=" as u64)   ax_pu(gp_rank_mod((&AX_W) as u64, 6u64, 6u64, AX_Q))
+    ax_ps("  -> two primes agree => rank over Q = 4, CERTIFIED (float needs an epsilon; this needs none)\n" as u64)
+    return 0i32
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let _a : i32 = argc   let _v : u64 = argv
+    axioma_show()
+    let r : u64 = axioma_selfprove()
+    ax_ps("axioma_selfprove = " as u64)   ax_pu(r)
+    if r == 0u64 { ax_ps("  GREEN: the fold's rank is a matroid rank function over GF(2) AND GF(p); exact rank certified.\n" as u64) } else { ax_ps("  (arm failed)\n" as u64) }
+    return r
+}

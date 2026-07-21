@@ -1,0 +1,105 @@
+/* STDLIB/iii/omnia/kquant.iii -- KQUANT: III-native exact dequantization of K-quant GGUF weights.
+ *
+ * A K-quantized weight is d*sc*q - dmin*m, where d,dmin are IEEE fp16 (every finite fp16 is EXACTLY a dyadic
+ * rational, value = mantissa * 2^-24), sc,m are 6-bit sub-block scales, q a 4-bit quant.  So the dequantized
+ * weight is EXACTLY a dyadic rational, and its integer mantissa (weight * 2^24) is computed with no rounding.
+ * That makes exact linear algebra on real quantized weights possible with ZERO quantization artifact.
+ *
+ * This re-derives the Q4_K law as III's own (the algorithm is the one metabole proved with two independent
+ * engines; here it is a clean, reusable, gated primitive).  A hand-built KAT verifies the full path
+ * (fp16 decode + 6-bit scale unpack + 4-bit quant -> mantissa).  Ring R0. */
+module kquant
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+var KQ_SC : u64 = 0u64   var KQ_SM : u64 = 0u64   var KQ_TEST : [u8; 256]   var KQ_OUT : [i64; 256]
+
+fn kq_pow2(k: u64) -> u64 { let mut r : u64 = 1u64   let mut i : u64 = 0u64   while i < k { r = r + r   i = i + 1u64 }   return r }
+fn kq_pu(v: u64) -> u32 { if v >= 10u64 { kq_pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn kq_ps(sp: u64) -> u32 { let p : *u8 = sp as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+
+/* signed mantissa of a finite fp16: value = result * 2^-24.  Nonfinite -> 0 (real K-quant scales are finite). */
+fn kq_f16_mant(bits: u64) -> i64 @export {
+    let s : u64 = (bits >> 15u64) & 1u64
+    let e : u64 = (bits >> 10u64) & 31u64
+    let m : u64 = bits & 1023u64
+    if e == 31u64 { return 0i64 }
+    let mut mag : i64 = 0i64
+    if e == 0u64 { mag = m as i64 } else { mag = ((1024u64 + m) * kq_pow2(e - 1u64)) as i64 }
+    if s == 1u64 { return 0i64 - mag }
+    return mag
+}
+/* Q4_K 6-bit sub-block scale/min unpack (the packed law), scales at BLK[4..15] */
+fn kq_scale(blk: u64, j: u64) -> i32 {
+    let b : *u8 = blk as *u8
+    if j < 4u64 { KQ_SC = (b[4u64 + j] as u64) & 63u64   KQ_SM = (b[8u64 + j] as u64) & 63u64   return 0i32 }
+    let sj4 : u64 = b[4u64 + j + 4u64] as u64
+    let sjm4 : u64 = b[4u64 + j - 4u64] as u64
+    let sj : u64 = b[4u64 + j] as u64
+    KQ_SC = (sj4 & 15u64) | ((sjm4 >> 6u64) << 4u64)
+    KQ_SM = (sj4 >> 4u64) | ((sj >> 6u64) << 4u64)
+    return 0i32
+}
+/* decode one 144-byte Q4_K block at `blk` into 256 exact mantissas at `out` (i64; weight = mant * 2^-24) */
+fn kq_dec_q4k(blk: u64, out: u64) -> i32 @export {
+    let b : *u8 = blk as *u8
+    let o : *i64 = out as *i64
+    let dbits : u64 = (b[0] as u64) | ((b[1] as u64) << 8u64)
+    let mbits : u64 = (b[2] as u64) | ((b[3] as u64) << 8u64)
+    let md : i64 = kq_f16_mant(dbits)
+    let mdm : i64 = kq_f16_mant(mbits)
+    let mut t : u64 = 0u64
+    while t < 4u64 {
+        let mut half : u64 = 0u64
+        while half < 2u64 {
+            let j : u64 = t * 2u64 + half
+            kq_scale(blk, j)
+            let sc : i64 = KQ_SC as i64   let mn : i64 = KQ_SM as i64
+            let mut l : u64 = 0u64
+            while l < 32u64 {
+                let raw : u64 = b[16u64 + t * 32u64 + l] as u64
+                let mut q : u64 = raw & 15u64
+                if half == 1u64 { q = raw >> 4u64 }
+                let x : i64 = sc * (q as i64)
+                o[t * 64u64 + half * 32u64 + l] = md * x - mdm * mn
+                l = l + 1u64
+            }
+            half = half + 1u64
+        }
+        t = t + 1u64
+    }
+    return 0i32
+}
+
+/* ================= THE GATE ================= */
+fn kquant_selfprove() -> u64 @export {
+    /* fp16 KATs: value * 2^24 */
+    if kq_f16_mant(15360u64) != 16777216i64 { return 1u64 }        /* 0x3C00 = 1.0  -> 2^24 */
+    if kq_f16_mant(14336u64) != 8388608i64 { return 2u64 }         /* 0x3800 = 0.5  -> 2^23 */
+    if kq_f16_mant(16384u64) != 33554432i64 { return 3u64 }        /* 0x4000 = 2.0  -> 2^25 */
+    if kq_f16_mant(48128u64) != (0i64 - 16777216i64) { return 4u64 }  /* 0xBC00 = -1.0 */
+    if kq_f16_mant(0u64) != 0i64 { return 5u64 }                   /* +0 */
+
+    /* Q4_K block KAT: d=1.0, dmin=0, all sub-blocks sc=1 mn=0, every quant byte 0x53 (low nibble 3, high 5).
+     * Then mant = md*(sc*q) - mdm*mn = 2^24 * q; low-nibble halves -> 3*2^24, high-nibble halves -> 5*2^24. */
+    let mut i : u64 = 0u64   while i < 144u64 { KQ_TEST[i] = 0u8   i = i + 1u64 }
+    KQ_TEST[0] = 0u8   KQ_TEST[1] = 60u8                            /* d = 0x3C00 = 1.0 */
+    KQ_TEST[4] = 1u8   KQ_TEST[5] = 1u8   KQ_TEST[6] = 1u8   KQ_TEST[7] = 1u8      /* scales[0..3]=1 -> sc(j<4) */
+    KQ_TEST[8] = 0u8   KQ_TEST[9] = 0u8   KQ_TEST[10] = 0u8  KQ_TEST[11] = 0u8     /* scales[4..7]=0 -> mn(j<4) */
+    KQ_TEST[12] = 1u8  KQ_TEST[13] = 1u8  KQ_TEST[14] = 1u8  KQ_TEST[15] = 1u8     /* scales[8..11]=1 -> sc(j>=4) */
+    i = 16u64   while i < 144u64 { KQ_TEST[i] = 83u8   i = i + 1u64 }              /* qs = 0x53 */
+    kq_dec_q4k((&KQ_TEST) as u64, (&KQ_OUT) as u64)
+    if KQ_OUT[0] != 50331648i64 { return 6u64 }                    /* 3 * 2^24 (t0 half0 l0) */
+    if KQ_OUT[32] != 83886080i64 { return 7u64 }                   /* 5 * 2^24 (t0 half1 l0) */
+    if KQ_OUT[64] != 50331648i64 { return 8u64 }                   /* 3 * 2^24 (t1 half0 l0) */
+    if KQ_OUT[255] != 83886080i64 { return 9u64 }                  /* 5 * 2^24 (t3 half1 l31) */
+    /* sub-block j>=4 path exercised too (t2,t3 use j=4..7); all gave sc=1 -> correct */
+
+    /* NEGATIVE: a different d scales the whole block; d=2.0 -> mant doubles (proves d is load-bearing) */
+    KQ_TEST[0] = 0u8   KQ_TEST[1] = 64u8                            /* d = 0x4000 = 2.0 */
+    kq_dec_q4k((&KQ_TEST) as u64, (&KQ_OUT) as u64)
+    if KQ_OUT[0] != 100663296i64 { return 10u64 }                  /* 3 * 2^25 = 2 * (3*2^24) */
+    return 0u64
+}
+
+fn main(argc: i32, argv: u64) -> u64 { let _a : i32 = argc   let _v : u64 = argv   return kquant_selfprove() }

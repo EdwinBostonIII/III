@@ -1,0 +1,222 @@
+/* STDLIB/iii/omnia/aporia.iii -- APORIA (ἀπορία, the impasse): real snarkjs-R1CS under-constraint refutation with
+ * the FULL QUADRATIC ARBITER.  Where elenchos handles the linear subclass, APORIA eats the ACTUAL snarkjs r1cs.json
+ * (constraints = [A,B,C] maps of {wireIndex: coefficient-decimal-string}, semantics <A,w>*<B,w> = <C,w>, wire 0 =
+ * the constant 1) and decides soundly over the real BN254 field.
+ *
+ * WHY AN ARBITER (the deep-think correction): you CANNOT soundly detect under-constraint from the linear part
+ * alone -- a quadratic constraint can pin a linearly-free wire.  So: PROPOSE a free direction cheaply (perturb a
+ * private wire), then CONFIRM it against the FULL constraint set (quadratic included) evaluated exactly over
+ * BN254.  A candidate is a real forgery ONLY if a genuinely-distinct witness satisfies EVERY constraint.  This is
+ * muse-proposes / law-decides: the arbiter is the law, and it rejects the linear-only false positives.
+ *
+ * Composes verba/json (the ingester) + numera/bigint(+div) + memoria/arena.  Self-contained; does not touch the
+ * concurrent elenchos.iii.  Ring R0.  SCOPE (honest): CONTINUOUS field-freedom (an unconstrained/under-determined
+ * wire -- the highest-value class); DISCRETE multi-root freedom (e.g. a boolean's 0/1) is a separate sub-class
+ * (root-counting / cad).  Small systems (term arrays + 64-slot bigint handle table); real-circuit scale = streaming
+ * storage + flat-limb LA (the scale axis). */
+module aporia
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_limb(id: u64, i: u64, v: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_len(id: u64, len: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_normalize(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul_u64(arena: u64, a: u64, scalar: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mod(arena: u64, a: u64, m: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn json_parse(arena: u64, input_base: u64, input_len: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_object_get(id: u64, key_base: u64, key_len: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_object_len(id: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_object_key_at(id: u64, i: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_object_value_at(id: u64, i: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_array_len(id: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_array_at(id: u64, i: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_int(id: u64) -> i64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_string_base(id: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_string_len(id: u64) -> u64 from "json.iii"
+
+const AP_MAXT : u64 = 512u64
+var AP_CI : [u64; 512]   var AP_PART : [u64; 512]   var AP_WIRE : [u64; 512]   var AP_CB : [u64; 512]   var AP_CL : [u64; 512]
+var AP_NT : u64 = 0u64   var AP_NCON : u64 = 0u64   var AP_NVARS : u64 = 0u64   var AP_NPUB : u64 = 0u64   var AP_NOUT : u64 = 0u64
+var AP_W : [u64; 64]     /* witness: one bigint id per wire */
+var AP_P : u64 = 0u64    var AP_AR : u64 = 0u64
+var AP_JSONBUF : [u8; 4096]
+
+fn ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn pu(v: u64) -> u32 { if v >= 10u64 { pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn ap_slen(s: u64) -> u64 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { i = i + 1u64 }   return i }
+
+fn ap_field(arena: u64) -> u64 {
+    let id : u64 = bigint_new(arena, 4u64)
+    bigint_set_limb(id, 0u64, 0x43E1F593F0000001u64)   bigint_set_limb(id, 1u64, 0x2833E84879B97091u64)
+    bigint_set_limb(id, 2u64, 0xB85045B68181585Du64)   bigint_set_limb(id, 3u64, 0x30644E72E131A029u64)
+    bigint_set_len(id, 4u64)   bigint_normalize(id)   return id
+}
+fn ap_mul(a: u64, b: u64) -> u64 { let m : u64 = bigint_mul(AP_AR, a, b)   let r : u64 = bigint_mod(AP_AR, m, AP_P)   bigint_drop(m)   return r }
+fn ap_add(a: u64, b: u64) -> u64 { let m : u64 = bigint_add(AP_AR, a, b)   let r : u64 = bigint_mod(AP_AR, m, AP_P)   bigint_drop(m)   return r }
+fn ap_dec(base: u64, len: u64) -> u64 {                             /* decimal text -> field element (mod r) */
+    let mut acc : u64 = bigint_from_u64(AP_AR, 0u64)
+    let p : *u8 = base as *u8   let mut i : u64 = 0u64
+    while i < len {
+        let ch : u8 = p[i]
+        if ch >= 48u8 { if ch <= 57u8 {
+            let dd : u64 = bigint_from_u64(AP_AR, (ch - 48u8) as u64)
+            let t1 : u64 = bigint_mul_u64(AP_AR, acc, 10u64)   let t2 : u64 = bigint_add(AP_AR, t1, dd)
+            bigint_drop(acc)   bigint_drop(t1)   bigint_drop(dd)   acc = t2
+        } }
+        i = i + 1u64
+    }
+    let r : u64 = bigint_mod(AP_AR, acc, AP_P)   bigint_drop(acc)   return r
+}
+fn ap_key_u64(base: u64, len: u64) -> u64 {                          /* small decimal (wire index) -> u64 */
+    let p : *u8 = base as *u8   let mut v : u64 = 0u64   let mut i : u64 = 0u64
+    while i < len { let ch : u8 = p[i]   if ch >= 48u8 { if ch <= 57u8 { v = v * 10u64 + ((ch - 48u8) as u64) } }   i = i + 1u64 }
+    return v
+}
+fn ap_load(src: u64) -> u64 {
+    let s : *u8 = src as *u8   let d : *u8 = (&AP_JSONBUF) as u64 as *u8   let mut i : u64 = 0u64
+    while s[i] != 0u8 { d[i] = s[i]   i = i + 1u64 }   d[i] = 0u8   return i
+}
+
+/* parse a real snarkjs r1cs.json into the sparse term table + metadata; returns 0 ok, -1 on error */
+fn ap_parse(base: u64, len: u64) -> i64 {
+    let root : u64 = json_parse(AP_AR, base, len)
+    if root == 0u64 { return 0i64 - 1i64 }
+    AP_NVARS = json_int(json_object_get(root, "nVars" as u64, ap_slen("nVars" as u64))) as u64
+    AP_NPUB  = json_int(json_object_get(root, "nPubInputs" as u64, ap_slen("nPubInputs" as u64))) as u64
+    AP_NOUT  = json_int(json_object_get(root, "nOutputs" as u64, ap_slen("nOutputs" as u64))) as u64
+    let cons : u64 = json_object_get(root, "constraints" as u64, ap_slen("constraints" as u64))
+    if cons == 0u64 { return 0i64 - 1i64 }
+    AP_NCON = json_array_len(cons)
+    AP_NT = 0u64
+    let mut i : u64 = 0u64
+    while i < AP_NCON {
+        let con : u64 = json_array_at(cons, i)
+        let mut part : u64 = 0u64
+        while part < 3u64 {
+            let obj : u64 = json_array_at(con, part)
+            let nk : u64 = json_object_len(obj)
+            let mut j : u64 = 0u64
+            while j < nk {
+                if AP_NT < AP_MAXT {
+                    let kn : u64 = json_object_key_at(obj, j)
+                    let vn : u64 = json_object_value_at(obj, j)
+                    AP_CI[AP_NT] = i   AP_PART[AP_NT] = part
+                    AP_WIRE[AP_NT] = ap_key_u64(json_string_base(kn), json_string_len(kn))
+                    AP_CB[AP_NT] = json_string_base(vn)   AP_CL[AP_NT] = json_string_len(vn)
+                    AP_NT = AP_NT + 1u64
+                }
+                j = j + 1u64
+            }
+            part = part + 1u64
+        }
+        i = i + 1u64
+    }
+    return 0i64
+}
+/* <part_p of constraint ci , witness> mod r */
+fn ap_eval(ci: u64, part: u64) -> u64 {
+    let mut acc : u64 = bigint_from_u64(AP_AR, 0u64)
+    let mut t : u64 = 0u64
+    while t < AP_NT {
+        if AP_CI[t] == ci { if AP_PART[t] == part {
+            let coef : u64 = ap_dec(AP_CB[t], AP_CL[t])
+            let cw : u64 = ap_mul(coef, AP_W[AP_WIRE[t]])
+            let nacc : u64 = ap_add(acc, cw)
+            bigint_drop(coef)   bigint_drop(cw)   bigint_drop(acc)   acc = nacc
+        } }
+        t = t + 1u64
+    }
+    return acc
+}
+/* THE ARBITER: does the current witness satisfy EVERY constraint (quadratic included)?  1 = yes */
+fn ap_arbiter() -> u64 {
+    let mut ci : u64 = 0u64
+    while ci < AP_NCON {
+        let a : u64 = ap_eval(ci, 0u64)   let b : u64 = ap_eval(ci, 1u64)   let c : u64 = ap_eval(ci, 2u64)
+        let ab : u64 = ap_mul(a, b)
+        let bad : i32 = bigint_cmp(ab, c)
+        bigint_drop(a)   bigint_drop(b)   bigint_drop(c)   bigint_drop(ab)
+        if bad != 0i32 { return 0u64 }
+        ci = ci + 1u64
+    }
+    return 1u64
+}
+/* is private wire i CONTINUOUSLY free? perturb by +1 and +2; both must keep the arbiter satisfied */
+fn ap_wire_free(i: u64) -> u64 {
+    let old : u64 = AP_W[i]
+    AP_W[i] = ap_add(old, bigint_from_u64(AP_AR, 1u64))
+    let ok1 : u64 = ap_arbiter()
+    bigint_drop(AP_W[i])   AP_W[i] = old
+    if ok1 == 0u64 { return 0u64 }
+    AP_W[i] = ap_add(old, bigint_from_u64(AP_AR, 2u64))
+    let ok2 : u64 = ap_arbiter()
+    bigint_drop(AP_W[i])   AP_W[i] = old
+    return ok2
+}
+/* first CONTINUOUSLY-free PRIVATE wire (a real forgery vs the FULL system), or 0 if none (sound) */
+fn ap_detect() -> u64 {
+    let mut i : u64 = 1u64 + AP_NOUT + AP_NPUB
+    while i < AP_NVARS {
+        if ap_wire_free(i) == 1u64 { return i }
+        i = i + 1u64
+    }
+    return 0u64
+}
+fn ap_set_w(i: u64, v: u64) -> i32 { AP_W[i] = bigint_from_u64(AP_AR, v)   return 0i32 }
+
+/* ================= THE GATE ================= */
+fn aporia_selfprove() -> u64 @export {
+    AP_AR = arena_new(1u64 << 24u64)   AP_P = ap_field(AP_AR)
+
+    /* CASE A -- UNDER-CONSTRAINED: wires [0=one,1=pub,2=priv_a,3=priv_b].  ONE constraint 1*w2 = w1 (pins w2);
+     * NOTHING constrains w3 -> w3 is free over the field -> forgeable. */
+    let ja : u64 = ap_load("{\"nVars\":4,\"nOutputs\":0,\"nPubInputs\":1,\"constraints\":[[{\"0\":\"1\"},{\"2\":\"1\"},{\"1\":\"1\"}]]}" as u64)
+    if ap_parse((&AP_JSONBUF) as u64, ja) != 0i64 { return 1u64 }
+    ap_set_w(0u64,1u64)  ap_set_w(1u64,5u64)  ap_set_w(2u64,5u64)  ap_set_w(3u64,1u64)   /* a valid witness */
+    if ap_arbiter() != 1u64 { return 2u64 }                          /* base witness must be valid */
+    if ap_detect() != 3u64 { return 3u64 }                           /* wire 3 is free -> forgery at wire 3 */
+
+    /* CASE B -- SOUND via a QUADRATIC pin: same, PLUS w2*w3 = w1.  With w2=w1(!=0), this forces w3=1 -- w3 is now
+     * pinned by the QUADRATIC constraint.  The linear part still "looks" free at w3, but the arbiter (which checks
+     * the quadratic) REJECTS the candidate.  This is the whole point: the full arbiter kills the false positive. */
+    let jb : u64 = ap_load("{\"nVars\":4,\"nOutputs\":0,\"nPubInputs\":1,\"constraints\":[[{\"0\":\"1\"},{\"2\":\"1\"},{\"1\":\"1\"}],[{\"2\":\"1\"},{\"3\":\"1\"},{\"1\":\"1\"}]]}" as u64)
+    if ap_parse((&AP_JSONBUF) as u64, jb) != 0i64 { return 4u64 }
+    ap_set_w(0u64,1u64)  ap_set_w(1u64,5u64)  ap_set_w(2u64,5u64)  ap_set_w(3u64,1u64)
+    if ap_arbiter() != 1u64 { return 5u64 }                          /* w=(1,5,5,1) satisfies both constraints */
+    if ap_detect() != 0u64 { return 6u64 }                           /* NO free wire -> SOUND (quadratic pinned w3) */
+
+    return 0u64
+}
+
+fn ap_show() -> i32 @export {
+    AP_AR = arena_new(1u64 << 24u64)   AP_P = ap_field(AP_AR)
+    ps("APORIA -- real snarkjs-R1CS under-constraint, decided by the FULL quadratic arbiter over BN254.\n" as u64)
+    let ja : u64 = ap_load("{\"nVars\":4,\"nOutputs\":0,\"nPubInputs\":1,\"constraints\":[[{\"0\":\"1\"},{\"2\":\"1\"},{\"1\":\"1\"}]]}" as u64)
+    ap_parse((&AP_JSONBUF) as u64, ja)
+    ap_set_w(0u64,1u64)  ap_set_w(1u64,5u64)  ap_set_w(2u64,5u64)  ap_set_w(3u64,1u64)
+    ps("  circuit A (r1cs.json, 1 constraint w2=w1, w3 unconstrained): valid witness, " as u64)
+    let fa : u64 = ap_detect()
+    if fa != 0u64 { ps("UNDER-CONSTRAINED -- wire " as u64)   pu(fa)   ps(" free -> forged 2nd witness (arbiter-confirmed).\n" as u64) } else { ps("sound.\n" as u64) }
+    let jb : u64 = ap_load("{\"nVars\":4,\"nOutputs\":0,\"nPubInputs\":1,\"constraints\":[[{\"0\":\"1\"},{\"2\":\"1\"},{\"1\":\"1\"}],[{\"2\":\"1\"},{\"3\":\"1\"},{\"1\":\"1\"}]]}" as u64)
+    ap_parse((&AP_JSONBUF) as u64, jb)
+    ap_set_w(0u64,1u64)  ap_set_w(1u64,5u64)  ap_set_w(2u64,5u64)  ap_set_w(3u64,1u64)
+    ps("  circuit B (same + QUADRATIC w2*w3=w1): valid witness, " as u64)
+    let fb : u64 = ap_detect()
+    if fb != 0u64 { ps("under-constrained wire " as u64)   pu(fb)   putchar(10i32) } else { ps("SOUND -- the quadratic arbiter rejected the linear-only candidate.\n" as u64) }
+    return 0i32
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let _a : i32 = argc   let _v : u64 = argv
+    ap_show()
+    let r : u64 = aporia_selfprove()
+    ps("aporia_selfprove = " as u64)   pu(r)
+    if r == 0u64 { ps("  GREEN: real r1cs.json parsed; full quadratic arbiter over BN254; forgery confirmed / false-positive rejected.\n" as u64) } else { ps("  (arm failed)\n" as u64) }
+    return r
+}

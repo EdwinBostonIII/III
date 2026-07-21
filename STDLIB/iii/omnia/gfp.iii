@@ -1,0 +1,148 @@
+/* STDLIB/iii/omnia/gfp.iii -- GF(p): exact rank over a prime field, generalizing the fold's GF(2) core.
+ *
+ * PTYXIS's rank (pt_recognise_gf2) is the fold over GF(2) -- perfect for stabilizers, parity, balance, homology.
+ * But integer/quantized data (e.g. neural-network weights) lives over Z, not GF(2): a weight matrix can be full
+ * rank over GF(p) while collapsing to low rank mod 2.  So the honest generalization of the fold is EXACT rank
+ * over a prime field GF(p), computed by Gaussian elimination with modular inverses -- tolerance-free, certified,
+ * where floating-point "numerical rank" needs an arbitrary epsilon and gets near-singular cases wrong.
+ *
+ * p = 2^31 - 1 (Mersenne prime M31).  All products a*b with a,b < p (< 2^31) are < 2^62, so they fit u64 with
+ * no overflow -- a real reason for this specific prime, not an arbitrary one.  Modular inverse by Fermat
+ * (a^(p-2) mod p).  rank(A) over GF(p) equals rank over Q except for the finitely many primes dividing a pivot
+ * minor -- so a second prime certifies it (see axioma.iii).
+ *
+ * NIH: self-contained integer arithmetic.  Self-reliant; exit code is the verdict.  Ring R0. */
+module gfp
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+const GP_P : u64 = 2147483647u64            /* 2^31 - 1, Mersenne prime (the default field) */
+const GP_Q : u64 = 2147483629u64            /* a second 31-bit prime, for two-prime rank certification */
+var GP_M : [u64; 4096]                        /* scratch matrix (destroyed by elimination); up to 64x64 */
+var GP_IN : [u64; 4096]                        /* test inputs */
+
+/* --- prime-parameterized field ops (a,b < prime < 2^31, so a*b < 2^62 fits u64) --- */
+fn gp_subm(a: u64, b: u64, p: u64) -> u64 { return (a + p - b) % p }
+fn gp_mulm(a: u64, b: u64, p: u64) -> u64 @export { return (a * b) % p }
+fn gp_powm(a0: u64, e0: u64, p: u64) -> u64 {
+    let mut a : u64 = a0 % p
+    let mut e : u64 = e0
+    let mut r : u64 = 1u64
+    while e > 0u64 {
+        if (e & 1u64) == 1u64 { r = gp_mulm(r, a, p) }
+        a = gp_mulm(a, a, p)
+        e = e >> 1u64
+    }
+    return r
+}
+fn gp_invm(a: u64, p: u64) -> u64 @export { return gp_powm(a, p - 2u64, p) }
+/* default-field wrappers (the fold over GF(2^31-1)) */
+fn gp_add(a: u64, b: u64) -> u64 { return (a + b) % GP_P }
+fn gp_sub(a: u64, b: u64) -> u64 { return gp_subm(a, b, GP_P) }
+fn gp_mul(a: u64, b: u64) -> u64 { return gp_mulm(a, b, GP_P) }
+fn gp_pow(a0: u64, e0: u64) -> u64 { return gp_powm(a0, e0, GP_P) }
+fn gp_inv(a: u64) -> u64 { return gp_invm(a, GP_P) }
+
+/* EXACT RANK over GF(prime): full Gauss-Jordan elimination; rank = number of pivots.  ptr -> nr*nc row-major. */
+fn gp_rank_mod(ptr: u64, nr: u64, nc: u64, p: u64) -> u64 @export {
+    let src : *u64 = ptr as *u64
+    let mut i : u64 = 0u64
+    while i < nr * nc { GP_M[i] = src[i] % p   i = i + 1u64 }
+    let mut rank : u64 = 0u64
+    let mut col : u64 = 0u64
+    while col < nc {
+        let mut piv : u64 = nr
+        let mut r : u64 = rank
+        while r < nr {
+            if GP_M[r * nc + col] != 0u64 { if piv == nr { piv = r } }
+            r = r + 1u64
+        }
+        if piv != nr {
+            if piv != rank {
+                let mut c : u64 = 0u64
+                while c < nc {
+                    let t : u64 = GP_M[rank * nc + c]
+                    GP_M[rank * nc + c] = GP_M[piv * nc + c]
+                    GP_M[piv * nc + c] = t
+                    c = c + 1u64
+                }
+            }
+            let inv : u64 = gp_invm(GP_M[rank * nc + col], p)
+            let mut rr : u64 = 0u64
+            while rr < nr {
+                if rr != rank {
+                    let f : u64 = gp_mulm(GP_M[rr * nc + col], inv, p)
+                    if f != 0u64 {
+                        let mut c : u64 = col
+                        while c < nc {
+                            GP_M[rr * nc + c] = gp_subm(GP_M[rr * nc + c], gp_mulm(f, GP_M[rank * nc + c], p), p)
+                            c = c + 1u64
+                        }
+                    }
+                }
+                rr = rr + 1u64
+            }
+            rank = rank + 1u64
+        }
+        col = col + 1u64
+    }
+    return rank
+}
+fn gp_rank(ptr: u64, nr: u64, nc: u64) -> u64 @export { return gp_rank_mod(ptr, nr, nc, GP_P) }
+
+/* helpers to lay a small matrix into GP_IN */
+fn gp_put(idx: u64, v: u64) -> i32 { GP_IN[idx] = v % GP_P   return 0i32 }
+fn gp_zero(n: u64) -> i32 { let mut i : u64 = 0u64   while i < n { GP_IN[i] = 0u64   i = i + 1u64 }   return 0i32 }
+fn gp_rank_in(nr: u64, nc: u64) -> u64 { return gp_rank((&GP_IN) as u64, nr, nc) }
+
+/* ================= THE GATE ================= */
+fn gfp_selfprove() -> u64 @export {
+    /* modular inverse is correct: a * a^-1 == 1 for several a (Fermat) */
+    if gp_mul(2u64, gp_inv(2u64)) != 1u64 { return 1u64 }
+    if gp_mul(123456u64, gp_inv(123456u64)) != 1u64 { return 2u64 }
+    if gp_mul(2147483646u64, gp_inv(2147483646u64)) != 1u64 { return 3u64 }
+
+    /* 3x3 identity -> rank 3 */
+    gp_zero(9u64)
+    gp_put(0u64, 1u64)   gp_put(4u64, 1u64)   gp_put(8u64, 1u64)
+    if gp_rank_in(3u64, 3u64) != 3u64 { return 4u64 }
+
+    /* zero matrix -> rank 0 */
+    gp_zero(9u64)
+    if gp_rank_in(3u64, 3u64) != 0u64 { return 5u64 }
+
+    /* row2 = 2*row0 + 3*row1 (exact integer dependency) -> rank 2 */
+    gp_zero(9u64)
+    gp_put(0u64, 1u64)   gp_put(1u64, 2u64)   gp_put(2u64, 5u64)      /* row0 = (1,2,5) */
+    gp_put(3u64, 4u64)   gp_put(4u64, 1u64)   gp_put(5u64, 7u64)      /* row1 = (4,1,7) */
+    gp_put(6u64, 2u64 * 1u64 + 3u64 * 4u64)                            /* row2 = 2*r0 + 3*r1 */
+    gp_put(7u64, 2u64 * 2u64 + 3u64 * 1u64)
+    gp_put(8u64, 2u64 * 5u64 + 3u64 * 7u64)
+    if gp_rank_in(3u64, 3u64) != 2u64 { return 6u64 }                 /* the dependency is found exactly */
+
+    /* stacking a duplicate row cannot raise rank: rank([A;A]) == rank(A) */
+    gp_zero(12u64)
+    gp_put(0u64, 3u64)   gp_put(1u64, 1u64)                            /* row0 = (3,1) */
+    gp_put(2u64, 1u64)   gp_put(3u64, 2u64)                            /* row1 = (1,2) */
+    gp_put(4u64, 3u64)   gp_put(5u64, 1u64)                            /* row2 = row0 */
+    gp_put(6u64, 1u64)   gp_put(7u64, 2u64)                            /* row3 = row1 */
+    if gp_rank_in(4u64, 2u64) != 2u64 { return 7u64 }
+
+    /* rank never exceeds min(nr,nc): a 2x4 full matrix has rank <= 2 */
+    gp_zero(8u64)
+    gp_put(0u64, 1u64)   gp_put(1u64, 2u64)   gp_put(2u64, 3u64)   gp_put(3u64, 4u64)
+    gp_put(4u64, 5u64)   gp_put(5u64, 6u64)   gp_put(6u64, 7u64)   gp_put(7u64, 9u64)
+    let r24 : u64 = gp_rank_in(2u64, 4u64)
+    if r24 != 2u64 { return 8u64 }
+
+    /* FIELD-DEPENDENCE (the honest subtlety float cannot even represent): a matrix full-rank over GF(p) whose
+     * entries are all even collapses mod 2.  Over GF(p): rank 2.  (Over GF(2) every entry is 0 -> rank 0.) */
+    gp_zero(4u64)
+    gp_put(0u64, 2u64)   gp_put(1u64, 4u64)
+    gp_put(2u64, 4u64)   gp_put(3u64, 2u64)                            /* det = 4-16 = -12 != 0 mod p */
+    if gp_rank_in(2u64, 2u64) != 2u64 { return 9u64 }                 /* full over GF(p) ... */
+    /* ...but mod 2 all entries are 0 -> GF(2) rank 0.  rank is FIELD-SPECIFIC; use the field the data lives in. */
+    return 0u64
+}
+
+fn main(argc: i32, argv: u64) -> u64 { let _a : i32 = argc   let _v : u64 = argv   return gfp_selfprove() }

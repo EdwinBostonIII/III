@@ -1,0 +1,295 @@
+/* STDLIB/iii/omnia/router_krisis.iii -- THE ROUTER ELECTION, decided by the SHARED KRISIS KERNEL + ZONOS.
+ *
+ * The MoE top-8 router election is a discrete order over 256 logits l_e = hidden . router_row_e.  The exact
+ * 192-bit election (metabole arm 374) is exact over the router's i64 hidden; the INTERVAL walk (SYNODOS) can
+ * not decide it at width 2^4.  Two tools, one boundary:
+ *   - THE KRISIS (rk_krisis / rk_sep, two INDEPENDENT exact engines that must agree): decides sign(l_a - l_b)
+ *     in unbounded bigint over the REAL 896-bit hidden and the REAL router rows (f32, PER-ELEMENT exponent) --
+ *     the head-argmax kernel generalized VERBATIM to the router (the shared krisis kernel).  No self-grading.
+ *   - ZONOS (rk_zonos_order, composes omnia/zonos.iii): the cheap tier for the interval walk -- represents the
+ *     logit difference as an affine form so the hidden's shared noise CANCELS; if the hull decides, done cheap;
+ *     else escalate to the krisis.  exact  subset-of  zonos-hull  subset-of  interval.
+ *
+ * NIH: composes the peras/bigint tier (via the krisis) + zonos.  The hidden lives in RK's OWN buffers so the
+ * gate is PURE (injected); rk_load_hidden copies the real MB_DTM for the live path.  Ring R0. */
+module router_krisis
+
+extern @abi(c-msvc-x64) fn arena_new(cap: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(arena: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul_u64(arena: u64, a: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_shl_bits(arena: u64, a: u64, bits: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn mb_dz_x_l(i: u64, k: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_dz_x_s(i: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_dz_x_e(i: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_me_sel(lay: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_moe_router_row(e: u64) -> u64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_rw_m(i: u64) -> i64 from "metabole.iii"
+extern @abi(c-msvc-x64) fn mb_rw_e(i: u64) -> i64 from "metabole.iii"
+/* ZONOS cheap tier */
+extern @abi(c-msvc-x64) fn zn_reset() -> i32 from "zonos.iii"
+extern @abi(c-msvc-x64) fn zn_from_rad(f: u64, cs: i64, cm: u64, ce: i64, rm: u64, re: i64) -> i32 from "zonos.iii"
+extern @abi(c-msvc-x64) fn zn_add(dst: u64, a: u64, b: u64) -> i32 from "zonos.iii"
+extern @abi(c-msvc-x64) fn zn_sub(dst: u64, a: u64, b: u64) -> i32 from "zonos.iii"
+extern @abi(c-msvc-x64) fn zn_hull_lo(f: u64) -> i32 from "zonos.iii"
+extern @abi(c-msvc-x64) fn zn_hull_hi(f: u64) -> i32 from "zonos.iii"
+extern @abi(c-msvc-x64) fn zn_rs() -> i64 from "zonos.iii"
+
+/* ---- the hidden (own buffers: injected for the gate, or loaded from MB_DTM live) ---- */
+var RK_HM : [u64; 100352]                   /* hidden mantissa: 7168 dims * 14 limbs */
+var RK_HS : [i64; 7168]                     /* hidden sign */
+var RK_HE : [i64; 7168]                     /* hidden exponent */
+/* ---- two router rows (f32 -> per-element mantissa + exponent) ---- */
+var RK_AM : [i64; 7168]   var RK_AE : [i64; 7168]
+var RK_BM : [i64; 7168]   var RK_BE : [i64; 7168]
+var RK_N : u64 = 0u64
+var RK_EXS : i64 = 0i64
+var RK_EXS2 : i64 = 0i64
+
+fn rk_inj_hidden(i: u64, s: i64, e: i64, lk: u64, lv: u64) -> i32 {
+    if i >= 7168u64 { return 1i32 }
+    let mut k : u64 = 0u64
+    while k < 14u64 { RK_HM[i * 14u64 + k] = 0u64   k = k + 1u64 }
+    if lk < 14u64 { RK_HM[i * 14u64 + lk] = lv }
+    RK_HS[i] = s   RK_HE[i] = e   return 0i32
+}
+fn rk_inj_a(i: u64, m: i64, e: i64) -> i32 { if i >= 7168u64 { return 1i32 }   RK_AM[i] = m   RK_AE[i] = e   return 0i32 }
+fn rk_inj_b(i: u64, m: i64, e: i64) -> i32 { if i >= 7168u64 { return 1i32 }   RK_BM[i] = m   RK_BE[i] = e   return 0i32 }
+/* copy the real 896-bit hidden (MB_DTM) into RK's buffers */
+fn rk_load_hidden(n: u64) -> i32 @export {
+    if n > 7168u64 { return 1i32 }
+    let mut i : u64 = 0u64
+    while i < n {
+        let mut k : u64 = 0u64
+        while k < 14u64 { RK_HM[i * 14u64 + k] = mb_dz_x_l(i, k)   k = k + 1u64 }
+        RK_HS[i] = mb_dz_x_s(i)   RK_HE[i] = mb_dz_x_e(i)
+        i = i + 1u64
+    }
+    RK_N = n   return 0i32
+}
+/* load the two contested router experts of layer `lay` into RK_A / RK_B (f32, per-element exp) */
+fn rk_load_pair(lay: u64, ea: u64, eb: u64) -> u64 @export {
+    if mb_me_sel(lay) != 0u64 { return 1u64 }
+    if mb_moe_router_row(ea) != 0u64 { return 2u64 }
+    let mut i : u64 = 0u64
+    while i < 7168u64 { RK_AM[i] = mb_rw_m(i)   RK_AE[i] = mb_rw_e(i)   i = i + 1u64 }
+    if mb_moe_router_row(eb) != 0u64 { return 3u64 }
+    i = 0u64
+    while i < 7168u64 { RK_BM[i] = mb_rw_m(i)   RK_BE[i] = mb_rw_e(i)   i = i + 1u64 }
+    return 0u64
+}
+
+/* build the 896-bit hidden mantissa of dim i as a bigint (Horner over 14 little-endian limbs) */
+fn rk_hb(ar: u64, i: u64) -> u64 {
+    let base : u64 = i * 14u64
+    let mut acc : u64 = bigint_from_u64(ar, RK_HM[base + 13u64])
+    let mut k : u64 = 13u64
+    while k > 0u64 {
+        k = k - 1u64
+        let sh : u64 = bigint_shl_bits(ar, acc, 64u64)
+        bigint_drop(acc)
+        let lb : u64 = bigint_from_u64(ar, RK_HM[base + k])
+        let na : u64 = bigint_add(ar, sh, lb)
+        bigint_drop(sh)   bigint_drop(lb)
+        acc = na
+    }
+    return acc
+}
+/* the minimum term exponent over both logits (weight exp is PER-ELEMENT here) */
+fn rk_emin(n: u64) -> i64 {
+    let mut emin : i64 = 1000000i64
+    let mut i : u64 = 0u64
+    while i < n {
+        if RK_HS[i] != 0i64 {
+            if RK_AM[i] != 0i64 { let e : i64 = RK_HE[i] + RK_AE[i]   if e < emin { emin = e } }
+            if RK_BM[i] != 0i64 { let e : i64 = RK_HE[i] + RK_BE[i]   if e < emin { emin = e } }
+        }
+        i = i + 1u64
+    }
+    return emin
+}
+/* ENGINE A (combined): sign(l_a - l_b) by accumulating hidden*a with its sign and hidden*b with FLIPPED
+ * sign into ONE pos/neg pair.  Result in RK_EXS. */
+fn rk_krisis(n: u64) -> i64 @export {
+    if n > 7168u64 { return 0i64 - 2i64 }
+    let emin : i64 = rk_emin(n)
+    if emin == 1000000i64 { RK_EXS = 0i64   return 0i64 }
+    let ar : u64 = arena_new(134217728u64)
+    if ar == 0u64 { return 0i64 - 2i64 }
+    let mut pos : u64 = bigint_from_u64(ar, 0u64)
+    let mut neg : u64 = bigint_from_u64(ar, 0u64)
+    let mut i : u64 = 0u64
+    while i < n {
+        let hs : i64 = RK_HS[i]
+        if hs != 0i64 {
+            let am : i64 = RK_AM[i]
+            let bm : i64 = RK_BM[i]
+            let mut nz : u64 = 0u64
+            if am != 0i64 { nz = 1u64 }
+            if bm != 0i64 { nz = 1u64 }
+            if nz == 1u64 {
+                let hb : u64 = rk_hb(ar, i)
+                if am != 0i64 {
+                    let mut aw : u64 = am as u64
+                    if am < 0i64 { aw = (0i64 - am) as u64 }
+                    let prod : u64 = bigint_mul_u64(ar, hb, aw)
+                    let sh : u64 = ((RK_HE[i] + RK_AE[i]) - emin) as u64
+                    let shf : u64 = bigint_shl_bits(ar, prod, sh)
+                    let mut ts : i64 = 1i64
+                    if am < 0i64 { ts = 0i64 - ts }
+                    if hs < 0i64 { ts = 0i64 - ts }
+                    if ts > 0i64 { let np : u64 = bigint_add(ar, pos, shf)   bigint_drop(pos)   pos = np }
+                    if ts < 0i64 { let nn : u64 = bigint_add(ar, neg, shf)   bigint_drop(neg)   neg = nn }
+                    bigint_drop(shf)   bigint_drop(prod)
+                }
+                if bm != 0i64 {
+                    let mut bw : u64 = bm as u64
+                    if bm < 0i64 { bw = (0i64 - bm) as u64 }
+                    let prod : u64 = bigint_mul_u64(ar, hb, bw)
+                    let sh : u64 = ((RK_HE[i] + RK_BE[i]) - emin) as u64
+                    let shf : u64 = bigint_shl_bits(ar, prod, sh)
+                    /* FLIPPED sign (this is -l_b) */
+                    let mut ts : i64 = 0i64 - 1i64
+                    if bm < 0i64 { ts = 0i64 - ts }
+                    if hs < 0i64 { ts = 0i64 - ts }
+                    if ts > 0i64 { let np : u64 = bigint_add(ar, pos, shf)   bigint_drop(pos)   pos = np }
+                    if ts < 0i64 { let nn : u64 = bigint_add(ar, neg, shf)   bigint_drop(neg)   neg = nn }
+                    bigint_drop(shf)   bigint_drop(prod)
+                }
+                bigint_drop(hb)
+            }
+        }
+        i = i + 1u64
+    }
+    let c : i32 = bigint_cmp(pos, neg)
+    RK_EXS = 0i64
+    if c > 0i32 { RK_EXS = 1i64 }
+    if c < 0i32 { RK_EXS = 0i64 - 1i64 }
+    bigint_drop_arena(ar)   arena_drop(ar)
+    return RK_EXS
+}
+/* ENGINE B (separate): accumulate l_a and l_b as SEPARATE bigints, then compare.  Result in RK_EXS2. */
+fn rk_sep(n: u64) -> i64 @export {
+    if n > 7168u64 { return 0i64 - 2i64 }
+    let emin : i64 = rk_emin(n)
+    if emin == 1000000i64 { RK_EXS2 = 0i64   return 0i64 }
+    let ar : u64 = arena_new(134217728u64)
+    if ar == 0u64 { return 0i64 - 2i64 }
+    let mut posA : u64 = bigint_from_u64(ar, 0u64)
+    let mut negA : u64 = bigint_from_u64(ar, 0u64)
+    let mut posB : u64 = bigint_from_u64(ar, 0u64)
+    let mut negB : u64 = bigint_from_u64(ar, 0u64)
+    let mut i : u64 = 0u64
+    while i < n {
+        let hs : i64 = RK_HS[i]
+        if hs != 0i64 {
+            let am : i64 = RK_AM[i]
+            let bm : i64 = RK_BM[i]
+            let mut nz : u64 = 0u64
+            if am != 0i64 { nz = 1u64 }
+            if bm != 0i64 { nz = 1u64 }
+            if nz == 1u64 {
+                let hb : u64 = rk_hb(ar, i)
+                if am != 0i64 {
+                    let mut aw : u64 = am as u64
+                    if am < 0i64 { aw = (0i64 - am) as u64 }
+                    let prod : u64 = bigint_mul_u64(ar, hb, aw)
+                    let shf : u64 = bigint_shl_bits(ar, prod, ((RK_HE[i] + RK_AE[i]) - emin) as u64)
+                    let mut ts : i64 = 1i64
+                    if am < 0i64 { ts = 0i64 - ts }
+                    if hs < 0i64 { ts = 0i64 - ts }
+                    if ts > 0i64 { let np : u64 = bigint_add(ar, posA, shf)   bigint_drop(posA)   posA = np }
+                    if ts < 0i64 { let nn : u64 = bigint_add(ar, negA, shf)   bigint_drop(negA)   negA = nn }
+                    bigint_drop(shf)   bigint_drop(prod)
+                }
+                if bm != 0i64 {
+                    let mut bw : u64 = bm as u64
+                    if bm < 0i64 { bw = (0i64 - bm) as u64 }
+                    let prod : u64 = bigint_mul_u64(ar, hb, bw)
+                    let shf : u64 = bigint_shl_bits(ar, prod, ((RK_HE[i] + RK_BE[i]) - emin) as u64)
+                    let mut ts : i64 = 1i64
+                    if bm < 0i64 { ts = 0i64 - ts }
+                    if hs < 0i64 { ts = 0i64 - ts }
+                    if ts > 0i64 { let np : u64 = bigint_add(ar, posB, shf)   bigint_drop(posB)   posB = np }
+                    if ts < 0i64 { let nn : u64 = bigint_add(ar, negB, shf)   bigint_drop(negB)   negB = nn }
+                    bigint_drop(shf)   bigint_drop(prod)
+                }
+                bigint_drop(hb)
+            }
+        }
+        i = i + 1u64
+    }
+    /* l_a - l_b = (posA + negB) - (negA + posB) */
+    let p : u64 = bigint_add(ar, posA, negB)
+    let q : u64 = bigint_add(ar, negA, posB)
+    let c : i32 = bigint_cmp(p, q)
+    RK_EXS2 = 0i64
+    if c > 0i32 { RK_EXS2 = 1i64 }
+    if c < 0i32 { RK_EXS2 = 0i64 - 1i64 }
+    bigint_drop_arena(ar)   arena_drop(ar)
+    return RK_EXS2
+}
+/* the verdict rule (no self-grading): a decision stands only where two independent results AGREE. */
+fn rk_verdict(a: i64, b: i64) -> i64 @export {
+    if a == b { return a }
+    return 0i64 - 1000i64
+}
+/* THE TRUSTED ORDER: the two independent engines must agree; -1000 = REFUSE. */
+fn rk_trusted(n: u64) -> i64 @export {
+    return rk_verdict(rk_krisis(n), rk_sep(n))
+}
+
+/* ZONOS CHEAP TIER: given the two logits as affine forms (center + a shared-noise radius, the interval
+ * walk's uncertain hidden), decide l_a > l_b iff the DIFFERENCE hull is strictly positive.  The shared
+ * noise CANCELS in the difference -- decidable where the naive interval (which would keep 2r) ties.
+ * Returns +1 / -1 (decided by ZONOS) or 0 (hull straddles 0 -> escalate to the krisis). */
+fn rk_zonos_order(ca: i64, ma: u64, ea: i64, ra: u64, cb: i64, mb: u64, eb: i64, rb: u64, shared: u64) -> i64 {
+    zn_reset()
+    /* if `shared`, both forms carry the SAME first noise symbol (correlated) -> it cancels in the diff */
+    zn_from_rad(0u64, ca, ma, ea, ra, 0i64)
+    zn_from_rad(1u64, cb, mb, eb, rb, 0i64)
+    zn_sub(2u64, 0u64, 1u64)                    /* d = l_a - l_b */
+    zn_hull_lo(2u64)
+    let lo : i64 = zn_rs()                       /* sign of the lower hull endpoint */
+    zn_hull_hi(2u64)
+    let hi : i64 = zn_rs()
+    if lo > 0i64 { return 1i64 }                 /* whole hull > 0 : a wins, decided cheap */
+    if hi < 0i64 { return 0i64 - 1i64 }          /* whole hull < 0 : b wins */
+    let _s : u64 = shared
+    return 0i64                                  /* straddles 0 -> escalate to the exact krisis */
+}
+
+/* ================= THE GATE (pure, RED->GREEN, negatives, deterministic) ================= */
+fn rk_selfprove() -> u64 @export {
+    /* a decidable near-tie order over injected router-shaped data (3 dims, per-element weight exps).
+     * hidden = [2^100, 2^30, 2^100] ; row a weights pick dims {0,1}; row b picks {2}.
+     * l_a - l_b = 2^100 + 2^30 - 2^100 = 2^30 > 0  (the near-cancellation the float ties on). */
+    rk_inj_hidden(0u64, 1i64, 0i64, 1u64, 68719476736u64)   /* 2^100 */
+    rk_inj_hidden(1u64, 1i64, 0i64, 0u64, 1073741824u64)    /* 2^30  */
+    rk_inj_hidden(2u64, 1i64, 0i64, 1u64, 68719476736u64)   /* 2^100 */
+    rk_inj_a(0u64, 1i64, 0i64)   rk_inj_a(1u64, 1i64, 0i64)   rk_inj_a(2u64, 0i64, 0i64)
+    rk_inj_b(0u64, 0i64, 0i64)   rk_inj_b(1u64, 0i64, 0i64)   rk_inj_b(2u64, 1i64, 0i64)
+    if rk_krisis(3u64) != 1i64 { return 1u64 }              /* engine A: +1 */
+    if rk_sep(3u64) != 1i64 { return 2u64 }                 /* engine B: +1 */
+    if rk_trusted(3u64) != 1i64 { return 3u64 }             /* agree -> +1 */
+
+    /* SIGN-SENSITIVE: flip row a's dim-0 sign -> the order flips, BOTH engines track it and AGREE (-1). */
+    rk_inj_a(0u64, 0i64 - 1i64, 0i64)
+    if rk_trusted(3u64) != (0i64 - 1i64) { return 4u64 }     /* -2^101 + 2^30 < 0 : b wins, engines agree */
+    rk_inj_a(0u64, 1i64, 0i64)                               /* restore */
+
+    /* NEGATIVE (no self-grading): the verdict REFUSES when two independent results disagree, and only
+     * stands when they AGREE -- the refuse mechanism gated directly (an engine bug cannot be self-certified). */
+    if rk_verdict(1i64, 0i64 - 1i64) != (0i64 - 1000i64) { return 7u64 }   /* disagree -> REFUSE */
+    if rk_verdict(0i64 - 1i64, 0i64 - 1i64) != (0i64 - 1i64) { return 8u64 }   /* agree -> stands */
+
+    /* ZONOS cheap tier: a CLEAR order (l_a=5+-1, l_b=3+-1, independent) decides by hull; a NEAR-TIE
+     * (equal centers, overlapping radii) STRADDLES -> escalate (returns 0). */
+    if rk_zonos_order(1i64, 6u64, 0i64, 1u64, 1i64, 2u64, 0i64, 1u64, 0u64) != 1i64 { return 5u64 }  /* [5,7] vs [1,3]: a wins, hull decides */
+    if rk_zonos_order(1i64, 3u64, 0i64, 2u64, 1i64, 3u64, 0i64, 2u64, 0u64) != 0i64 { return 6u64 }  /* [1,5] vs [1,5]: straddle -> escalate to krisis */
+    return 0u64
+}

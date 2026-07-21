@@ -1,0 +1,150 @@
+/* STDLIB/iii/omnia/leimma.iii -- LEIMMA (the REMNANT): the FOLD-DEFECT METER.
+ *
+ * PTYXIS defeats explosion wherever a generating structure exists.  LEIMMA measures what it CANNOT defeat:
+ * the irreducible core that survives every collapse -- the fold-DEFECT.  In topology that core has a name
+ * mathematics already trusts: HOMOLOGY.  A shape's exponential geometry (every simplex) folds away under
+ * Discrete Morse collapse; what remains are the Betti numbers -- the holes, voids, and components that no
+ * collapse removes.  And the collapse is the SAME reduce-fold as PTYXIS: boundary-matrix reduction over GF(2)
+ * IS pt_reduce (Gaussian elimination = Buchberger-linear = automaton minimisation = congruence closure).
+ *
+ * So LEIMMA computes exact homology over GF(2) by COMPOSING PTYXIS's fold (pt_recognise_gf2 = the rank), and
+ * the DEFECT = (b0, b1, b2) = the count of irreducible generators = the fold-defect of the shape:
+ *   b0 = n0 - rank(d1)                (connected components)
+ *   b1 = (n1 - rank(d1)) - rank(d2)   (loops)
+ *   b2 = n2 - rank(d2)                (voids)
+ * The number is INVARIANT to the triangulation -- a shape with a million simplices and one with six give the
+ * SAME defect.  That is the fold: discard the exponential geometry, keep the invariant generators.
+ *
+ * THE INVISIBLE PLAYER, TRAPPED.  Why does the fold give a UNIQUE answer at all?  CONFLUENCE (Church-Rosser):
+ * the reduction reaches the same normal form regardless of order.  It is the body of which every fold is a
+ * limb -- and LEIMMA makes it a CONDITION OF MOTION: the rank is verified ORDER-INDEPENDENT (forward vs
+ * reversed fold agree), so the defect is well-defined, not an artifact of how we reduced.  A boundary map with
+ * d^2 != 0 is not a chain complex at all -- the fold REFUSES it (the honest wall).
+ *
+ * NIH: composes omnia/ptyxis (the fold).  Determinism = confluence witnessed.  Ring R0. */
+module leimma
+
+extern @abi(c-msvc-x64) fn pt_recognise_gf2(ptr: u64, n: u64) -> u64 from "ptyxis.iii"
+
+const LM_CAP : u64 = 64u64
+var LM_N0 : u64 = 0u64                       /* vertices (0-cells) */
+var LM_E1 : [u64; 64]                        /* edge boundaries: bitvector over vertices */
+var LM_N1 : u64 = 0u64
+var LM_E2 : [u64; 64]                        /* triangle boundaries: bitvector over edges */
+var LM_N2 : u64 = 0u64
+var LM_SCR : [u64; 64]                       /* scratch for the reversed-order (confluence) fold */
+
+fn lm_reset() -> i32 @export { LM_N0 = 0u64   LM_N1 = 0u64   LM_N2 = 0u64   return 0i32 }
+fn lm_set_v(n: u64) -> i32 @export { LM_N0 = n   return 0i32 }
+fn lm_add_edge(b: u64) -> i32 @export { if LM_N1 < LM_CAP { LM_E1[LM_N1] = b   LM_N1 = LM_N1 + 1u64 }   return 0i32 }
+fn lm_add_tri(b: u64) -> i32 @export { if LM_N2 < LM_CAP { LM_E2[LM_N2] = b   LM_N2 = LM_N2 + 1u64 }   return 0i32 }
+
+/* the ranks, computed by PTYXIS's reduce-fold */
+fn lm_rank1() -> u64 @export { return pt_recognise_gf2((&LM_E1) as u64, LM_N1) }
+fn lm_rank2() -> u64 @export { return pt_recognise_gf2((&LM_E2) as u64, LM_N2) }
+/* the SAME rank with the generators folded in REVERSED order -- confluence made a condition of motion */
+fn lm_rank1_rev() -> u64 @export {
+    let mut i : u64 = 0u64
+    while i < LM_N1 { LM_SCR[i] = LM_E1[LM_N1 - 1u64 - i]   i = i + 1u64 }
+    return pt_recognise_gf2((&LM_SCR) as u64, LM_N1)
+}
+
+/* THE FOLD-DEFECT: the irreducible generators (Betti numbers) */
+fn lm_betti0() -> u64 @export { return LM_N0 - lm_rank1() }
+fn lm_betti1() -> i64 @export {
+    let r1 : u64 = lm_rank1()
+    let r2 : u64 = lm_rank2()
+    return ((LM_N1 - r1) as i64) - (r2 as i64)
+}
+fn lm_betti2() -> u64 @export { return LM_N2 - lm_rank2() }
+
+/* THE HONEST WALL: d^2 = 0 must hold (each triangle's edge-boundary closes to zero over vertices), or it is
+ * not a chain complex and the fold REFUSES (returns 0). */
+fn lm_is_complex() -> u64 @export {
+    let mut t : u64 = 0u64
+    while t < LM_N2 {
+        let tb : u64 = LM_E2[t]
+        let mut acc : u64 = 0u64
+        let mut e : u64 = 0u64
+        while e < LM_N1 {
+            if ((tb >> e) & 1u64) == 1u64 { acc = acc ^ LM_E1[e] }
+            e = e + 1u64
+        }
+        if acc != 0u64 { return 0u64 }
+        t = t + 1u64
+    }
+    return 1u64
+}
+
+/* ---- the test shapes (encoded once; the defect is triangulation-invariant) ---- */
+fn lm_point() -> i32 { lm_reset()   lm_set_v(1u64)   return 0i32 }
+fn lm_interval() -> i32 { lm_reset()   lm_set_v(2u64)   lm_add_edge(3u64)   return 0i32 }   /* {0,1} */
+fn lm_circle() -> i32 {
+    lm_reset()   lm_set_v(3u64)
+    lm_add_edge(3u64)   lm_add_edge(6u64)   lm_add_edge(5u64)   /* 01,12,02 */
+    return 0i32
+}
+fn lm_disk() -> i32 { lm_circle()   lm_add_tri(7u64)   return 0i32 }   /* fill: edges {0,1,2} */
+fn lm_sphere() -> i32 @export {
+    /* tetrahedron boundary: 4 v, 6 e (01,02,03,12,13,23), 4 tri */
+    lm_reset()   lm_set_v(4u64)
+    lm_add_edge(3u64)   lm_add_edge(5u64)   lm_add_edge(9u64)     /* 01,02,03 */
+    lm_add_edge(6u64)   lm_add_edge(10u64)  lm_add_edge(12u64)    /* 12,13,23 */
+    lm_add_tri(11u64)   lm_add_tri(21u64)   lm_add_tri(38u64)   lm_add_tri(56u64)  /* 012,013,023,123 */
+    return 0i32
+}
+fn lm_figure8() -> i32 {
+    /* two circles sharing vertex 0: {0,1,2} and {0,3,4} */
+    lm_reset()   lm_set_v(5u64)
+    lm_add_edge(3u64)   lm_add_edge(6u64)   lm_add_edge(5u64)     /* 01,12,02 */
+    lm_add_edge(9u64)   lm_add_edge(24u64)  lm_add_edge(17u64)    /* 03,34,04 */
+    return 0i32
+}
+
+/* ================= THE GATE ================= */
+fn leimma_selfprove() -> u64 @export {
+    /* POINT: (1,0,0) */
+    lm_point()
+    if lm_betti0() != 1u64 { return 1u64 }
+    if lm_betti1() != 0i64 { return 2u64 }
+    if lm_betti2() != 0u64 { return 3u64 }
+
+    /* INTERVAL: contractible (1,0,0) */
+    lm_interval()
+    if lm_betti0() != 1u64 { return 4u64 }
+    if lm_betti1() != 0i64 { return 5u64 }
+
+    /* CIRCLE: one loop (1,1,0) -- the irreducible generator survives */
+    lm_circle()
+    if lm_betti0() != 1u64 { return 6u64 }
+    if lm_betti1() != 1i64 { return 7u64 }
+
+    /* DISK: the 2-cell KILLS the loop (1,0,0) -- the fold removes the generator that is now derivable */
+    lm_disk()
+    if lm_is_complex() != 1u64 { return 8u64 }
+    if lm_betti1() != 0i64 { return 9u64 }
+
+    /* SPHERE: a void, no loop (1,0,1) */
+    lm_sphere()
+    if lm_is_complex() != 1u64 { return 10u64 }
+    if lm_betti0() != 1u64 { return 11u64 }
+    if lm_betti1() != 0i64 { return 12u64 }
+    if lm_betti2() != 1u64 { return 13u64 }
+
+    /* FIGURE-8: two irreducible loops (1,2,0) -- defect 2 */
+    lm_figure8()
+    if lm_betti0() != 1u64 { return 14u64 }
+    if lm_betti1() != 2i64 { return 15u64 }
+
+    /* THE INVISIBLE PLAYER, TRAPPED: the rank (hence the defect) is CONFLUENT -- order-independent.
+     * Fold the sphere's boundary forward and reversed: same rank. */
+    lm_sphere()
+    if lm_rank1() != lm_rank1_rev() { return 16u64 }   /* Church-Rosser witnessed */
+
+    /* THE HONEST WALL (negative): a forged "triangle" whose edges do NOT close (d^2 != 0) is REFUSED --
+     * it is not a chain complex, and the fold names it rather than reporting a false defect. */
+    lm_circle()
+    lm_add_tri(3u64)                                    /* only edges {0,1} -- does not close */
+    if lm_is_complex() != 0u64 { return 17u64 }        /* MUST refuse */
+    return 0u64
+}

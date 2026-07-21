@@ -1,0 +1,164 @@
+/* STDLIB/iii/omnia/kanon.iii -- KANON (the measuring-rod / the filter): the ONE fold theorem, and its
+ * counterpart, expressed as a single calculable law and applied IDENTICALLY across the fields the fold was
+ * equivocated in -- then the SAME law written in the EIDOLOS ontology.
+ *
+ * THE ONE THEOREM (a closure-operator fixpoint; the FILTER).  Every realized fold is a closure Fold(.).  For any
+ * generating set G and query x:
+ *        x IN Fold(G)   <=>   Fold(G u {x}) = Fold(G).
+ * Its calculable realization for the whole LINEAR family is RANK over the field:
+ *        x IN Fold(G)   <=>   rank(G u {x}) = rank(G)        [ PTYXIS = the fold ]
+ * and its COUNTERPART is the DEFECT (rank-nullity):
+ *        |G| = rank(G) + defect(G),   defect = the irreducible remnant   [ LEIMMA = the counterpart ]
+ *        |Fold(G)| = 2^rank(G)   over GF(2).
+ * ONE function (kn_member, one call to PTYXIS's rank) is the filter for EVERY field below; each is cross-checked
+ * against independent enumeration (kn_brute) -- rank-fold vs brute must AGREE, or the theorem is false in code.
+ *
+ * HONEST SCOPE.  This rank realization is universal across the LINEAR/MATROID folds: linear algebra, coding
+ * theory, the graphic matroid, homology (and GF(2)-span, parity-count, signed balance already built).  The
+ * ANALYTIC folds (order-sign, Nekrasov localization, perfectoid tilt) obey the SAME abstract fixpoint with a
+ * DIFFERENT closure -- rank does not compute a sign or an integral, and this file claims no such thing.
+ *
+ * THE EIDOLOS TWIN.  The identical law lives in the ontology: the kept house = Fold (closure of sealed claims),
+ * eol_judge_claim = the membership filter (1 = derivable/in-fold, 0 = defect), eol_reduce = the minimal basis
+ * (drops the derivable, keeps rank generators).  Verified: a<c is IN the fold of {a<b,b<c} (transitivity),
+ * a<d is DEFECT, and reducing {a<b,b<c,a<c} drops exactly the one derivable claim -- rank-nullity, ontological.
+ *
+ * Composes omnia/ptyxis (rank) + omnia/eidolos (entailment).  Self-reliant; exit code is the verdict.  Ring R0. */
+module kanon
+
+extern @abi(c-msvc-x64) fn pt_recognise_gf2(ptr: u64, n: u64) -> u64 from "ptyxis.iii"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_keep() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_reduce() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_judge_claim(base: u64, len: u64) -> u64 from "eidolos.iii"
+
+var KN_G : [u64; 64]   var KN_TMP : [u64; 64]   var KN_SEEN : [u64; 256]
+
+fn kn_pow2(k: u64) -> u64 { let mut r : u64 = 1u64   let mut i : u64 = 0u64   while i < k { r = r + r   i = i + 1u64 }   return r }
+fn kn_pu(v: u64) -> u32 { if v >= 10u64 { kn_pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn kn_ps(sp: u64) -> u32 { let p : *u8 = sp as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn kn_slen(s: u64) -> u64 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { i = i + 1u64 }   return i }
+
+/* THE FILTER, numerical: x IN Fold(G) <=> rank(G u {x}) = rank(G) */
+fn kn_rank(ptr: u64, n: u64) -> u64 { return pt_recognise_gf2(ptr, n) }
+fn kn_member(gp: u64, ng: u64, q: u64) -> u64 {
+    let r0 : u64 = kn_rank(gp, ng)
+    let g : *u64 = gp as *u64
+    let mut i : u64 = 0u64
+    while i < ng { KN_TMP[i] = g[i]   i = i + 1u64 }
+    KN_TMP[ng] = q
+    let r1 : u64 = kn_rank((&KN_TMP) as u64, ng + 1u64)
+    if r1 == r0 { return 1u64 } else { return 0u64 }
+}
+/* independent ground truth: is q an XOR of some subset of G? (enumeration, no rank) */
+fn kn_brute(gp: u64, ng: u64, q: u64) -> u64 {
+    let g : *u64 = gp as *u64
+    let lim : u64 = kn_pow2(ng)
+    let mut mask : u64 = 0u64
+    while mask < lim {
+        let mut x : u64 = 0u64   let mut i : u64 = 0u64
+        while i < ng { if ((mask >> i) & 1u64) == 1u64 { x = x ^ g[i] }   i = i + 1u64 }
+        if x == q { return 1u64 }
+        mask = mask + 1u64
+    }
+    return 0u64
+}
+/* independent |Fold(G)| by enumeration: count distinct XORs (must equal 2^rank) */
+fn kn_distinct(gp: u64, ng: u64) -> u64 {
+    let g : *u64 = gp as *u64
+    let lim : u64 = kn_pow2(ng)
+    let mut cnt : u64 = 0u64   let mut mask : u64 = 0u64
+    while mask < lim {
+        let mut x : u64 = 0u64   let mut i : u64 = 0u64
+        while i < ng { if ((mask >> i) & 1u64) == 1u64 { x = x ^ g[i] }   i = i + 1u64 }
+        let mut seen : u64 = 0u64   let mut j : u64 = 0u64
+        while j < cnt { if KN_SEEN[j] == x { seen = 1u64 }   j = j + 1u64 }
+        if seen == 0u64 { KN_SEEN[cnt] = x   cnt = cnt + 1u64 }
+        mask = mask + 1u64
+    }
+    return cnt
+}
+fn kn_set1(a: u64) -> i32 { KN_G[0] = a   return 0i32 }
+fn kn_set3(a: u64, b: u64, c: u64) -> i32 { KN_G[0] = a   KN_G[1] = b   KN_G[2] = c   return 0i32 }
+
+/* one field's obligation: the filter agrees with brute on both a member and a non-member, and |Fold|=2^rank */
+fn kn_field(ng: u64, memq: u64, nonq: u64) -> u64 {
+    let gp : u64 = (&KN_G) as u64
+    if kn_member(gp, ng, memq) != 1u64 { return 1u64 }          /* the filter admits the member ... */
+    if kn_brute(gp, ng, memq) != 1u64 { return 2u64 }           /* ... and enumeration agrees */
+    if kn_member(gp, ng, nonq) != 0u64 { return 3u64 }          /* the filter refuses the non-member ... */
+    if kn_brute(gp, ng, nonq) != 0u64 { return 4u64 }           /* ... and enumeration agrees */
+    if kn_distinct(gp, ng) != kn_pow2(kn_rank(gp, ng)) { return 5u64 }   /* |Fold| = 2^rank exactly */
+    return 0u64
+}
+
+/* ================= THE PROOF: one filter, four fields, then the EIDOLOS twin ================= */
+fn kanon_selfprove() -> u64 @export {
+    /* FIELD 1  LINEAR ALGEBRA: span membership.  G={1,2,4}; 7=1^2^4 in span, 8 not. */
+    kn_set3(1u64, 2u64, 4u64)
+    if kn_field(3u64, 7u64, 8u64) != 0u64 { return 10u64 }
+    /* FIELD 2  CODING THEORY: codeword membership.  G=[6,3] generator; 51 a codeword, 32 not. */
+    kn_set3(37u64, 22u64, 11u64)
+    if kn_field(3u64, 51u64, 32u64) != 0u64 { return 20u64 }
+    /* FIELD 3  GRAPHIC MATROID: an edge is dependent <=> it closes a cycle.  Path 0-1-2-3; chord 0-3 (=9)
+     * closes the cycle (member/dependent); edge to a new vertex 4 (=17) is independent (non-member). */
+    kn_set3(3u64, 6u64, 12u64)
+    if kn_field(3u64, 9u64, 17u64) != 0u64 { return 30u64 }
+    /* FIELD 4  HOMOLOGY: a 1-cycle is trivial <=> it is a boundary.  Disk 2-cell d(012)=7; the loop 7 is a
+     * boundary (member -> Betti_1=0); a bare edge 1 is not a boundary (non-member). */
+    kn_set1(7u64)
+    if kn_field(1u64, 7u64, 1u64) != 0u64 { return 40u64 }
+
+    /* THE UNIVERSAL WITNESS: it was the SAME function kn_member (one PTYXIS rank call) in every field above --
+     * the filter is field-independent by construction, and rank-fold agreed with brute enumeration each time. */
+
+    /* ===== THE EIDOLOS TWIN: the identical fixpoint law in the ontology ===== */
+    /* Fold = the kept house (closure of {a<b, b<c}) */
+    eol_reset()
+    if eol_read("[a < b] [b < c]" as u64, kn_slen("[a < b] [b < c]" as u64)) < 0i64 { return 50u64 }
+    if eol_keep() == 0u64 { return 51u64 }
+    /* THE FILTER: a<c IS in the fold (derivable by transitivity) */
+    if eol_judge_claim("[a < c]" as u64, kn_slen("[a < c]" as u64)) != 1u64 { return 52u64 }
+    /* THE COUNTERPART: a<d is DEFECT (a new generator, not derivable) */
+    if eol_judge_claim("[a < d]" as u64, kn_slen("[a < d]" as u64)) != 0u64 { return 53u64 }
+    /* RANK-NULLITY, ontological: reducing {a<b, b<c, a<c} drops EXACTLY the one derivable claim */
+    eol_reset()
+    if eol_read("[a < b] [b < c] [a < c]" as u64, kn_slen("[a < b] [b < c] [a < c]" as u64)) < 0i64 { return 54u64 }
+    if eol_keep() == 0u64 { return 55u64 }
+    if eol_reduce() != 1u64 { return 56u64 }        /* one derivable claim dropped: |G| - rank = defect = 1 */
+    return 0u64
+}
+
+fn kanon_show() -> i32 @export {
+    kn_ps("THE ONE FOLD FILTER:  x in Fold(G)  <=>  rank(G u {x}) = rank(G)   [PTYXIS];   |G| = rank + defect  [LEIMMA]\n" as u64)
+    kn_ps("applied IDENTICALLY (same kn_member, one PTYXIS rank call) across four fields; rank-fold vs brute must agree:\n" as u64)
+    let gp : u64 = (&KN_G) as u64
+    kn_set3(1u64, 2u64, 4u64)
+    kn_ps("  [linear algebra] G={1,2,4}  rank=" as u64)   kn_pu(kn_rank(gp, 3u64))   kn_ps("  |Fold|=2^rank=" as u64)   kn_pu(kn_distinct(gp, 3u64))
+    kn_ps("   7 in Fold? " as u64)   kn_pu(kn_member(gp, 3u64, 7u64))   kn_ps("(brute " as u64)   kn_pu(kn_brute(gp, 3u64, 7u64))   kn_ps(")   8 in Fold? " as u64)   kn_pu(kn_member(gp, 3u64, 8u64))   kn_ps("\n" as u64)
+    kn_set3(37u64, 22u64, 11u64)
+    kn_ps("  [coding theory]  [6,3] code  rank=" as u64)   kn_pu(kn_rank(gp, 3u64))   kn_ps("  #codewords=" as u64)   kn_pu(kn_distinct(gp, 3u64))
+    kn_ps("   51 codeword? " as u64)   kn_pu(kn_member(gp, 3u64, 51u64))   kn_ps("   32 codeword? " as u64)   kn_pu(kn_member(gp, 3u64, 32u64))   kn_ps("\n" as u64)
+    kn_set3(3u64, 6u64, 12u64)
+    kn_ps("  [graphic matroid] path 0-1-2-3  rank=" as u64)   kn_pu(kn_rank(gp, 3u64))
+    kn_ps("   chord 0-3 closes a cycle? " as u64)   kn_pu(kn_member(gp, 3u64, 9u64))   kn_ps("   edge to new vertex independent? " as u64)   kn_pu(1u64 - kn_member(gp, 3u64, 17u64))   kn_ps("\n" as u64)
+    kn_set1(7u64)
+    kn_ps("  [homology]  disk 2-cell d(012)=7  loop 7 a boundary? " as u64)   kn_pu(kn_member(gp, 1u64, 7u64))   kn_ps("  (=> Betti_1=0)   bare edge a boundary? " as u64)   kn_pu(kn_member(gp, 1u64, 1u64))   kn_ps("\n" as u64)
+    kn_ps("THE EIDOLOS TWIN: kept-house = Fold, eol_judge_claim = the filter, eol_reduce = the basis.\n" as u64)
+    eol_reset()   eol_read("[a < b] [b < c]" as u64, 15u64)   eol_keep()
+    kn_ps("  Fold={a<b, b<c}:  a<c derivable (in Fold)? " as u64)   kn_pu(eol_judge_claim("[a < c]" as u64, 7u64))   kn_ps("   a<d (defect)? " as u64)   kn_pu(eol_judge_claim("[a < d]" as u64, 7u64))   kn_ps("\n" as u64)
+    eol_reset()   eol_read("[a < b] [b < c] [a < c]" as u64, 23u64)   eol_keep()
+    kn_ps("  reduce {a<b,b<c,a<c} drops (defect count) = " as u64)   kn_pu(eol_reduce())   kn_ps("  -> rank-nullity, ontological\n" as u64)
+    return 0i32
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let _a : i32 = argc   let _v : u64 = argv
+    kanon_show()
+    let r : u64 = kanon_selfprove()
+    kn_ps("kanon_selfprove = " as u64)   kn_pu(r)
+    if r == 0u64 { kn_ps("  GREEN: one filter, four fields, rank-fold==brute; the same law twins in EIDOLOS.\n" as u64) } else { kn_ps("  (arm failed)\n" as u64) }
+    return r
+}

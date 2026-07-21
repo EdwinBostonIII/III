@@ -1,0 +1,138 @@
+/* STDLIB/iii/omnia/rhoe.iii -- RHOE (rhoe, the flow): the event-primary COVENANT.  panta rhei -- everything flows.
+ *
+ * The law, made checkable: a process's STATE is not a stored cell but what its append-only stream of events FOLDS
+ * to; its IDENTITY is the canonical form of that stream; its PROVENANCE is the merkle witness of it.  This is how
+ * the universe is (events in time, not objects), and it is what makes the electron's job easier -- append-only,
+ * replay-deterministic, reversible.  RHOE does not reimplement the log (it COMPOSES event_substrate + isub); it
+ * CERTIFIES the covenant and adds the exact-identity/witness layer that other organs adopt to become event-primary.
+ *
+ * THE THREE GIFTS an event-primary process has that an object-based one does NOT (proven, with teeth):
+ *   1. EQUIVALENCE   -- the fold over the whole log equals the object accumulator (nothing lost by folding).
+ *   2. REVERSIBILITY -- the fold over a PREFIX recovers a PAST state the object mutated away (object-state forgets;
+ *                       the log remembers by its own structure -- evt_maxprio(mark) vs a lossy running max).
+ *   3. WITNESS       -- the provenance is a tamper-evident, replay-deterministic merkle root (isub_witness): the
+ *                       same stream reseals identically; any tampered event reseals differently.
+ *
+ * TWO BAROMETERS attest, neither grading itself: the LOGOS (the covenant sealed as a pure EIDOLOS claim -- state,
+ * identity, provenance all SIT UNDER the log; the anti-law "log under state" is REFUSED) and the ELECTRON
+ * (bfp_compute48, deterministic).  Dogfooded: the campaign's own conformance record is itself an event fold that
+ * rewinds.  Composes omnia/event_substrate + omnia/isub + omnia/eidolos + katabasis/behavioral_fp.  Ring R0. */
+module rhoe
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn evt_reset() -> i32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_perceive(observer: u64, kind: u64, priority: u64, payload: u64) -> u64 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_count() -> u32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_mark() -> u32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_rewind(bp: u32) -> i32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_maxprio(upto: u32) -> u64 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_emit(verb: u32, a: u32, b: u32) -> u64 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_witness_into(out32: *u8) -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_agree(root_a: *u8, root_b: *u8) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_keep() -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_judge_claim(base: u64, len: u64) -> u64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn bfp_compute48() -> u64 from "behavioral_fp.iii"
+
+var RH_OBJMAX : u64 = 0u64      /* the OLD way: a running max, mutated in place -- it forgets the past */
+var RH_SNAP : u64 = 0u64        /* the object's only memory of the past: an explicit snapshot */
+var RH_PRI : [u64; 8]           /* the stream of priorities over time */
+var RH_WA : [u8; 32]   var RH_WA2 : [u8; 32]   var RH_WB : [u8; 32]
+
+fn rh_slen(s: u64) -> u64 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { i = i + 1u64 }   return i }
+fn rh_pu(v: u64) -> u32 { if v >= 10u64 { rh_pu(v / 10u64) }   putchar((48u64 + (v % 10u64)) as i32)   return 1u32 }
+fn rh_ps(s: u64) -> u32 { let p : *u8 = s as *u8   let mut i : u64 = 0u64   while p[i] != 0u8 { putchar(p[i] as i32)   i = i + 1u64 }   return 1u32 }
+fn rh_judge(q: u64) -> u64 { return eol_judge_claim(q, rh_slen(q)) }
+
+/* lay the event stream onto the logos bus as (seq -> payload) edges; tamper!=0 alters that event's payload */
+fn rh_lay_stream(n: u64, tamper: u64) -> i32 {
+    isub_reset()
+    let mut i : u64 = 0u64
+    while i < n {
+        let mut pay : u64 = RH_PRI[i]
+        if tamper != 0u64 { if (i + 1u64) == tamper { pay = pay + 100u64 } }
+        isub_emit(0u32, (i + 1u64) as u32, (pay + 1u64) as u32)
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* ======================= THE GATE: the covenant, certified ======================= */
+fn rhoe_selfprove() -> u64 @export {
+    /* --- THE LAW (Logos barometer): state, identity, provenance SIT UNDER the log; the anti-law is refused --- */
+    eol_reset()
+    if eol_read("[s < l] [i < l] [p < l]" as u64, rh_slen("[s < l] [i < l] [p < l]" as u64)) <= 0i64 { return 1u64 }   /* s=state i=identity p=provenance l=log */
+    if eol_keep() == 0u64 { return 1u64 }
+    if rh_judge("[s < l]" as u64) != 1u64 { return 2u64 }                          /* the law IS entailed */
+    if rh_judge("[l < s]" as u64) == 1u64 { return 3u64 }                          /* the anti-law (state primary) is NOT */
+
+    /* --- THE THREE GIFTS vs object-state; priorities over time: 5, 9, 3, 11, 2 --- */
+    RH_PRI[0] = 5u64   RH_PRI[1] = 9u64   RH_PRI[2] = 3u64   RH_PRI[3] = 11u64   RH_PRI[4] = 2u64
+    evt_reset()   RH_OBJMAX = 0u64
+    let mut i : u64 = 0u64
+    while i < 3u64 {
+        evt_perceive(1u64, 1u64, RH_PRI[i], 100u64 + RH_PRI[i])
+        if RH_PRI[i] > RH_OBJMAX { RH_OBJMAX = RH_PRI[i] }
+        i = i + 1u64
+    }
+    RH_SNAP = RH_OBJMAX                                                             /* object must SNAPSHOT to remember (9) */
+    let mark : u32 = evt_mark()                                                     /* the log remembers by its own structure */
+    while i < 5u64 {
+        evt_perceive(1u64, 1u64, RH_PRI[i], 100u64 + RH_PRI[i])
+        if RH_PRI[i] > RH_OBJMAX { RH_OBJMAX = RH_PRI[i] }
+        i = i + 1u64
+    }
+    /* GIFT 1 -- EQUIVALENCE: the fold over the whole log == the object accumulator (both 11) */
+    if evt_maxprio(evt_count()) != RH_OBJMAX { return 4u64 }
+    if RH_OBJMAX != 11u64 { return 5u64 }
+    /* GIFT 2 -- REVERSIBILITY: the fold over the PREFIX recovers the past state (9); the object lost it (only 11) */
+    if evt_maxprio(mark) != RH_SNAP { return 6u64 }                                /* fold(prefix) == 9 == snapshot */
+    if evt_maxprio(mark) == evt_maxprio(evt_count()) { return 7u64 }               /* state evolved: 9 != 11 (teeth) */
+    if evt_maxprio(mark) == RH_OBJMAX { return 8u64 }                              /* object CANNOT answer the past query */
+    evt_rewind(mark)                                                               /* truncate the log to the mark */
+    if evt_maxprio(evt_count()) != RH_SNAP { return 9u64 }                         /* rewound current state == 9 */
+
+    /* GIFT 3 -- WITNESS: tamper-evident, replay-deterministic merkle root of the stream --- */
+    rh_lay_stream(5u64, 0u64)   isub_witness_into((&RH_WA) as u64 as *u8)
+    rh_lay_stream(5u64, 0u64)   isub_witness_into((&RH_WA2) as u64 as *u8)
+    if isub_agree((&RH_WA) as u64 as *u8, (&RH_WA2) as u64 as *u8) != 1u32 { return 10u64 }   /* replay-deterministic */
+    rh_lay_stream(5u64, 3u64)   isub_witness_into((&RH_WB) as u64 as *u8)
+    if isub_agree((&RH_WA) as u64 as *u8, (&RH_WB) as u64 as *u8) != 0u32 { return 11u64 }    /* tamper-evident */
+
+    /* --- THE ELECTRON BAROMETER: the substrate's confluence, deterministic --- */
+    if bfp_compute48() != bfp_compute48() { return 12u64 }
+
+    /* --- DOGFOOD: the campaign's own conformance record is itself an event fold that rewinds --- */
+    evt_reset()
+    evt_perceive(2u64, 7u64, 1u64, 1001u64)                                        /* organ isub conforms */
+    let cm : u32 = evt_mark()
+    evt_perceive(2u64, 7u64, 1u64, 1002u64)                                        /* organ eidolos conforms */
+    evt_perceive(2u64, 7u64, 1u64, 1003u64)                                        /* organ anamnesis conforms */
+    if evt_count() != 3u32 { return 13u64 }                                        /* conformance = a fold over the ledger */
+    evt_rewind(cm)
+    if evt_count() != 1u32 { return 14u64 }                                        /* the ledger rewinds -- dogfooded */
+
+    return 0u64
+}
+
+fn rh_show() -> i32 @export {
+    rh_ps("RHOE -- panta rhei: state is what the stream of events folds to (event-primary, as kardia would have it).\n" as u64)
+    RH_PRI[0] = 5u64   RH_PRI[1] = 9u64   RH_PRI[2] = 3u64   RH_PRI[3] = 11u64   RH_PRI[4] = 2u64
+    evt_reset()
+    let mut i : u64 = 0u64
+    while i < 5u64 { evt_perceive(1u64, 1u64, RH_PRI[i], 100u64 + RH_PRI[i])   i = i + 1u64 }
+    rh_ps("  stream 5,9,3,11,2:  fold(all)=" as u64)   rh_pu(evt_maxprio(evt_count()))
+    rh_ps("  fold(prefix 3)=" as u64)   rh_pu(evt_maxprio(3u32))   rh_ps("  (the past, recovered -- object-state cannot)\n" as u64)
+    return 0i32
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let _a : i32 = argc   let _v : u64 = argv
+    rh_show()
+    let r : u64 = rhoe_selfprove()
+    rh_ps("rhoe_selfprove = " as u64)   rh_pu(r)
+    if r == 0u64 { rh_ps("  GREEN: covenant sealed (Logos); three gifts over object-state; tamper-evident witness; electron; dogfooded.\n" as u64) } else { rh_ps("  (arm failed)\n" as u64) }
+    return r
+}

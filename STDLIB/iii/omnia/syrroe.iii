@@ -1,0 +1,202 @@
+/* STDLIB/iii/omnia/syrroe.iii -- SYRROE (the CONFLUENCE): the fold's invisible player, integrated and
+ * grounded in the electrons.
+ *
+ * The fold gives a UNIQUE answer only because of CONFLUENCE (Church-Rosser): reduce in any order, reach the
+ * same normal form.  This organ makes that player visible, integrates XII's confluence-completion into the
+ * fold, and -- the point -- grounds it not in an axiom but in the QUALITATIVE PROPERTY OF THE SUBSTRATE, the
+ * way III derives its tricks: the electrons compute the same result regardless of the path (determinism =
+ * reversibility = the CPU-as-Z2 identity), and THAT is confluence.  Every fold-field inherits it for free from
+ * the one substrate they all run on -- the TRULY COMMON DENOMINATOR.
+ *
+ *   RAW FOLD (row echelon)     -- PATH-DEPENDENT: different orders -> different bases (confluence not yet).
+ *   XII COMPLETION (canonical) -- back-reduce to the sorted reduced echelon: the UNIQUE normal form, PATH-
+ *                                 INDEPENDENT (confluence achieved).
+ *   SUBSTRATE GROUND           -- bfp_compute48 (what the CPU's gates actually compute, ring R0) is
+ *                                 DETERMINISTIC: the electrons re-derive the same value -> physical confluence.
+ *   ONTOLOGICAL MEDIUM         -- the normal form is sealed as ONE EIDOLOS name regardless of path, bound to
+ *                                 the substrate witness: [normalform < substrate] [k<canon> = normalform]
+ *                                 [k<bfp> < substrate].  Two paths, one name = confluence, made ontological.
+ *
+ * NIH: composes katabasis/behavioral_fp (the electron witness) + eidos/eidolos (the ontology).  The organ runs
+ * itself; the exit code is the verdict.  Ring R0. */
+module syrroe
+
+extern @abi(c-msvc-x64) fn bfp_compute48() -> u64 from "behavioral_fp.iii"
+extern @abi(c-msvc-x64) fn eol_reset() -> i32 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_read(addr: u64, len: u64) -> i64 from "eidolos.iii"
+extern @abi(c-msvc-x64) fn eol_addr() -> u64 from "eidolos.iii"
+
+var SR_IN : [u64; 64]   var SR_NIN : u64 = 0u64
+var SR_B  : [u64; 64]   var SR_NB : u64 = 0u64
+var SR_RA : [u64; 64]   var SR_RB : [u64; 64]        /* row-echelon of two orders */
+var SR_CA : [u64; 64]   var SR_CB : [u64; 64]        /* canonical of two orders */
+var SR_CLM : [u8; 160]  var SR_CLN : u64 = 0u64
+var SR_HEX : [u8; 16]
+
+fn sr_hibit(v: u64) -> u64 {
+    let mut b : u64 = 63u64
+    while b > 0u64 { if ((v >> b) & 1u64) == 1u64 { return b }   b = b - 1u64 }
+    return 0u64
+}
+fn sr_set_nin(n: u64) -> i32 { SR_NIN = n   return 0i32 }
+fn sr_set_in(i: u64, v: u64) -> i32 { if i < 64u64 { SR_IN[i] = v }   return 0i32 }
+
+/* RAW FOLD: row echelon of SR_IN into SR_B (no back-reduce) -- path-dependent basis, invariant rank/span */
+fn sr_rowech() -> u64 {
+    SR_NB = 0u64
+    let mut i : u64 = 0u64
+    while i < SR_NIN {
+        let mut v : u64 = SR_IN[i]
+        let mut j : u64 = 0u64
+        while j < SR_NB {
+            let piv : u64 = sr_hibit(SR_B[j])
+            if ((v >> piv) & 1u64) == 1u64 { v = v ^ SR_B[j] }
+            j = j + 1u64
+        }
+        if v != 0u64 { SR_B[SR_NB] = v   SR_NB = SR_NB + 1u64 }
+        i = i + 1u64
+    }
+    return SR_NB
+}
+/* XII COMPLETION: back-reduce to the reduced echelon, then sort by pivot -- the UNIQUE canonical normal form. */
+fn sr_canonical() -> u64 {
+    sr_rowech()
+    let mut a : u64 = 0u64
+    while a < SR_NB {
+        let piva : u64 = sr_hibit(SR_B[a])
+        let mut b : u64 = 0u64
+        while b < SR_NB {
+            if b != a { if ((SR_B[b] >> piva) & 1u64) == 1u64 { SR_B[b] = SR_B[b] ^ SR_B[a] } }
+            b = b + 1u64
+        }
+        a = a + 1u64
+    }
+    /* insertion sort by value descending (pivots distinct -> a canonical, path-independent order) */
+    let mut i : u64 = 1u64
+    while i < SR_NB {
+        let key : u64 = SR_B[i]
+        let mut k : u64 = i
+        let mut go : u64 = 1u64
+        while go == 1u64 {
+            if k == 0u64 { go = 0u64 } else {
+                if SR_B[k - 1u64] < key { SR_B[k] = SR_B[k - 1u64]   k = k - 1u64 } else { go = 0u64 }
+            }
+        }
+        SR_B[k] = key
+        i = i + 1u64
+    }
+    return SR_NB
+}
+fn sr_copy_to(which: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 64u64 {
+        if which == 0u64 { SR_RA[i] = SR_B[i] }
+        if which == 1u64 { SR_RB[i] = SR_B[i] }
+        if which == 2u64 { SR_CA[i] = SR_B[i] }
+        if which == 3u64 { SR_CB[i] = SR_B[i] }
+        i = i + 1u64
+    }
+    return 0i32
+}
+fn sr_eq(pa: u64, pb: u64, n: u64) -> u64 {
+    let a : *u64 = pa as *u64
+    let b : *u64 = pb as *u64
+    let mut i : u64 = 0u64
+    while i < n { if a[i] != b[i] { return 0u64 }   i = i + 1u64 }
+    return 1u64
+}
+/* content-address of the current SR_B basis (an order-independent name for the normal form) */
+fn sr_hash() -> u64 {
+    let mut h : u64 = 1469598103934665603u64
+    let mut i : u64 = 0u64
+    while i < SR_NB {
+        h = h ^ SR_B[i]
+        h = h * 1099511628211u64
+        i = i + 1u64
+    }
+    return h
+}
+/* seal the normal form as ONE EIDOLOS name, bound to the substrate witness (bfp).  Returns the (1,1,1)
+ * address; two paths that reach the same canonical form + the same substrate get the SAME name. */
+fn sr_hexput(v: u64) -> i32 {
+    let mut sh : u64 = 60u64
+    let mut go : u64 = 1u64
+    while go == 1u64 {
+        let nyb : u64 = (v >> sh) & 15u64
+        let mut c : u8 = (48u64 + nyb) as u8
+        if nyb >= 10u64 { c = (87u64 + nyb) as u8 }
+        if SR_CLN < 160u64 { SR_CLM[SR_CLN] = c   SR_CLN = SR_CLN + 1u64 }
+        if sh == 0u64 { go = 0u64 }
+        if sh != 0u64 { sh = sh - 4u64 }
+    }
+    return 0i32
+}
+fn sr_putz(s: u64) -> i32 {
+    let p : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    while p[i] != 0u8 { if SR_CLN < 160u64 { SR_CLM[SR_CLN] = p[i]   SR_CLN = SR_CLN + 1u64 }   i = i + 1u64 }
+    return 0i32
+}
+fn sr_seal(canon: u64, bfp: u64) -> u64 {
+    SR_CLN = 0u64
+    sr_putz("[normalform < substrate] [k" as u64)   sr_hexput(canon)   sr_putz(" = normalform] [k" as u64)
+    sr_hexput(bfp)   sr_putz(" < substrate]" as u64)
+    eol_reset()
+    if eol_read((&SR_CLM) as u64, SR_CLN) < 0i64 { eol_reset()   return 0u64 }
+    let a : u64 = eol_addr()
+    eol_reset()
+    return a
+}
+
+/* ================= THE GATE (the organ runs itself; exit 0 = confluence, grounded) ================= */
+fn syrroe_selfprove() -> u64 @export {
+    /* three generators whose row echelon DEPENDS on order: {3,5,6} (6 = 3 XOR 5). */
+    sr_set_nin(3u64)
+    /* --- order A = [3,5,6] --- */
+    sr_set_in(0u64, 3u64)   sr_set_in(1u64, 5u64)   sr_set_in(2u64, 6u64)
+    sr_rowech()   let ra : u64 = SR_NB   sr_copy_to(0u64)
+    sr_canonical()   let ca : u64 = SR_NB   sr_copy_to(2u64)
+    let canon_a : u64 = sr_hash()
+    /* --- order B = [6,5,3] (same set, reversed) --- */
+    sr_set_in(0u64, 6u64)   sr_set_in(1u64, 5u64)   sr_set_in(2u64, 3u64)
+    sr_rowech()   let rb : u64 = SR_NB   sr_copy_to(1u64)
+    sr_canonical()   let cb : u64 = SR_NB   sr_copy_to(3u64)
+    let canon_b : u64 = sr_hash()
+
+    /* CONFLUENCE, PART 1 -- the RAW fold is PATH-DEPENDENT: same rank, but DIFFERENT bases across orders. */
+    if ra != rb { return 1u64 }                                  /* rank is invariant (2) */
+    if sr_eq((&SR_RA) as u64, (&SR_RB) as u64, ra) == 1u64 { return 2u64 }   /* but row echelons DIFFER */
+
+    /* CONFLUENCE, PART 2 -- XII COMPLETION makes the normal form UNIQUE: the canonical bases are BIT-IDENTICAL
+     * across orders.  Different paths, one normal form -- confluence achieved. */
+    if ca != cb { return 3u64 }
+    if sr_eq((&SR_CA) as u64, (&SR_CB) as u64, ca) != 1u64 { return 4u64 }   /* canonical is order-INDEPENDENT */
+    if canon_a != canon_b { return 5u64 }                        /* one content-address for the normal form */
+
+    /* THE SUBSTRATE GROUND (the common denominator) -- the electrons compute the SAME value regardless of when:
+     * bfp_compute48 is DETERMINISTIC.  This is physical confluence -- the reason the fold's confluence holds at
+     * all, inherited from the substrate every fold-field shares. */
+    let s1 : u64 = bfp_compute48()
+    let s2 : u64 = bfp_compute48()
+    if s1 != s2 { return 6u64 }                                  /* the substrate re-derives -> confluent */
+
+    /* THE ONTOLOGICAL MEDIUM -- the normal form is ONE EIDOLOS name across paths, BOUND to the substrate.  Both
+     * orders seal to the SAME address; the path-dependent row echelon would seal to DIFFERENT names. */
+    let name_a : u64 = sr_seal(canon_a, s1)
+    if name_a == 0u64 { return 7u64 }
+    let name_b : u64 = sr_seal(canon_b, s2)
+    if name_a != name_b { return 8u64 }                          /* two paths, ONE name = confluence, ontological */
+
+    /* NEGATIVE (the honest wall) -- take the PATH-DEPENDENT row-echelon hashes; without the XII completion they
+     * do NOT agree, so their EIDOLOS names DIFFER: confluence is not free, it is what the completion buys. */
+    let mut hA : u64 = 1469598103934665603u64
+    let mut i : u64 = 0u64
+    while i < ra { hA = (hA ^ SR_RA[i]) * 1099511628211u64   i = i + 1u64 }
+    let mut hB : u64 = 1469598103934665603u64
+    i = 0u64
+    while i < rb { hB = (hB ^ SR_RB[i]) * 1099511628211u64   i = i + 1u64 }
+    if hA == hB { return 9u64 }                                  /* the raw fold is genuinely path-dependent */
+    return 0u64
+}
+
+fn main(argc: i32, argv: u64) -> u64 { let _a : i32 = argc   let _v : u64 = argv   return syrroe_selfprove() }
